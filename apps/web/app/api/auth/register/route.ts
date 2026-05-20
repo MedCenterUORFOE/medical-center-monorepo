@@ -46,6 +46,7 @@ export async function POST(request: Request) {
 
     // 5. Strip the password out before sending the success response
     // We don't want to send even the hashed password back to the frontend
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password_hash, ...userWithoutPassword } = newUser;
 
     return NextResponse.json({

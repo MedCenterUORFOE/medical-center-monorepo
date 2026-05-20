@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { OAuth2Client } from 'google-auth-library';
 import { prisma } from '@medical-center/db'; // Adjust if your db package name is different
-import { successResponse, apiErrors } from '@/lib/api-response';
+import { apiErrors } from '@/lib/api-response';
 import jwt from 'jsonwebtoken';
 
 // Initialize the Google Client
