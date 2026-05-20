@@ -2,16 +2,27 @@ import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 
-// 1. Read your Supabase URL from the environment
+// 1. Read your Supabase URL
 const connectionString = process.env.DATABASE_URL;
 
-// 2. Create a standard PostgreSQL connection pool
-const pool = new Pool({ connectionString });
+// 2. Create a TypeScript interface for the global scope
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+};
 
-// 3. Wrap the pool in Prisma's driver adapter
-const adapter = new PrismaPg(pool);
+// 3. Create the connection only if it doesn't already exist
+const createPrismaClient = () => {
+  const pool = new Pool({ connectionString });
+  const adapter = new PrismaPg(pool);
+  return new PrismaClient({ adapter });
+};
 
-// 4. Pass the adapter into Prisma 7
-export const prisma = new PrismaClient({ adapter });
+// 4. Export the client (reuses the existing one in dev mode)
+export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+
+// 5. Save it to the global scope in development to survive Hot Reloads
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = prisma;
+}
 
 export * from '@prisma/client';
