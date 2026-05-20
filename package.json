@@ -16,8 +16,8 @@
     "tsx": "^4.21.0",
     "turbo": "^2.9.12"
   },
-  "optionalDependencies": {
-    "@next/swc-win32-x64-msvc": "14.2.35",
-    "@next/swc-linux-x64-gnu": "14.2.35"
+  "dependencies": {
+    "eslint-config-next": "^14.1.4",
+    "next": "^14.1.4"
   }
 }
