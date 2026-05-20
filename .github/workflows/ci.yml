@@ -7,6 +7,11 @@ on:
 jobs:
   build-and-lint:
     runs-on: ubuntu-latest
+  
+    env:
+      DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
+      JWT_SECRET: "ci_build_placeholder_secret"
+      
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -25,6 +30,3 @@ jobs:
 
       - name: Run Build Test (The Blast Radius Check)
         run: npx turbo run build
-        env:
-          DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
-          JWT_SECRET: "ci_build_placeholder_secret"
