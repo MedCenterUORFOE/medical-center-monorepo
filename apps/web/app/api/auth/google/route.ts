@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { OAuth2Client } from 'google-auth-library';
 import { prisma } from '@medical-center/db'; // Adjust if your db package name is different
 import { apiErrors } from '@/lib/api-response';
-import jwt from 'jsonwebtoken';
+import { SignJWT } from 'jose';
 
 // Initialize the Google Client
 // 'postmessage' is the required redirect_uri when doing frontend-to-backend code exchange
@@ -66,9 +66,14 @@ export async function POST(request: NextRequest) {
       role: user.role,
     };
 
-    const sessionToken = jwt.sign(tokenPayload, process.env.JWT_SECRET!, {
-      expiresIn: '1d', 
-    });
+// 4. JWT Generator (Edge Compatible using jose)
+const secretKey = new TextEncoder().encode(process.env.JWT_SECRET!);
+    
+const sessionToken = await new SignJWT(tokenPayload)
+  .setProtectedHeader({ alg: 'HS256' })
+  .setIssuedAt()
+  .setExpirationTime('1d')
+  .sign(secretKey);
 
     // 5. Set the token as a secure HttpOnly cookie
     const response = NextResponse.json({

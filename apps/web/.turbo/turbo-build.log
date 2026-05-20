@@ -1,0 +1,100 @@
+
+> web@0.1.0 build
+> next build
+
+  ▲ Next.js 14.2.35
+  - Environments: .env
+
+   Creating an optimized production build ...
+ ⚠ Found lockfile missing swc dependencies, patching...
+npm error code ENOWORKSPACES
+npm error This command does not support workspaces.
+npm error A complete log of this run can be found in: C:\Users\dilee\npm-cache\_logs\2026-05-20T16_03_52_965Z-debug-0.log
+ ⚠ Found lockfile missing swc dependencies, patching...
+npm error code ENOWORKSPACES
+npm error This command does not support workspaces.
+npm error A complete log of this run can be found in: C:\Users\dilee\npm-cache\_logs\2026-05-20T16_04_00_211Z-debug-0.log
+ ⚠ Found lockfile missing swc dependencies, patching...
+npm error code ENOWORKSPACES
+npm error This command does not support workspaces.
+npm error A complete log of this run can be found in: C:\Users\dilee\npm-cache\_logs\2026-05-20T16_04_03_643Z-debug-0.log
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+ ⚠ Found lockfile missing swc dependencies, patching...
+npm error code ENOWORKSPACES
+npm error This command does not support workspaces.
+npm error A complete log of this run can be found in: C:\Users\dilee\npm-cache\_logs\2026-05-20T16_04_12_139Z-debug-0.log
+   Generating static pages (0/9) ...
+   Generating static pages (2/9) 
+TypeError: Cannot read properties of null (reading 'useContext')
+   Generating static pages (4/9) 
+    at exports.useContext (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\react\cjs\react.production.js:491:33)
+   Generating static pages (6/9) 
+    at StyleRegistry (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\styled-jsx\dist\index\index.js:450:30)
+    at Wc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:68:44)
+    at Zc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:70:253)
+    at Z (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:76:89)
+    at Zc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:74:209)
+    at Z (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:76:89)
+    at Zc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:74:209)
+    at Z (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:76:89)
+    at Zc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:74:209)
+
+Error occurred prerendering page "/500". Read more: https://nextjs.org/docs/messages/prerender-error
+
+TypeError: Cannot read properties of null (reading 'useContext')
+    at exports.useContext (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\react\cjs\react.production.js:491:33)
+    at StyleRegistry (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\styled-jsx\dist\index\index.js:450:30)
+    at Wc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:68:44)
+    at Zc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:70:253)
+    at Z (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:76:89)
+    at Zc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:74:209)
+    at Z (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:76:89)
+    at Zc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:74:209)
+    at Z (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:76:89)
+    at Zc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:74:209)
+TypeError: Cannot read properties of null (reading 'useContext')
+    at exports.useContext (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\react\cjs\react.production.js:491:33)
+    at StyleRegistry (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\styled-jsx\dist\index\index.js:450:30)
+    at Wc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:68:44)
+    at Zc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:70:253)
+    at Z (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:76:89)
+    at Zc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:74:209)
+    at Z (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:76:89)
+    at Zc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:74:209)
+    at Z (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:76:89)
+    at Zc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:74:209)
+
+Error occurred prerendering page "/404". Read more: https://nextjs.org/docs/messages/prerender-error
+
+TypeError: Cannot read properties of null (reading 'useContext')
+    at exports.useContext (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\react\cjs\react.production.js:491:33)
+    at StyleRegistry (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\styled-jsx\dist\index\index.js:450:30)
+    at Wc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:68:44)
+    at Zc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:70:253)
+    at Z (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:76:89)
+    at Zc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:74:209)
+    at Z (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:76:89)
+    at Zc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:74:209)
+    at Z (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:76:89)
+    at Zc (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\react-dom\cjs\react-dom-server.browser.production.min.js:74:209)
+ ✓ Generating static pages (9/9)
+ ⨯ Failed to patch lockfile, please try uninstalling and reinstalling next in this workspace
+TypeError: Cannot read properties of undefined (reading 'os')
+    at fetchPkgInfo (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\lib\patch-incorrect-lockfile.js:73:25)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async Promise.all (index 2)
+    at async patchIncorrectLockfile (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\lib\patch-incorrect-lockfile.js:162:26)
+    at async build (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\build\index.js:2169:9)
+
+> Export encountered errors on following paths:
+	/_error: /404
+	/_error: /500
+npm error Lifecycle script `build` failed with error:
+npm error code 1
+npm error path C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web
+npm error workspace web@0.1.0
+npm error location C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web
+npm error command failed
+npm error command C:\WINDOWS\system32\cmd.exe /d /s /c next build
