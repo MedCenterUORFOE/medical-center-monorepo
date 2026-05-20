@@ -69,6 +69,7 @@ model User {
   is_profile_complete Boolean    @default(false)
   created_at          DateTime   @default(now())
   updated_at          DateTime   @updatedAt
+  profile_picture     String?
 
   // Relations (ISA Subtypes)
   student              Student?

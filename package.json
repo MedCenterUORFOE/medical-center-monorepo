@@ -10,10 +10,15 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "lint": "turbo run lint"
+    "lint": "turbo run lint",
+    "postinstall": "cd packages/db && npx prisma generate"
   },
   "devDependencies": {
     "tsx": "^4.21.0",
     "turbo": "^2.9.12"
+  },
+  "dependencies": {
+    "eslint-config-next": "^14.1.4",
+    "next": "^14.1.4"
   }
 }
