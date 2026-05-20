@@ -1,0 +1,12 @@
+import { loadEnvFile } from "node:process";
+
+try { loadEnvFile(".env"); } catch {}
+
+export default {
+  schema: "prisma/schema.prisma",
+  migrations: { path: "prisma/migrations" },
+  datasource: {
+    url: process.env.DATABASE_URL,
+    accelerateUrl: process.env.DIRECT_URL
+  }
+};

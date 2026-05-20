@@ -1,0 +1,414 @@
+// packages/db/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // URL is injected via the prisma.config.ts file in Prisma 7 monorepos
+}
+
+// -----------------------------------------------------------------------------
+// ENUMS
+// -----------------------------------------------------------------------------
+
+enum Role {
+  STUDENT
+  ACADEMIC_STAFF
+  DOCTOR
+  NURSE
+  ADMIN 
+  // ADMIN_STAFF // uncomment this line if and when you expand the service to admin staff of the university
+  AMBULANCE_DRIVER
+}
+
+enum UserStatus {
+  UNVERIFIED
+  VERIFIED
+  SUSPENDED
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum EmergencyStatus {
+  PENDING
+  DISPATCHED
+  COMPLETED
+  CANCELLED
+}
+
+enum CertificateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PrescriptionSource {
+  INTERNAL
+  EXTERNAL
+}
+
+// -----------------------------------------------------------------------------
+// BASE IDENTITY
+// -----------------------------------------------------------------------------
+
+model User {
+  id                  String     @id @default(uuid())
+  email               String     @unique
+  password_hash       String?    // Nullable for Google OAuth users
+  name                String
+  role                Role
+  status              UserStatus @default(UNVERIFIED)
+  nic                 String?    @unique
+  phone               String?
+  is_profile_complete Boolean    @default(false)
+  created_at          DateTime   @default(now())
+  updated_at          DateTime   @updatedAt
+
+  // Relations (ISA Subtypes)
+  student              Student?
+  academic_staff       AcademicStaff?
+  medical_center_staff MedicalCenterStaff?
+  ambulance_driver     AmbulanceDriver?
+
+  // Common Relations (Routed dynamically via the Application Layer)
+  patient_profile      PatientProfile?
+  emergency_requests   EmergencyRequest[]
+  notifications        Notification[]
+}
+
+// -----------------------------------------------------------------------------
+// ISA SUBTYPES
+// -----------------------------------------------------------------------------
+
+model Student {
+  student_id               String  @id // PK + FK to User
+  university_reg_number    String  @unique
+  university_email         String? @unique
+  faculty                  String
+  department               String?
+  year_of_study            Int
+  batch                    String
+  emergency_contact_name   String? 
+  emergency_contact_number String 
+
+  user                     User @relation(fields: [student_id], references: [id], onDelete: Cascade)
+}
+
+model AcademicStaff {
+  academic_staff_id        String  @id // PK + FK to User
+  university_staff_id      String  @unique
+  university_email         String? @unique
+  department               String
+  position                 String
+  emergency_contact_name   String? 
+  emergency_contact_number String 
+
+  user                 User @relation(fields: [academic_staff_id], references: [id], onDelete: Cascade)
+  certificate_receipts ExtraCertificateRecipient[]
+}
+
+model MedicalCenterStaff {
+  staff_id            String  @id // PK + FK to User
+  university_staff_id String? @unique
+  license_number      String  @unique
+
+  user                User @relation(fields: [staff_id], references: [id], onDelete: Cascade)
+  doctor              Doctor?
+  nurse               Nurse?
+}
+
+model AmbulanceDriver {
+  driver_id            String  @id // PK + FK to User
+  university_staff_id  String? @unique
+  vehicle_registration String
+
+  user                 User @relation(fields: [driver_id], references: [id], onDelete: Cascade)
+  availability         DriverAvailability?
+  emergency_dispatches EmergencyRequest[] // Requests accepted by this driver
+}
+
+// -----------------------------------------------------------------------------
+// MEDICAL STAFF SUBTYPES (Derived from MedicalCenterStaff)
+// -----------------------------------------------------------------------------
+
+model Doctor {
+  doctor_id      String @id // PK + FK to MedicalCenterStaff
+  specialization String
+
+  staff          MedicalCenterStaff @relation(fields: [doctor_id], references: [staff_id], onDelete: Cascade)
+
+  // Doctor Specific Relations
+  availabilities               DoctorAvailability[]
+  appointments                 Appointment[]
+  medical_records              MedicalRecord[]
+  prescriptions_issued         Prescription[]
+  medical_certificate_requests MedicalCertificateRequest[]
+  medical_certificates_issued  MedicalCertificate[]
+}
+
+model Nurse {
+  nurse_id       String @id // PK + FK to MedicalCenterStaff
+
+  staff          MedicalCenterStaff @relation(fields: [nurse_id], references: [staff_id], onDelete: Cascade)
+  availabilities NurseAvailability[]
+}
+
+// -----------------------------------------------------------------------------
+// CORE CLINICAL MODELS
+// -----------------------------------------------------------------------------
+
+model PatientProfile {
+  user_id       String    @id // PK + FK to User
+  blood_group   String?
+  allergies     String?
+  special_notes String?
+  height        Float?
+  weight        Float?
+  date_of_birth DateTime?
+
+  user           User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  appointments         Appointment[]
+  medical_records      MedicalRecord[]
+  certificate_requests MedicalCertificateRequest[]
+}
+
+model Appointment {
+  id             String            @id @default(uuid())
+  patient_id     String            // Maps to PatientProfile.user_id
+  doctor_id      String            // Maps to Doctor.doctor_id
+  scheduled_time DateTime
+  status         AppointmentStatus @default(SCHEDULED)
+  reason         String?
+
+  patient        PatientProfile @relation(fields: [patient_id], references: [user_id])
+  doctor         Doctor         @relation(fields: [doctor_id], references: [doctor_id])
+}
+
+model MedicalRecord {
+  id              String   @id @default(uuid())
+  patient_id      String   // Maps to PatientProfile.user_id
+  doctor_id       String   // Maps to Doctor.doctor_id
+  visit_date_time DateTime @default(now())
+  diagnosis       String
+  notes           String?
+
+  patient              PatientProfile              @relation(fields: [patient_id], references: [user_id])
+  doctor               Doctor                      @relation(fields: [doctor_id], references: [doctor_id])
+  reports              MedicalReport[]
+  prescription         Prescription?
+  certificates         MedicalCertificate[]
+  certificate_requests MedicalCertificateRequest[]
+}
+
+model MedicalReport {
+  id          String   @id @default(uuid())
+  record_id   String
+  file_url    String
+  type        String
+  upload_time DateTime @default(now())
+
+  medical_record MedicalRecord @relation(fields: [record_id], references: [id], onDelete: Cascade)
+}
+
+// -----------------------------------------------------------------------------
+// PHARMACY & INVENTORY 
+// -----------------------------------------------------------------------------
+
+// 1. THE CATALOG (The abstract idea: "Paracetamol 500mg")
+model Medicine {
+  id          String   @id @default(uuid())
+  name        String
+  category    String
+  unit        String   // e.g., tablets, ml, vials
+
+  inventory_batches  InventoryBatch[]
+  prescription_items PrescriptionItem[]
+}
+
+// 2. THE PHYSICAL BATCHES (The bottles in the drawer)
+model InventoryBatch {
+  id             String   @id @default(uuid())
+  medicine_id    String   // Maps to Medicine.id
+  batch_number   String   // The manufacturer's number (for barcode scanning)
+  stock_quantity Int
+  expiry_date    DateTime
+
+  medicine       Medicine @relation(fields: [medicine_id], references: [id], onDelete: Cascade)
+  dispensations  DispensedItem[]
+
+  // Prevents entering the exact same batch twice for the same medicine
+  @@unique([medicine_id, batch_number]) 
+}
+
+// 3. THE PRESCRIPTION (What the Doctor writes)
+model Prescription {
+  id               String   @id @default(uuid())
+  record_id        String   @unique
+  doctor_id        String   // Maps to Doctor.doctor_id
+  issued_timestamp DateTime @default(now())
+
+  medical_record MedicalRecord      @relation(fields: [record_id], references: [id])
+  doctor         Doctor             @relation(fields: [doctor_id], references: [doctor_id])
+  items          PrescriptionItem[]
+}
+
+// 4. THE PRESCRIPTION ITEM (e.g., "Take 10 Paracetamol")
+model PrescriptionItem {
+  id                     String             @id @default(uuid())
+  prescription_id        String
+  medicine_id            String?            // Nullable if source is EXTERNAL
+  external_medicine_name String?            // Doctor types it manually if it's not in our catalog
+  dosage                 String
+  quantity               Int                // e.g., Doctor wants 10 pills
+  instructions           String?
+  source                 PrescriptionSource
+
+  prescription  Prescription    @relation(fields: [prescription_id], references: [id], onDelete: Cascade)
+  medicine      Medicine?       @relation(fields: [medicine_id], references: [id])
+  dispensations DispensedItem[] // Links to the actual physical bottles handed out
+}
+
+// 5. THE DISPENSATION (What the Nurse hands over - solves the 7+3 problem!)
+model DispensedItem {
+  id                   String   @id @default(uuid())
+  prescription_item_id String   // Maps to PrescriptionItem.id
+  inventory_batch_id   String   // Maps to InventoryBatch.id
+  quantity             Int      // e.g., 7 from Bottle A, 3 from Bottle B
+  dispensed_at         DateTime @default(now())
+
+  prescription_item PrescriptionItem @relation(fields: [prescription_item_id], references: [id], onDelete: Cascade)
+  inventory_batch   InventoryBatch   @relation(fields: [inventory_batch_id], references: [id])
+}
+
+// -----------------------------------------------------------------------------
+// EMERGENCY DISPATCH
+// -----------------------------------------------------------------------------
+
+model EmergencyRequest {
+  id                   String          @id @default(uuid())
+  requester_id         String          // Maps to User.id
+  driver_id            String?         // Maps to AmbulanceDriver.driver_id
+  patient_location_lat Float
+  patient_location_lng Float
+  driver_location_lat  Float?
+  driver_location_lng  Float?
+  status               EmergencyStatus @default(PENDING)
+  created_at           DateTime        @default(now())
+
+  requester      User             @relation(fields: [requester_id], references: [id])
+  driver         AmbulanceDriver? @relation(fields: [driver_id], references: [driver_id])
+  record         EmergencyRecord?
+}
+
+model EmergencyRecord {
+  id            String    @id @default(uuid())
+  request_id    String    @unique
+  hospital_name String
+  dispatched_at DateTime?
+  arrived_at    DateTime?
+  notes         String?
+
+  request EmergencyRequest @relation(fields: [request_id], references: [id], onDelete: Cascade)
+}
+
+// -----------------------------------------------------------------------------
+// MEDICAL CERTIFICATES
+// -----------------------------------------------------------------------------
+
+model MedicalCertificateRequest {
+  id               String            @id @default(uuid())
+  patient_id       String            // Maps to PatientProfile.user_id
+  doctor_id        String            // Maps to Doctor.doctor_id
+  record_id        String            // Maps to MedicalRecord.id
+  status           CertificateStatus @default(PENDING)
+  doctor_notes     String?
+  created_at       DateTime          @default(now())
+
+  patient    PatientProfile              @relation(fields: [patient_id], references: [user_id])
+  doctor     Doctor                      @relation(fields: [doctor_id], references: [doctor_id])
+  record     MedicalRecord               @relation(fields: [record_id], references: [id])
+  recipients ExtraCertificateRecipient[]
+  certificate MedicalCertificate?
+}
+
+model ExtraCertificateRecipient {
+  id           String    @id @default(uuid())
+  request_id   String
+  staff_id     String    // Maps to AcademicStaff.academic_staff_id
+  sent_at      DateTime?
+
+  request      MedicalCertificateRequest @relation(fields: [request_id], references: [id], onDelete: Cascade)
+  staff        AcademicStaff             @relation(fields: [staff_id], references: [academic_staff_id])
+}
+
+model MedicalCertificate {
+  id         String   @id @default(uuid())
+  request_id String   @unique
+  doctor_id  String   // Maps to Doctor.doctor_id
+  record_id  String
+  file_url   String
+  issued_at  DateTime @default(now())
+  notes      String?
+
+  request MedicalCertificateRequest @relation(fields: [request_id], references: [id])
+  doctor  Doctor                    @relation(fields: [doctor_id], references: [doctor_id])
+  record  MedicalRecord             @relation(fields: [record_id], references: [id])
+}
+
+// -----------------------------------------------------------------------------
+// AVAILABILITY
+// -----------------------------------------------------------------------------
+
+model DoctorAvailability {
+  doctor_id    String   // Maps to Doctor.doctor_id
+  day_of_week  Int
+  start_time   DateTime
+  end_time     DateTime
+  is_available Boolean  @default(true)
+
+  doctor Doctor @relation(fields: [doctor_id], references: [doctor_id], onDelete: Cascade)
+
+  @@id([doctor_id, day_of_week])
+}
+
+model NurseAvailability {
+  nurse_id     String   // Maps to Nurse.nurse_id
+  day_of_week  Int
+  start_time   DateTime
+  end_time     DateTime
+  is_available Boolean  @default(true)
+
+  nurse Nurse @relation(fields: [nurse_id], references: [nurse_id], onDelete: Cascade)
+
+  @@id([nurse_id, day_of_week])
+}
+
+model DriverAvailability {
+  driver_id    String   @id // Maps to AmbulanceDriver.driver_id
+  is_available Boolean  @default(true)
+  updated_at   DateTime @updatedAt
+
+  driver AmbulanceDriver @relation(fields: [driver_id], references: [driver_id], onDelete: Cascade)
+}
+
+// -----------------------------------------------------------------------------
+// NOTIFICATIONS
+// -----------------------------------------------------------------------------
+
+model Notification {
+  id       String   @id @default(uuid())
+  user_id  String
+  type     String
+  message  String
+  is_read  Boolean  @default(false)
+  sent_at  DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}

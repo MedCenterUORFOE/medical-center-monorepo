@@ -1,0 +1,5 @@
+This is a university medical center management system.
+Stack: Next.js 14 (App Router), React Native with Expo, Node.js/Express, PostgreSQL via Prisma ORM, Supabase for storage and realtime, Resend for email, FCM for push notifications.
+Database tables: USER, STUDENT, ACADEMIC_STAFF, MEDICAL_CENTR_STAFF, DOCTOR, NURSE, AMBULANCE_DRIVER, PATIENT_PROFILE, APPOINTMENT, MEDICAL_RECORD, MEDICAL_REPORT, PRESCRIPTION, PRESCRIPTION_ITEM, INVENTORY, EMERGENCY_REQUEST, EMERGENCY_RECORD, MEDICAL_CERTIFICATE_REQUEST, CERTIFICATE_RECIPIENT, MEDICAL_CERTIFICATE, DOCTOR_AVAILABILITY, NURSE_AVAILABILITY, DRIVER_AVAILABILITY, NOTIFICATION.
+Roles: student, academic_staff, doctor, nurse, admin, ambulance_driver.
+Always use TypeScript. Always use Prisma client for DB queries. Never expose raw SQL unless necessary. Enforce role-based access in API middleware.

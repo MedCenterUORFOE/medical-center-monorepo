@@ -1,0 +1,19 @@
+{
+  "name": "medical-center-monorepo",
+  "version": "1.0.0",
+  "packageManager": "npm@10.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "turbo": "^2.9.12"
+  }
+}
