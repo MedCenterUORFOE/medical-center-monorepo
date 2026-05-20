@@ -1,0 +1,5 @@
+
+> mobile-driver@1.0.0 lint
+> expo lint
+
+Using legacy ESLint config. Consider upgrading to flat config.
