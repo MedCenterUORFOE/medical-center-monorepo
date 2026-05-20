@@ -1,0 +1,30 @@
+name: Monorepo CI Safeguard
+
+on:
+  pull_request:
+    branches: [ "main", "dev" ]
+
+jobs:
+  build-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run Linter (Syntax & Type Check)
+        run: npx turbo run lint
+
+      - name: Run Build Test (The Blast Radius Check)
+        run: npx turbo run build
+        env:
+          DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
+          JWT_SECRET: "ci_build_placeholder_secret"
