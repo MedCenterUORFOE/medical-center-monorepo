@@ -1,5 +1,4 @@
 
 > mobile-patient@1.0.0 lint
-> expo lint
+> eslint . --ext .js,.jsx,.ts,.tsx
 
-Using legacy ESLint config. Consider upgrading to flat config.
