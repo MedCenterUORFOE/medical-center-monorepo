@@ -2,56 +2,37 @@
 > web@0.1.0 build
 > next build
 
-  ▲ Next.js 14.2.35
-  - Environments: .env
+   ▲ Next.js 14.1.4
+   - Environments: .env
 
    Creating an optimized production build ...
- ⚠ Compiled with warnings
-
-../../node_modules/jose/dist/webapi/lib/deflate.js
-A Node.js API is used (CompressionStream at line: 10) which is not supported in the Edge Runtime.
-Learn more: https://nextjs.org/docs/api-reference/edge-runtime
-
-Import trace for requested module:
-../../node_modules/jose/dist/webapi/lib/deflate.js
-../../node_modules/jose/dist/webapi/jwe/flattened/decrypt.js
-../../node_modules/jose/dist/webapi/index.js
-
-../../node_modules/jose/dist/webapi/lib/deflate.js
-A Node.js API is used (DecompressionStream at line: 26) which is not supported in the Edge Runtime.
-Learn more: https://nextjs.org/docs/api-reference/edge-runtime
-
-Import trace for requested module:
-../../node_modules/jose/dist/webapi/lib/deflate.js
-../../node_modules/jose/dist/webapi/jwe/flattened/decrypt.js
-../../node_modules/jose/dist/webapi/index.js
-
+Compiler edge-server unexpectedly exited with code: null and signal: SIGTERM
  ✓ Compiled successfully
    Linting and checking validity of types ...
    Collecting page data ...
    Generating static pages (0/9) ...
-   Generating static pages (2/9) 
-   Generating static pages (4/9) 
-   Generating static pages (6/9) 
- ✓ Generating static pages (9/9)
+   Generating static pages (2/9) 
+   Generating static pages (4/9) 
+   Generating static pages (6/9) 
+ ✓ Generating static pages (9/9) 
    Finalizing page optimization ...
    Collecting build traces ...
 
 Route (app)                              Size     First Load JS
-┌ ○ /                                    5.34 kB        92.6 kB
-├ ○ /_not-found                          873 B          88.1 kB
-├ ƒ /api/auth/google                     0 B                0 B
-├ ƒ /api/auth/login                      0 B                0 B
-├ ƒ /api/auth/register                   0 B                0 B
+┌ ○ /                                    5.22 kB        89.5 kB
+├ ○ /_not-found                          882 B          85.1 kB
+├ λ /api/auth/google                     0 B                0 B
+├ λ /api/auth/login                      0 B                0 B
+├ λ /api/auth/register                   0 B                0 B
 └ ○ /api/health                          0 B                0 B
-+ First Load JS shared by all            87.2 kB
-  ├ chunks/117-676d1fc2a02ba1d5.js       31.7 kB
-  ├ chunks/fd9d1056-749e5812300142af.js  53.6 kB
-  └ other shared chunks (total)          1.86 kB
++ First Load JS shared by all            84.3 kB
+  ├ chunks/69-74caad7d92f0b2c1.js        29 kB
+  ├ chunks/fd9d1056-d03af0e963d7a2f3.js  53.4 kB
+  └ other shared chunks (total)          1.87 kB
 
 
-ƒ Middleware                             32.6 kB
+ƒ Middleware                             32.9 kB
 
 ○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
+λ  (Dynamic)  server-rendered on demand using Node.js
 
