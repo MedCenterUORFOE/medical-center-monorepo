@@ -2,8 +2,6 @@ import { prisma } from './index';
 import bcrypt from 'bcryptjs';
 
 // We spin up a direct local connection specifically for the seed script
-
-
 async function main() {
   console.log('🌱 Starting database seed...');
 
@@ -30,6 +28,8 @@ async function main() {
       name: 'System Administrator',
       password_hash: password_hash,
       role: 'ADMIN',
+      status: 'VERIFIED',          // <-- REQUIRED FOR NEW LOGIN FLOW
+      is_profile_complete: true,   // <-- REQUIRED TO BYPASS ONBOARDING
     },
   });
 

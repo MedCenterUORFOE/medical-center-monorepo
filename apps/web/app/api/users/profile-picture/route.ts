@@ -1,0 +1,95 @@
+/**
+ * PROFILE PICTURE UPLOAD ENDPOINT (POST /api/users/profile-picture)
+ * * --- AUTHENTICATION TESTING STRATEGY ---
+ * DEVELOPMENT MODE: Hardcoded `userId`.
+ * PRODUCTION MODE: Uncomment `getUserSession()` before deployment.
+ */
+
+import prisma from '@medical-center/db';
+import { createClient } from '@supabase/supabase-js';
+import { checkRateLimit } from '@/lib/rate-limiter';
+import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
+// import { getUserSession } from '@/lib/auth';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error("Missing Supabase Environment Variables");
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+export async function POST(request: Request) {
+  try {
+    // --- RATE LIMITING (Protect Supabase Storage Quota) ---
+    const forwardedFor = request.headers.get('x-forwarded-for');
+    const ip = forwardedFor ? forwardedFor.split(',')[0] : 'unknown-ip';
+
+    if (!checkRateLimit(ip, 5, 3600000)) { // Limit: 5 uploads per hour
+      return errorResponse('Too many upload attempts. Please try again later.', 429);
+    }
+
+    // === PRODUCTION AUTH BLOCK ===
+    // const session = await getUserSession();
+    // if (!session?.id) return apiErrors.unauthorized();
+    // const userId = session.id; // FIXED from session.userId
+    
+    // === LOCAL TESTING MOCK ===
+    const userId = "test-user-id"; 
+
+    const formData = await request.formData();
+    const file = formData.get('image') as File | null;
+
+    if (!file) {
+      return apiErrors.badRequest("No image file provided");
+    }
+
+    const buffer = await file.arrayBuffer();
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${userId}-${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(fileName, buffer, {
+        contentType: file.type,
+        upsert: true, 
+      });
+
+    if (uploadError) {
+      console.error("Supabase Storage Error:", uploadError);
+      return errorResponse("Failed to upload image to storage", 502);
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(fileName);
+
+    const uploadedUrl = publicUrlData.publicUrl;
+
+    // --- THE SECURE TRANSACTION ---
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { profile_picture: uploadedUrl },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          user_id: userId,
+          action: "PROFILE_PICTURE_UPDATED",
+          entity_type: "User",
+          entity_id: userId,
+          ip_address: ip,
+          details: JSON.stringify({ message: "User updated their profile picture." }),
+        }
+      });
+    });
+
+    return successResponse({ url: uploadedUrl }, "Profile picture successfully updated.");
+
+  } catch (error) {
+    console.error("Profile Picture Upload Error:", error);
+    return apiErrors.internal();
+  }
+}

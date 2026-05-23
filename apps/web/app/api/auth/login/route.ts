@@ -1,76 +1,83 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { SignJWT } from 'jose';
 import bcrypt from 'bcryptjs';
-
-import { prisma } from '@medical-center/db';
+import prisma from '@medical-center/db';
+import { checkRateLimit } from '@/lib/rate-limiter';
+import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 
 export async function POST(request: Request) {
   try {
-    // 1. Grab the email and password from the incoming request
+    // --- RATE LIMITING ---
+    const forwardedFor = request.headers.get('x-forwarded-for');
+    const ip = forwardedFor ? forwardedFor.split(',')[0] : 'unknown-ip';
+    
+    if (!checkRateLimit(ip, 10, 300000)) {
+      return errorResponse('Too many login attempts. Try again in 5 minutes.', 429);
+    }
+
     const body = await request.json();
     const { email, password } = body;
 
     if (!email || !password) {
-      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
+      return apiErrors.badRequest('Email and password are required');
     }
 
-    // 2. Find the user in the database
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
+    const user = await prisma.user.findUnique({ where: { email } });
 
     if (!user || !user.password_hash) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+      return apiErrors.unauthorized('Invalid credentials');
     }
 
-    // 3. Check if the password matches the hash
+    // --- STATUS GATEKEEPER ---
+    if (user.status === 'SUSPENDED') {
+      return apiErrors.forbidden('This account has been suspended or deleted.');
+    }
+    if (user.status === 'UNVERIFIED') {
+      // We pass the extra data in the `errors` parameter of your errorResponse
+      return errorResponse('Please verify your email before logging in.', 403, { requiresVerification: true });
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.password_hash);
-
     if (!isPasswordValid) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+      return apiErrors.unauthorized('Invalid credentials');
     }
 
-    // 4. Create the JWT Payload (The VIP Badge)
-    // We embed their ID and Role so the middleware can read it later without hitting the DB again
     const jwtPayload = {
-      userId: user.id,
+      id: user.id,
+      email: user.email,
       role: user.role, 
     };
 
-    // 5. Cryptographically sign the token using jose
     const secret = new TextEncoder().encode(process.env.JWT_SECRET);
     const token = await new SignJWT(jwtPayload)
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
-      .setExpirationTime('7d') // Token expires in 7 days
+      .setExpirationTime('7d') 
       .sign(secret);
 
-    // 6. Set the HTTP-Only Cookie (For the Web Portal)
-    // HTTP-Only means malicious JavaScript cannot steal this cookie
-    cookies().set({
-      name: 'umc_session',
-      value: token,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 7, // 7 days in seconds
-    });
-
-    // 7. Return the token in JSON (For the Mobile Apps to save in SecureStore)
-    return NextResponse.json({
-      message: 'Login successful',
-      token: token,
+    // --- CENTRALIZED SUCCESS RESPONSE ---
+    const response = successResponse({
+      token,
       user: {
         id: user.id,
         name: user.name,
         role: user.role,
+        is_profile_complete: user.is_profile_complete
       }
-    }, { status: 200 });
+    }, 'Login successful');
+
+    response.cookies.set('session_token', token, { 
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7, 
+    });
+
+    return response;
 
   } catch (error) {
     console.error('Login Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return apiErrors.internal();
   }
 }
