@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server';
-import prisma from '@medical-center/db';
+
+import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { checkRateLimit } from '@/lib/rate-limiter';

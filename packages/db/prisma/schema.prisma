@@ -18,6 +18,7 @@ enum Role {
   ADMIN
   // ADMIN_STAFF // uncomment this line if and when you expand the service to admin staff of the university
   AMBULANCE_DRIVER
+  PHARMACIST
 }
 
 enum UserStatus {
@@ -127,6 +128,7 @@ model MedicalCenterStaff {
   user   User    @relation(fields: [staff_id], references: [id], onDelete: Cascade)
   doctor Doctor?
   nurse  Nurse?
+  pharmacist Pharmacist?
 }
 
 model AmbulanceDriver {
@@ -165,6 +167,14 @@ model Nurse {
   availabilities NurseAvailability[]
 }
 
+model Pharmacist {
+  pharmacist_id String @id // PK + FK to MedicalCenterStaff
+
+  staff MedicalCenterStaff @relation(fields: [pharmacist_id], references: [staff_id], onDelete: Cascade)
+  
+  // ADD THIS LINE:
+  availabilities PharmacistAvailability[]
+}
 // -----------------------------------------------------------------------------
 // CORE CLINICAL MODELS
 // -----------------------------------------------------------------------------
@@ -409,6 +419,18 @@ model DriverAvailability {
   updated_at   DateTime @updatedAt
 
   driver AmbulanceDriver @relation(fields: [driver_id], references: [driver_id], onDelete: Cascade)
+}
+
+model PharmacistAvailability {
+  pharmacist_id String 
+  day_of_week   Int
+  start_time    DateTime
+  end_time      DateTime
+  is_available  Boolean  @default(true)
+
+  pharmacist Pharmacist @relation(fields: [pharmacist_id], references: [pharmacist_id], onDelete: Cascade)
+
+  @@id([pharmacist_id, day_of_week])
 }
 
 // -----------------------------------------------------------------------------

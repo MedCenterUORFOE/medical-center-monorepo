@@ -9,8 +9,8 @@
  * ---------------------------------------
  */
 
-import { NextResponse } from 'next/server';
-import prisma from '@medical-center/db';
+
+import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 // import { getUserSession } from '@/lib/auth';

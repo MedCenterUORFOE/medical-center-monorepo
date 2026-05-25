@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@medical-center/db';
+import { NextRequest } from 'next/server'; // FIX: Imported NextRequest
+import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { Resend } from 'resend';
@@ -12,7 +12,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const provisionSchema = z.object({
   email: z.string().email("Invalid email address"),
   name: z.string().min(2, "Name is required"),
-  role: z.enum(["DOCTOR", "NURSE", "PHARMACIST", "ADMIN", "DRIVER"]),
+  role: z.enum(["DOCTOR", "NURSE", "PHARMACIST", "ADMIN", "AMBULANCE_DRIVER"]), // FIX: Updated enum
   nic: z.string().min(10, "NIC is required"),
 });
 
@@ -22,14 +22,9 @@ export async function POST(request: Request) {
     const forwardedFor = request.headers.get('x-forwarded-for');
     const ip = forwardedFor ? forwardedFor.split(',')[0] : 'unknown-ip';
     
-    if (!checkRateLimit(ip, 20, 3600000)) { // 20 provisions per hour
+    if (!checkRateLimit(ip, 20, 3600000)) { 
       return errorResponse('Too many provisioning attempts.', 429);
     }
-
-    // --- SECURITY NOTE ---
-    // We do NOT need to check if the user is an ADMIN here.
-    // Your middleware.ts is already configured to block anyone 
-    // without the 'ADMIN' role from accessing '/api/admin/*' !
 
     const body = await request.json();
     const { email, name, role, nic } = provisionSchema.parse(body);
@@ -46,6 +41,7 @@ export async function POST(request: Request) {
     // THE SECURE TRANSACTION
     const newUser = await prisma.$transaction(async (tx) => {
       
+      // 1. Create Base Identity
       const user = await tx.user.create({
         data: {
           email,
@@ -54,13 +50,38 @@ export async function POST(request: Request) {
           nic,
           status: 'UNVERIFIED',
           is_profile_complete: false,
-          reset_token: setupToken, // We repurpose the reset token for account setup!
+          reset_token: setupToken, 
           reset_expires: tokenExpiry
         }
       });
 
-      // To extract the Admin's ID who made this request, we read the header 
-      // injected by your middleware!
+      // 2. Create the Subtypes based on Role
+      if (role === "DOCTOR" || role === "NURSE" || role === "PHARMACIST") {
+        // Create the Middle Tier
+        const staff = await tx.medicalCenterStaff.create({
+          data: {
+            staff_id: user.id, // PK maps to User ID
+            license_number: `PENDING-${user.id.substring(0, 8)}`, // Temporary placeholder
+          }
+        });
+
+        // Create the Final Tier
+        if (role === "DOCTOR") {
+          await tx.doctor.create({ data: { doctor_id: staff.staff_id, specialization: "PENDING" } });
+        } else if (role === "NURSE") {
+          await tx.nurse.create({ data: { nurse_id: staff.staff_id } });
+        } else if (role === "PHARMACIST") {
+          await tx.pharmacist.create({ data: { pharmacist_id: staff.staff_id } });
+        }
+      } else if (role === "AMBULANCE_DRIVER") { // FIX: Updated role check
+        await tx.ambulanceDriver.create({
+          data: {
+            driver_id: user.id,
+            vehicle_registration: "PENDING",
+          }
+        });
+      }
+
       const adminId = request.headers.get('x-user-id') || 'system-admin';
 
       await tx.auditLog.create({
@@ -82,12 +103,10 @@ export async function POST(request: Request) {
 
     // --- EMAIL DISPATCH ---
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    // They will be directed to a "Setup Account" page which functions almost 
-    // exactly like your "Reset Password" page on the frontend.
     const setupLink = `${appUrl}/setup-account?token=${setupToken}`;
 
     await resend.emails.send({
-      from: 'Medical Center <admin@resend.dev>', // MUST use this for unverified Resend testing
+      from: 'Medical Center <admin@resend.dev>', 
       to: email, 
       subject: `Welcome to the Medical Center - ${role} Account Setup`,
       html: `
@@ -124,16 +143,13 @@ export async function POST(request: Request) {
 // ============================================================================
 export async function GET(request: NextRequest) {
   try {
-    // --- RATE LIMITING ---
     const forwardedFor = request.headers.get('x-forwarded-for');
     const ip = forwardedFor ? forwardedFor.split(',')[0] : 'unknown-ip';
     
-    // Higher limit for GET requests since navigating pages triggers this often
     if (!checkRateLimit(ip, 100, 300000)) { 
       return errorResponse('Too many requests. Please slow down.', 429);
     }
 
-    // 1. Extract Query Parameters
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
@@ -141,7 +157,6 @@ export async function GET(request: NextRequest) {
     const role = searchParams.get('role');
     const status = searchParams.get('status');
 
-    // 2. Build the Dynamic Prisma WHERE Clause
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const whereClause: any = {};
 
@@ -150,7 +165,7 @@ export async function GET(request: NextRequest) {
         { name: { contains: search, mode: 'insensitive' } },
         { email: { contains: search, mode: 'insensitive' } },
         { nic: { contains: search, mode: 'insensitive' } },
-        { university_reg_number: { contains: search, mode: 'insensitive' } }, // Assuming this exists on your User model, else remove
+        // FIX: Removed university_reg_number because it crashes the User table query
       ];
     }
 
@@ -162,7 +177,6 @@ export async function GET(request: NextRequest) {
       whereClause.status = status;
     }
 
-    // 3. Execute Database Query with Pagination
     const skip = (page - 1) * limit;
 
     const [users, totalCount] = await prisma.$transaction([
@@ -170,9 +184,8 @@ export async function GET(request: NextRequest) {
         where: whereClause,
         skip,
         take: limit,
-        orderBy: { created_at: 'desc' }, // Newest users first
+        orderBy: { created_at: 'desc' }, 
         select: {
-          // WE NEVER SELECT THE PASSWORD HASH OR TOKENS HERE
           id: true,
           name: true,
           email: true,
@@ -182,10 +195,9 @@ export async function GET(request: NextRequest) {
           is_profile_complete: true,
         },
       }),
-      prisma.user.count({ where: whereClause }), // Get the total for frontend pagination math
+      prisma.user.count({ where: whereClause }), 
     ]);
 
-    // 4. Return the standard response
     return successResponse(
       {
         users,

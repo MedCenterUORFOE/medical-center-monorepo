@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server';
-import prisma from '@medical-center/db';
+
+import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
@@ -15,9 +15,68 @@ const clinicalProfileSchema = z.object({
 });
 
 // ============================================================================
-// PATCH: Update Patient Baseline Clinical Data (Nurses/Doctors)
+// GET: Fetch Base Identity & Clinical Profile (No Medical Records)
 // ============================================================================
-export async function PATCH(
+export async function GET(
+  request: Request,
+  { params }: { params: { patientId: string } }
+) {
+  try {
+    // --- RATE LIMITING ---
+    const forwardedFor = request.headers.get('x-forwarded-for');
+    const ip = forwardedFor ? forwardedFor.split(',')[0] : 'unknown-ip';
+    
+    // Limit: 60 profile views per hour per IP to prevent scraping
+    if (!checkRateLimit(ip, 60, 3600000)) { 
+      return errorResponse('Too many profile fetch attempts. Please slow down.', 429);
+    }
+
+    // === PRODUCTION AUTH & RBAC BLOCK ===
+    // const session = await getUserSession();
+    // if (!session?.id) return apiErrors.unauthorized();
+    // 
+    // if (session.role !== "NURSE" && session.role !== "DOCTOR" && session.role !== "ADMIN") {
+    //   return apiErrors.forbidden("Medical Staff Only");
+    // }
+
+    const { patientId } = params;
+
+    // Fetch the 360-degree view of the patient (Excluding clinical history)
+    const patientData = await prisma.user.findUnique({
+      where: { 
+        id: patientId,
+        status: { not: 'SUSPENDED' } 
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        nic: true,
+        phone: true,
+        role: true,
+        profile_picture: true,
+        student: true,
+        academicStaff: true,
+        patientProfile: true,
+      }
+    });
+
+    if (!patientData) {
+      return apiErrors.notFound("Patient not found or account suspended.");
+    }
+
+    return successResponse({ patient: patientData }, "Patient profile retrieved successfully.");
+
+  } catch (error) {
+    console.error("Profile Fetch Error:", error);
+    return apiErrors.internal();
+  }
+}
+
+// ============================================================================
+// PUT / PATCH: Update Patient Baseline Clinical Data (Nurses/Doctors)
+// ============================================================================
+export async function PUT(
   request: Request,
   { params }: { params: { patientId: string } } 
 ) {
@@ -62,7 +121,6 @@ export async function PATCH(
 
       const forwardedFor = request.headers.get('x-forwarded-for');
       const ip = forwardedFor ? forwardedFor.split(',')[0] : 'unknown-ip';
-
       const changedKeys = Object.keys(validatedData).filter(key => validatedData[key as keyof typeof validatedData] !== undefined);
 
       await tx.auditLog.create({
@@ -93,73 +151,5 @@ export async function PATCH(
   }
 }
 
-// ============================================================================
-// GET: Fetch Complete Medical Dossier for a specific Patient
-// ============================================================================
-export async function GET(
-  request: Request,
-  { params }: { params: { patientId: string } }
-) {
-  try {
-    // --- RATE LIMITING ---
-    const forwardedFor = request.headers.get('x-forwarded-for');
-    const ip = forwardedFor ? forwardedFor.split(',')[0] : 'unknown-ip';
-    
-    // Limit: 60 profile views per hour per IP to prevent scraping
-    if (!checkRateLimit(ip, 60, 3600000)) { 
-      return errorResponse('Too many profile fetch attempts. Please slow down.', 429);
-    }
-
-    // === PRODUCTION AUTH & RBAC BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // 
-    // if (session.role !== "NURSE" && session.role !== "DOCTOR" && session.role !== "ADMIN") {
-    //   return apiErrors.forbidden("Medical Staff Only");
-    // }
-
-    const { patientId } = params;
-
-    // Fetch the 360-degree view of the patient
-    const patientData = await prisma.user.findUnique({
-      where: { 
-        id: patientId,
-        // Ensure we don't accidentally fetch suspended/deleted accounts
-        status: { not: 'SUSPENDED' } 
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        nic: true,
-        phone: true,
-        role: true,
-        profile_picture: true,
-        
-        // 1. Get their University Baseline
-        student: true,
-        academicStaff: true,
-        
-        // 2. Get their Clinical Baseline (Allergies, Blood Type, Weight, etc.)
-        patientProfile: true,
-
-        // 3. Get their Past Medical Encounters (If your schema has this mapped)
-        // medicalRecords: {
-        //   orderBy: { created_at: 'desc' },
-        //   take: 10,
-        //   select: { id: true, diagnosis: true, date: true, doctor_name: true }
-        // }
-      }
-    });
-
-    if (!patientData) {
-      return apiErrors.notFound("Patient not found or account suspended.");
-    }
-
-    return successResponse({ patient: patientData }, "Patient dossier retrieved successfully.");
-
-  } catch (error) {
-    console.error("Medical Dossier Fetch Error:", error);
-    return apiErrors.internal();
-  }
-}
+// Map PATCH to PUT for complete frontend compatibility
+export const PATCH = PUT;

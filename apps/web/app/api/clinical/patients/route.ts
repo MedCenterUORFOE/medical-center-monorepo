@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import prisma from '@medical-center/db';
+import { prisma } from '@medical-center/db';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 

@@ -9,6 +9,7 @@ const publicRoutes = [
   '/register',
   '/forgot-password',
   '/reset-password',
+  '/setup-account', // <-- ADDED: Crucial for Admin-provisioned staff
   
   // API Routes
   '/api/health',
@@ -27,6 +28,7 @@ const roleAccessMap: Record<string, string[]> = {
   '/admin': ['ADMIN'],
   '/dashboard/doctor': ['DOCTOR'],
   '/dashboard/nurse': ['NURSE'],
+  '/dashboard/pharmacist': ['PHARMACIST'], // <-- ADDED
   '/inventory': ['PHARMACIST', 'NURSE', 'ADMIN'],
   
   // API Routes
@@ -34,6 +36,8 @@ const roleAccessMap: Record<string, string[]> = {
   '/api/doctor': ['DOCTOR'],
   '/api/nurse': ['NURSE'],
   '/api/inventory': ['PHARMACIST', 'NURSE', 'ADMIN'],
+  '/api/medicines': ['ADMIN', 'DOCTOR', 'NURSE', 'PHARMACIST'], // <-- ADDED
+  '/api/dispensations': ['ADMIN', 'NURSE', 'PHARMACIST'],       // <-- ADDED
 };
 
 export async function middleware(request: NextRequest) {
@@ -65,7 +69,6 @@ export async function middleware(request: NextRequest) {
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.substring(7);
   } else {
-    // MISMATCH FIXED: Changed to 'session_token'
     token = request.cookies.get('session_token')?.value;
   }
 
@@ -96,7 +99,6 @@ export async function middleware(request: NextRequest) {
     // --- G. PASS THE USER ID TO THE BACKEND ---
     const requestHeaders = new Headers(request.headers);
     
-    // MISMATCH FIXED: Extracting payload.id instead of payload.userId
     requestHeaders.set('x-user-id', payload.id as string);
 
     return NextResponse.next({

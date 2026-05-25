@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server';
+
 import { SignJWT } from 'jose';
 import bcrypt from 'bcryptjs';
-import prisma from '@medical-center/db';
+import { prisma } from '@medical-center/db';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 

@@ -5,20 +5,12 @@
  * PRODUCTION MODE: Uncomment `getUserSession()` before deployment.
  */
 
-import prisma from '@medical-center/db';
-import { createClient } from '@supabase/supabase-js';
+import { prisma } from '@medical-center/db';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
+// FIX: Use the centralized build-safe Supabase client!
+import { supabase } from '@/lib/supabase';
 // import { getUserSession } from '@/lib/auth';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing Supabase Environment Variables");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(request: Request) {
   try {

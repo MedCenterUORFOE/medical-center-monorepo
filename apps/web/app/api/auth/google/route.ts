@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { OAuth2Client } from 'google-auth-library';
-import { prisma } from '@medical-center/db'; 
+import { prisma } from '@medical-center/db';
 import { SignJWT } from 'jose';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';

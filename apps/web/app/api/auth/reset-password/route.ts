@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
+
 import bcrypt from 'bcryptjs';
-import prisma from '@medical-center/db';
+import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
