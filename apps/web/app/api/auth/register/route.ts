@@ -2,11 +2,11 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { prisma } from '@medical-center/db';
-import { Resend } from 'resend';
+import { resend } from '@/lib/resend';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+
 
 // --- SECURITY: EXPLICIT WHITELIST ---
 // Only these roles are allowed to use the public self-registration form.

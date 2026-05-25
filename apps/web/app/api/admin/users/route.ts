@@ -2,11 +2,11 @@ import { NextRequest } from 'next/server'; // FIX: Imported NextRequest
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import crypto from 'crypto';
-import { Resend } from 'resend';
+import { resend } from '@/lib/resend';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+
 
 // Validating the Admin's input
 const provisionSchema = z.object({

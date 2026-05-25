@@ -3,11 +3,11 @@ import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
-import { Resend } from 'resend';
+import { resend } from '@/lib/resend';
 import { supabase } from '@/lib/supabase';
 // import { getUserSession } from '@/lib/auth';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+
 
 
 const certificateStatusSchema = z.object({
