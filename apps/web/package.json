@@ -10,16 +10,21 @@
   },
   "dependencies": {
     "@medical-center/db": "*",
+    "@supabase/supabase-js": "^2.106.1",
     "bcryptjs": "^3.0.3",
     "google-auth-library": "^10.6.2",
     "jose": "^6.2.3",
     "next": "14.1.4",
+    "pdfkit": "^0.18.0",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "resend": "^6.12.3",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
+    "@types/pdfkit": "^0.17.6",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@typescript-eslint/eslint-plugin": "^7.18.0",

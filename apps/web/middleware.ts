@@ -4,11 +4,22 @@ import { jwtVerify } from 'jose';
 
 // 1. The Whitelist: The ONLY routes allowed without a token
 const publicRoutes = [
-  '/api/auth/login',
-  '/api/auth/register', 
-  '/api/health',
+  // UI Routes
   '/login',
-  '/register'
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/setup-account', // <-- ADDED: Crucial for Admin-provisioned staff
+  
+  // API Routes
+  '/api/health',
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/google',
+  '/api/auth/forgot-password',
+  '/api/auth/reset-password',
+  '/api/auth/verify',
+  '/api/auth/resend-verification'
 ];
 
 // 2. The VIP List: Specific roles required for specific folders
@@ -17,6 +28,7 @@ const roleAccessMap: Record<string, string[]> = {
   '/admin': ['ADMIN'],
   '/dashboard/doctor': ['DOCTOR'],
   '/dashboard/nurse': ['NURSE'],
+  '/dashboard/pharmacist': ['PHARMACIST'], // <-- ADDED
   '/inventory': ['PHARMACIST', 'NURSE', 'ADMIN'],
   
   // API Routes
@@ -24,13 +36,14 @@ const roleAccessMap: Record<string, string[]> = {
   '/api/doctor': ['DOCTOR'],
   '/api/nurse': ['NURSE'],
   '/api/inventory': ['PHARMACIST', 'NURSE', 'ADMIN'],
+  '/api/medicines': ['ADMIN', 'DOCTOR', 'NURSE', 'PHARMACIST'], // <-- ADDED
+  '/api/dispensations': ['ADMIN', 'NURSE', 'PHARMACIST'],       // <-- ADDED
 };
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // --- A. IS IT ON THE WHITELIST? ---
-  // If the URL starts with any of our public routes, open the door immediately.
   if (publicRoutes.some(route => pathname.startsWith(route))) {
     return NextResponse.next();
   }
@@ -56,7 +69,7 @@ export async function middleware(request: NextRequest) {
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.substring(7);
   } else {
-    token = request.cookies.get('umc_session')?.value;
+    token = request.cookies.get('session_token')?.value;
   }
 
   // --- D. NO TOKEN? KICK THEM OUT ---
@@ -84,9 +97,9 @@ export async function middleware(request: NextRequest) {
     }
 
     // --- G. PASS THE USER ID TO THE BACKEND ---
-    // We safely inject the verified ID into the headers so the API routes can use it!
     const requestHeaders = new Headers(request.headers);
-    requestHeaders.set('x-user-id', payload.userId as string);
+    
+    requestHeaders.set('x-user-id', payload.id as string);
 
     return NextResponse.next({
       request: {
