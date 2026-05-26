@@ -1,19 +1,15 @@
-
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { resend } from '@/lib/resend';
 import { supabase } from '@/lib/supabase';
+import { sendPushNotification } from '@/lib/firebase-admin';
 // import { getUserSession } from '@/lib/auth';
-
-
-
 
 const certificateStatusSchema = z.object({
   status: z.enum(["APPROVED", "REJECTED"]),
   doctor_notes: z.string().optional(),
-  // Assuming the frontend/pdf-generator has already saved the file and provides the path on approval
   file_path: z.string().optional(), 
 }).superRefine((data, ctx) => {
   if (data.status === "REJECTED" && (!data.doctor_notes || data.doctor_notes.trim() === "")) {
@@ -64,7 +60,7 @@ export async function PATCH(
     const certRequest = await prisma.medicalCertificateRequest.findUnique({
       where: { id: requestId },
       include: {
-        patient: { include: { user: { select: { name: true, email: true } } } },
+        patient: { include: { user: { select: { name: true, email: true, fcm_token: true } } } },
         recipients: { include: { staff: { include: { user: { select: { email: true } } } } } }
       }
     });
@@ -83,7 +79,7 @@ export async function PATCH(
         }
       });
 
-      // 3. Notify the Patient
+      // 3. Notify the Patient (In-App DB Notification)
       await tx.notification.create({
         data: {
           user_id: certRequest.patient_id,
@@ -107,13 +103,38 @@ export async function PATCH(
     });
 
     // ------------------------------------------------------------------------
+    // FIREBASE PUSH NOTIFICATION (Real-time ping to the Patient's Phone)
+    // ------------------------------------------------------------------------
+    const patientToken = certRequest.patient.user.fcm_token;
+    if (patientToken) {
+      const title = validatedData.status === "APPROVED" 
+        ? "📄 Certificate Approved" 
+        : "❌ Certificate Rejected";
+      
+      const bodyText = validatedData.status === "APPROVED"
+        ? "Your medical certificate has been approved and dispatched."
+        : "Your certificate request was rejected. Tap to view doctor notes.";
+
+      await sendPushNotification({
+        tokens: patientToken,
+        title: title,
+        body: bodyText,
+        data: {
+          type: "CERTIFICATE_UPDATE",
+          status: validatedData.status,
+          request_id: requestId,
+        }
+      });
+    }
+
+    // ------------------------------------------------------------------------
     // THE AUTO-SEND EMAIL WORKER (Executes only on Approval)
     // ------------------------------------------------------------------------
     if (validatedData.status === "APPROVED" && validatedData.file_path) {
       
       // A. Fetch the private PDF Buffer from Supabase Storage
       const { data: fileData, error: storageError } = await supabase.storage
-        .from('medical-documents') // Replace with your actual private bucket name
+        .from('medical-documents') 
         .download(validatedData.file_path);
 
       if (storageError || !fileData) {
@@ -121,7 +142,6 @@ export async function PATCH(
         return errorResponse("Certificate approved, but failed to fetch PDF for dispatch.", 500);
       }
 
-      // Convert Blob to Node Buffer for Resend
       const pdfBuffer = Buffer.from(await fileData.arrayBuffer());
 
       // B. Extract the tagged academic staff emails
@@ -129,11 +149,11 @@ export async function PATCH(
         .map(recipient => recipient.staff.user.email)
         .filter(email => email !== null) as string[];
 
-      // C. Dispatch the email with the PDF attached directly in memory
+      // C. Dispatch the email
       if (targetEmails.length > 0) {
         try {
           await resend.emails.send({
-            from: 'Medical Center <noreply@ruhuna-medical.com>', // Will default to sandbox address if domain unverified
+            from: 'Medical Center <noreply@ruhuna-medical.com>', 
             to: targetEmails,
             subject: `Medical Leave Certificate: ${certRequest.patient.user.name}`,
             text: `Please find the authorized medical leave certificate attached for ${certRequest.patient.user.name}.`,
@@ -145,7 +165,6 @@ export async function PATCH(
             ]
           });
 
-          // Log the successful dispatch timestamp for compliance
           await prisma.extraCertificateRecipient.updateMany({
             where: { request_id: requestId },
             data: { sent_at: new Date() }
@@ -153,7 +172,6 @@ export async function PATCH(
 
         } catch (emailError) {
           console.error("Resend Dispatch Error:", emailError);
-          // We do not throw a 500 here because the database transaction (approval) already succeeded.
         }
       }
     }

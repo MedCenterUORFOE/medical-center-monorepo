@@ -10,22 +10,42 @@ Compiler edge-server unexpectedly exited with code: null and signal: SIGTERM
  ✓ Compiled successfully
    Linting and checking validity of types ...
    Collecting page data ...
-   Generating static pages (0/31) ...
+Firebase Admin SDK initialized successfully.
+Firebase Admin SDK initialized successfully.
+Firebase Admin SDK initialized successfully.
+Firebase Admin SDK initialized successfully.
+Firebase Admin SDK initialized successfully.
+   Generating static pages (0/33) ...
+Email Verification Error: ex [Error]: Dynamic server usage: Page couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+   Generating static pages (8/33) 
+    at Object.eP [as staticGenerationBailout] (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29358)
+    at i (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:34692)
+    at Object.get (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:34788)
+    at p (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\.next\server\app\api\auth\verify\route.js:1:550)
+    at C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:42490
+    at C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\server\lib\trace\tracer.js:133:36
+    at NoopContextManager.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\@opentelemetry\api\build\src\context\NoopContextManager.js:14:19)
+    at ContextAPI.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\@opentelemetry\api\build\src\api\context.js:51:46)
+    at NoopTracer.startActiveSpan (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\@opentelemetry\api\build\src\trace\NoopTracer.js:54:31)
+    at ProxyTracer.startActiveSpan (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\@opentelemetry\api\build\src\trace\ProxyTracer.js:27:24) {
+  description: "Page couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
 Patient Search Error: ex [Error]: Dynamic server usage: Page couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
     at eP (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29358)
     at Module.eE (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29694)
     at i (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:34572)
     at Object.get (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:34788)
     at l (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\.next\server\app\api\clinical\patients\route.js:1:541)
-   Generating static pages (7/31) 
     at C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:42490
     at C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\server\lib\trace\tracer.js:133:36
-    at NoopContextManager.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:7062)
-    at ContextAPI.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:518)
-    at NoopTracer.startActiveSpan (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:18093) {
+    at NoopContextManager.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\@opentelemetry\api\build\src\context\NoopContextManager.js:14:19)
+    at ContextAPI.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\@opentelemetry\api\build\src\api\context.js:51:46)
+    at NoopTracer.startActiveSpan (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\@opentelemetry\api\build\src\trace\NoopTracer.js:54:31) {
   description: "Page couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
   digest: 'DYNAMIC_SERVER_USAGE'
 }
+   Generating static pages (16/33) 
 Notifications Fetch Error: ex [Error]: Dynamic server usage: Page couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
     at eP (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29358)
     at Module.eE (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29694)
@@ -34,28 +54,13 @@ Notifications Fetch Error: ex [Error]: Dynamic server usage: Page couldn't be re
     at d (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\.next\server\app\api\notifications\route.js:1:541)
     at C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:42490
     at C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\server\lib\trace\tracer.js:133:36
-    at NoopContextManager.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:7062)
-    at ContextAPI.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:518)
-    at NoopTracer.startActiveSpan (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:18093) {
+    at NoopContextManager.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\@opentelemetry\api\build\src\context\NoopContextManager.js:14:19)
+    at ContextAPI.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\@opentelemetry\api\build\src\api\context.js:51:46)
+    at NoopTracer.startActiveSpan (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\@opentelemetry\api\build\src\trace\NoopTracer.js:54:31) {
   description: "Page couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
   digest: 'DYNAMIC_SERVER_USAGE'
 }
-Email Verification Error: ex [Error]: Dynamic server usage: Page couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
-    at Object.eP [as staticGenerationBailout] (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29358)
-    at i (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:34692)
-    at Object.get (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:34788)
-    at p (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\.next\server\app\api\auth\verify\route.js:1:550)
-    at C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:42490
-    at C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\server\lib\trace\tracer.js:133:36
-    at NoopContextManager.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:7062)
-    at ContextAPI.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:518)
-    at NoopTracer.startActiveSpan (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:18093)
-    at ProxyTracer.startActiveSpan (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:18854) {
-  description: "Page couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
-  digest: 'DYNAMIC_SERVER_USAGE'
-}
-   Generating static pages (15/31) 
-   Generating static pages (23/31) 
+   Generating static pages (24/33) 
 Signed URL Generator Error: ex [Error]: Dynamic server usage: Page couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
     at eP (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29358)
     at Module.eE (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29694)
@@ -64,13 +69,14 @@ Signed URL Generator Error: ex [Error]: Dynamic server usage: Page couldn't be r
     at c (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\.next\server\app\api\documents\sign-url\route.js:1:551)
     at C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:42490
     at C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\server\lib\trace\tracer.js:133:36
-    at NoopContextManager.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:7062)
-    at ContextAPI.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:518)
-    at NoopTracer.startActiveSpan (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\@opentelemetry\api\index.js:1:18093) {
+    at NoopContextManager.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\@opentelemetry\api\build\src\context\NoopContextManager.js:14:19)
+    at ContextAPI.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\@opentelemetry\api\build\src\api\context.js:51:46)
+    at NoopTracer.startActiveSpan (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\@opentelemetry\api\build\src\trace\NoopTracer.js:54:31) {
   description: "Page couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
   digest: 'DYNAMIC_SERVER_USAGE'
 }
- ✓ Generating static pages (31/31) 
+Firebase Admin SDK initialized successfully.
+ ✓ Generating static pages (33/33) 
    Finalizing page optimization ...
    Collecting build traces ...
 
@@ -79,6 +85,11 @@ Route (app)                                Size     First Load JS
 ├ ○ /_not-found                            882 B          85.1 kB
 ├ λ /api/admin/users                       0 B                0 B
 ├ λ /api/admin/users/[userId]/status       0 B                0 B
+├ λ /api/ambulance/driver/status           0 B                0 B
+├ λ /api/ambulance/requests                0 B                0 B
+├ λ /api/ambulance/requests/[id]/accept    0 B                0 B
+├ λ /api/ambulance/requests/[id]/cancel    0 B                0 B
+├ λ /api/ambulance/requests/[id]/status    0 B                0 B
 ├ λ /api/appointments                      0 B                0 B
 ├ λ /api/auth/change-password              0 B                0 B
 ├ λ /api/auth/forgot-password              0 B                0 B
