@@ -1,22 +1,35 @@
 import * as admin from 'firebase-admin';
 
-// 1. Initialize Firebase (Prevent Next.js hot-reload crashes)
+const hasFirebaseKeys = 
+  process.env.FIREBASE_PROJECT_ID && 
+  process.env.FIREBASE_CLIENT_EMAIL && 
+  process.env.FIREBASE_PRIVATE_KEY;
+
+// 1. Initialize Firebase safely
 if (!admin.apps.length) {
-  try {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      }),
-    });
-    console.log('Firebase Admin SDK initialized successfully.');
-  } catch (error) {
-    console.error('Firebase Admin initialization error:', error);
+  if (!hasFirebaseKeys) {
+    // Prevent build-time crashes when environment variables aren't injected (like in CI/CD pipelines)
+    console.warn(
+      '⚠️ Firebase Admin environment variables are missing. Firebase initialization skipped. (Expected during build/CI phases).'
+    );
+  } else {
+    try {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        }),
+      });
+      console.log('Firebase Admin SDK initialized successfully.');
+    } catch (error) {
+      console.error('Firebase Admin initialization error:', error);
+    }
   }
 }
 
-export const adminMessaging = admin.messaging();
+// Safely export messaging, but handle situations where app wasn't instantiated
+export const adminMessaging = admin.apps.length ? admin.messaging() : null;
 
 // 2. The Master Push Notification Helper
 export async function sendPushNotification({
@@ -31,7 +44,12 @@ export async function sendPushNotification({
   data?: Record<string, string>;
 }) {
   try {
-    // Normalize to an array so we always use sendEachForMulticast
+    // If initialization was skipped (CI environment), log and move on without throwing
+    if (!adminMessaging) {
+      console.warn('[FCM] Push notification skipped: Firebase Admin SDK is not initialized.');
+      return null;
+    }
+
     const tokenArray = Array.isArray(tokens) ? tokens : [tokens];
 
     if (tokenArray.length === 0) {
@@ -45,12 +63,9 @@ export async function sendPushNotification({
       tokens: tokenArray,
     };
 
-    // Fire the notification
     const response = await adminMessaging.sendEachForMulticast(message);
-    
     console.log(`[FCM] Success: ${response.successCount} | Failed: ${response.failureCount}`);
 
-    // If any tokens failed (e.g., user uninstalled app), log exactly which ones
     if (response.failureCount > 0) {
       response.responses.forEach((resp, idx) => {
         if (!resp.success) {
@@ -62,8 +77,6 @@ export async function sendPushNotification({
     return response;
   } catch (error) {
     console.error('[FCM] Critical Push Notification Error:', error);
-    // We return null instead of throwing an error so the main API route doesn't crash 
-    // if notifications temporarily go down.
     return null;
   }
 }
