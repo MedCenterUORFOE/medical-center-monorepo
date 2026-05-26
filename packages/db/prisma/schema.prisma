@@ -36,6 +36,7 @@ enum AppointmentStatus {
 enum EmergencyStatus {
   PENDING
   DISPATCHED
+  ARRIVED
   COMPLETED
   CANCELLED
 }
@@ -74,6 +75,7 @@ model User {
   profile_picture      String?
   reset_token          String?    @unique // For password recovery
   reset_expires        DateTime? // For password recovery
+  fcm_token           String?
 
   // --- FIXED RELATION NAMES (CamelCase to match API queries) ---
   // ISA Subtypes

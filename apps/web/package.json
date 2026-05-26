@@ -12,6 +12,7 @@
     "@medical-center/db": "*",
     "@supabase/supabase-js": "^2.106.1",
     "bcryptjs": "^3.0.3",
+    "firebase-admin": "^13.10.0",
     "google-auth-library": "^10.6.2",
     "jose": "^6.2.3",
     "next": "14.1.4",
