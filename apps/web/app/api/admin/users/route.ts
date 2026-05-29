@@ -21,8 +21,8 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs'; // ADDED: Required for Flow A
-import crypto from 'crypto';
-import { resend } from '@/lib/resend';
+//import crypto from 'crypto';
+//import { resend } from '@/lib/resend';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 
