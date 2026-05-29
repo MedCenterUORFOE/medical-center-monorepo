@@ -1,8 +1,7 @@
-
 import { prisma } from '@medical-center/db';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
-// import { getUserSession } from '@/lib/auth';
+import { getUserSession } from '@/lib/auth';
 
 // ============================================================================
 // GET: Fetch Complete Medical History Timeline for a Patient
@@ -21,16 +20,13 @@ export async function GET(
     }
 
     // === PRODUCTION AUTH & RBAC BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // 
-    // // Only medical staff OR the actual patient can view this history
-    // if (session.role !== "NURSE" && session.role !== "DOCTOR" && session.id !== params.patientId) {
-    //   return apiErrors.forbidden("Unauthorized access to medical records.");
-    // }
-
-    // === LOCAL TESTING MOCK ===
-    // (Bypassing auth check for local Postman testing)
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    
+    // Only medical staff OR the actual patient can view this history
+    if (session.role !== "NURSE" && session.role !== "DOCTOR" && session.id !== params.patientId) {
+      return apiErrors.forbidden("Unauthorized access to medical records.");
+    }
 
     const { patientId } = params;
 

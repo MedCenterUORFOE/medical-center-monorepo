@@ -3,12 +3,12 @@ import { sendPushNotification } from '@/lib/firebase-admin';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { z } from 'zod';
+import { getUserSession } from '@/lib/auth';
 
 // -----------------------------------------------------------------------------
 // ZOD VALIDATION SCHEMA
 // -----------------------------------------------------------------------------
 const createEmergencySchema = z.object({
-  requester_id: z.string().uuid("Invalid Requester ID"),
   pickup_lat: z.number({ required_error: "Latitude is required" }),
   pickup_lng: z.number({ required_error: "Longitude is required" }),
 });
@@ -25,13 +25,22 @@ export async function POST(request: Request) {
       return errorResponse('Too many requests. Please wait a moment.', 429);
     }
 
+    // === PRODUCTION AUTH BLOCK ===
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    
+    if (session.role !== "STUDENT" && session.role !== "ACADEMIC_STAFF") {
+      return apiErrors.forbidden("Only students and academic staff can request an ambulance.");
+    }
+    const requesterId = session.id;
+
     const body = await request.json();
     const validatedData = createEmergencySchema.parse(body);
 
     // 1. Create the Emergency Request in the database
     const newRequest = await prisma.emergencyRequest.create({
       data: {
-        requester_id: validatedData.requester_id,
+        requester_id: requesterId,
         patient_location_lat: validatedData.pickup_lat,
         patient_location_lng: validatedData.pickup_lng,
         status: 'PENDING',
@@ -78,7 +87,7 @@ export async function POST(request: Request) {
     // 5. Audit Trail
     await prisma.auditLog.create({
       data: {
-        user_id: validatedData.requester_id,
+        user_id: requesterId,
         action: "EMERGENCY_CREATED",
         entity_type: "EmergencyRequest",
         entity_id: newRequest.id,

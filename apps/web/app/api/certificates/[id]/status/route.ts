@@ -5,7 +5,7 @@ import { checkRateLimit } from '@/lib/rate-limiter';
 import { resend } from '@/lib/resend';
 import { supabase } from '@/lib/supabase';
 import { sendPushNotification } from '@/lib/firebase-admin';
-// import { getUserSession } from '@/lib/auth';
+import { getUserSession } from '@/lib/auth';
 
 const certificateStatusSchema = z.object({
   status: z.enum(["APPROVED", "REJECTED"]),
@@ -44,13 +44,11 @@ export async function PATCH(
     }
 
     // === PRODUCTION AUTH & RBAC BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // if (session.role !== "DOCTOR") return apiErrors.forbidden("Only doctors can approve certificates.");
-    // const doctorId = session.id;
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    if (session.role !== "DOCTOR") return apiErrors.forbidden("Only doctors can approve certificates.");
+    const doctorId = session.id;
 
-    // === LOCAL TESTING MOCK ===
-    const doctorId = "test-doctor-id"; 
     const requestId = params.id;
 
     const body = await request.json();

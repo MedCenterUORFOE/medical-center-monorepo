@@ -2,6 +2,7 @@ import { prisma } from '@medical-center/db';
 import { sendPushNotification } from '@/lib/firebase-admin';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { z } from 'zod';
+import { getUserSession } from '@/lib/auth';
 
 // -----------------------------------------------------------------------------
 // ZOD VALIDATION SCHEMA
@@ -26,12 +27,10 @@ export async function PATCH(
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown-ip';
 
     // === PRODUCTION AUTH BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id || session.role !== 'DRIVER') return apiErrors.unauthorized();
-    // const userId = session.id;
-
-    // === LOCAL TESTING MOCK ===
-    const userId = "test-driver-id";
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    if (session.role !== 'AMBULANCE_DRIVER') return apiErrors.forbidden();
+    const userId = session.id;
 
     // 1. Verify Request and Driver Ownership
     const emergencyRequest = await prisma.emergencyRequest.findUnique({

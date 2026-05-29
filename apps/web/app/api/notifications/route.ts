@@ -1,8 +1,7 @@
-
 import { prisma } from '@medical-center/db';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
-// import { getUserSession } from '@/lib/auth';
+import { getUserSession } from '@/lib/auth';
 
 // ============================================================================
 // GET: Fetch User Notifications & Unread Count
@@ -18,12 +17,9 @@ export async function GET(request: Request) {
     }
 
     // === PRODUCTION AUTH BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // const userId = session.id;
-
-    // === LOCAL TESTING MOCK ===
-    const userId = "test-student-id"; 
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    const userId = session.id;
 
     // 1. Fetch the user's notifications, newest first
     const notifications = await prisma.notification.findMany({

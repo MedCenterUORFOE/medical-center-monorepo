@@ -2,6 +2,7 @@ import { prisma } from '@medical-center/db';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { supabase } from '@/lib/supabase';
+import { getUserSession } from '@/lib/auth';
 
 // ============================================================================
 // GET: Generate a secure, 5-minute signed URL for private medical documents
@@ -17,14 +18,10 @@ export async function GET(request: Request) {
     }
 
     // === PRODUCTION AUTH & RBAC BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // const userId = session.id;
-    // const userRole = session.role;
-
-    // === LOCAL TESTING MOCK ===
-    const userId = "test-student-id"; 
-    const userRole: string = "STUDENT";
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    const userId = session.id;
+    const userRole = session.role;
 
     const { searchParams } = new URL(request.url);
     const filePath = searchParams.get('file_path');

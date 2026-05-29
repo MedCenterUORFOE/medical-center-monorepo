@@ -2,7 +2,7 @@ import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response'; // FIX: Restored errorResponse
 import { checkRateLimit } from '@/lib/rate-limiter';
-// import { getUserSession } from '@/lib/auth';
+import { getUserSession } from '@/lib/auth';
 
 const dayScheduleSchema = z.object({
   day_of_week: z.number().int().min(0).max(6, "Day must be between 0 (Sunday) and 6 (Saturday)"),
@@ -28,18 +28,14 @@ export async function PUT(request: Request) {
     }
 
     // === PRODUCTION AUTH & RBAC BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // 
-    // if (session.role !== "DOCTOR" && session.role !== "NURSE" && session.role !== "PHARMACIST") {
-    //   return apiErrors.forbidden("Only medical and pharmacy staff can set availability schedules.");
-    // }
-    // const staffId = session.id;
-    // const staffRole = session.role;
-
-    // === LOCAL TESTING MOCK ===
-    const staffId = "test-pharmacist-id"; // Try swapping to "test-nurse-id" or "test-doctor-id"
-    const staffRole: string = "PHARMACIST";
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    
+    if (session.role !== "DOCTOR" && session.role !== "NURSE" && session.role !== "PHARMACIST") {
+      return apiErrors.forbidden("Only medical and pharmacy staff can set availability schedules.");
+    }
+    const staffId = session.id;
+    const staffRole = session.role;
 
     const body = await request.json();
     const validatedData = availabilitySchema.parse(body);

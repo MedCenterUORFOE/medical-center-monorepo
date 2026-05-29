@@ -1,9 +1,8 @@
-
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
-// import { getUserSession } from '@/lib/auth';
+import { getUserSession } from '@/lib/auth';
 
 // -----------------------------------------------------------------------------
 // ZOD VALIDATION SCHEMAS
@@ -64,16 +63,13 @@ export async function POST(request: Request) {
     }
 
     // === PRODUCTION AUTH & RBAC BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // 
-    // if (session.role !== "DOCTOR") {
-    //   return apiErrors.forbidden("Only Doctors can create medical records.");
-    // }
-    // const doctorId = session.id;
-
-    // === LOCAL TESTING MOCK ===
-    const doctorId = "test-doctor-id"; 
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    
+    if (session.role !== "DOCTOR") {
+      return apiErrors.forbidden("Only Doctors can create medical records.");
+    }
+    const doctorId = session.id;
 
     const body = await request.json();
     const validatedData = createRecordSchema.parse(body);

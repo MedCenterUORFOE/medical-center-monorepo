@@ -1,9 +1,8 @@
 import { prisma } from '@medical-center/db';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { supabase } from '@/lib/supabase';
+import { getUserSession } from '@/lib/auth';
 //import { checkRateLimit } from '@/lib/rate-limiter';
-
-
 
 export async function POST(
   request: Request,
@@ -12,8 +11,26 @@ export async function POST(
   try {
     const { recordId } = params;
     
-    // 1. Authenticate and verify user has access to this record
-    // [Insert Production Auth Block Here]
+    // === PRODUCTION AUTH BLOCK ===
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    
+    if (session.role !== "DOCTOR" && session.role !== "NURSE") {
+      return apiErrors.forbidden("Only doctors and nurses can upload medical reports.");
+    }
+
+    // Ownership Check: Ensure the record exists and doctors only access their own charts
+    const targetRecord = await prisma.medicalRecord.findUnique({
+      where: { id: recordId }
+    });
+
+    if (!targetRecord) {
+      return apiErrors.notFound("Medical record not found.");
+    }
+
+    if (session.role === "DOCTOR" && targetRecord.doctor_id !== session.id) {
+      return apiErrors.forbidden("You do not have permission to upload reports to this specific record.");
+    }
 
     const formData = await request.formData();
     const file = formData.get('file') as File;

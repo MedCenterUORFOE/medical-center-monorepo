@@ -2,7 +2,7 @@ import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
-// import { getUserSession } from '@/lib/auth';
+import { getUserSession } from '@/lib/auth';
 
 // -----------------------------------------------------------------------------
 // ZOD SCHEMAS
@@ -33,16 +33,13 @@ export async function POST(request: Request) {
     }
 
     // === PRODUCTION AUTH & RBAC BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // 
-    // if (session.role !== "NURSE" && session.role !== "PHARMACIST" && session.role !== "ADMIN") {
-    //   return apiErrors.forbidden("Unauthorized. Only Nurses and Pharmacists can log physical inventory deliveries.");
-    // }
-    // const initiatorId = session.id;
-
-    // === LOCAL TESTING MOCK ===
-    const initiatorId = "test-pharmacist-id"; 
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    
+    if (session.role !== "NURSE" && session.role !== "PHARMACIST" && session.role !== "ADMIN") {
+      return apiErrors.forbidden("Unauthorized. Only Nurses and Pharmacists can log physical inventory deliveries.");
+    }
+    const initiatorId = session.id;
 
     const body = await request.json();
     const validatedData = createBatchSchema.parse(body);
@@ -113,16 +110,13 @@ export async function PATCH(request: Request) {
     }
 
     // === PRODUCTION AUTH & RBAC BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // 
-    // if (session.role !== "NURSE" && session.role !== "PHARMACIST" && session.role !== "ADMIN") {
-    //   return apiErrors.forbidden("Unauthorized. Only Nurses and Pharmacists can restock inventory.");
-    // }
-    // const initiatorId = session.id;
-
-    // === LOCAL TESTING MOCK ===
-    const initiatorId = "test-pharmacist-id"; 
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    
+    if (session.role !== "NURSE" && session.role !== "PHARMACIST" && session.role !== "ADMIN") {
+      return apiErrors.forbidden("Unauthorized. Only Nurses and Pharmacists can restock inventory.");
+    }
+    const initiatorId = session.id;
 
     const body = await request.json();
     const validatedData = updateBatchSchema.parse(body);
@@ -197,12 +191,12 @@ export async function GET(request: Request) {
     }
 
     // === PRODUCTION AUTH & RBAC BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // 
-    // if (session.role !== "NURSE" && session.role !== "PHARMACIST" && session.role !== "ADMIN") {
-    //   return apiErrors.forbidden("Unauthorized. Only Pharmacy/Nursing staff can view batch details.");
-    // }
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    
+    if (session.role !== "NURSE" && session.role !== "PHARMACIST" && session.role !== "ADMIN") {
+      return apiErrors.forbidden("Unauthorized. Only Pharmacy/Nursing staff can view batch details.");
+    }
 
     const { searchParams } = new URL(request.url);
     const medicineId = searchParams.get('medicine_id');

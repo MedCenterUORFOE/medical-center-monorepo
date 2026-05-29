@@ -2,7 +2,7 @@ import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
-// import { getUserSession } from '@/lib/auth';
+import { getUserSession } from '@/lib/auth';
 
 // ============================================================================
 // GET: Fetch Medicine Catalog with Aggregated Active Stock
@@ -19,13 +19,13 @@ export async function GET(request: Request) {
     }
 
     // === PRODUCTION AUTH & RBAC BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // 
-    // // Only medical staff and pharmacists should be browsing the internal catalog
-    // if (session.role !== "DOCTOR" && session.role !== "NURSE" && session.role !== "PHARMACIST" && session.role !== "ADMIN") {
-    //   return apiErrors.forbidden("Unauthorized. Medical and Pharmacy staff only.");
-    // }
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    
+    // Only medical staff and pharmacists should be browsing the internal catalog
+    if (session.role !== "DOCTOR" && session.role !== "NURSE" && session.role !== "PHARMACIST" && session.role !== "ADMIN") {
+      return apiErrors.forbidden("Unauthorized. Medical and Pharmacy staff only.");
+    }
 
     // Parse the search query (e.g., ?search=para)
     const { searchParams } = new URL(request.url);
@@ -106,17 +106,14 @@ export async function POST(request: Request) {
     }
 
     // === PRODUCTION AUTH & RBAC BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // 
-    // // Only Doctors, Pharmacists, and Admins can define new catalog concepts
-    // if (session.role !== "DOCTOR" && session.role !== "PHARMACIST" && session.role !== "ADMIN") {
-    //   return apiErrors.forbidden("Unauthorized. Only authorized staff can expand the medical catalog.");
-    // }
-    // const initiatorId = session.id;
-
-    // === LOCAL TESTING MOCK ===
-    const initiatorId = "test-pharmacist-id"; 
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    
+    // Only Doctors, Pharmacists, and Admins can define new catalog concepts
+    if (session.role !== "DOCTOR" && session.role !== "PHARMACIST" && session.role !== "ADMIN") {
+      return apiErrors.forbidden("Unauthorized. Only authorized staff can expand the medical catalog.");
+    }
+    const initiatorId = session.id;
 
     const body = await request.json();
     const validatedData = createMedicineSchema.parse(body);
