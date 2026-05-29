@@ -1,19 +1,38 @@
-import { NextRequest } from 'next/server'; // FIX: Imported NextRequest
+/**
+ * STAFF PROVISIONING ENDPOINT (POST /api/admin/users)
+ * * --- ARCHITECTURAL NOTE: TWO PROVISIONING FLOWS ---
+ * * FLOW A: Admin-Provisioned Credentials (CURRENTLY ACTIVE)
+ * - Why: Bypasses Resend Sandbox limits and simplifies local onboarding.
+ * - How: The Admin manually sets a password in the UI. The API hashes it 
+ * and instantly sets the user's status to 'VERIFIED'. No email is sent.
+ * - Hand-off: The Admin securely shares the credentials directly with the staff.
+ * * FLOW B: Setup Token via Email (COMMENTED OUT)
+ * - Why: Better for larger organizations where admins shouldn't know passwords.
+ * - How to switch back:
+ * 1. Remove `password` from the `provisionSchema`.
+ * 2. Uncomment the `crypto.randomBytes` setup token logic.
+ * 3. In `tx.user.create`, remove `password_hash` and `status: 'VERIFIED'`.
+ * 4. Restore `status: 'UNVERIFIED'`, `reset_token`, and `reset_expires`.
+ * 5. Uncomment the `resend.emails.send` block at the bottom.
+ * ---------------------------------------
+ */
+
+import { NextRequest } from 'next/server';
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
+import bcrypt from 'bcryptjs'; // ADDED: Required for Flow A
 import crypto from 'crypto';
 import { resend } from '@/lib/resend';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 
-
-
 // Validating the Admin's input
 const provisionSchema = z.object({
   email: z.string().email("Invalid email address"),
   name: z.string().min(2, "Name is required"),
-  role: z.enum(["DOCTOR", "NURSE", "PHARMACIST", "ADMIN", "AMBULANCE_DRIVER"]), // FIX: Updated enum
+  role: z.enum(["DOCTOR", "NURSE", "PHARMACIST", "ADMIN", "AMBULANCE_DRIVER"]),
   nic: z.string().min(10, "NIC is required"),
+  password: z.string().min(8, "Password must be at least 8 characters"), // ADDED: Admin provides initial password
 });
 
 export async function POST(request: Request) {
@@ -27,16 +46,35 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { email, name, role, nic } = provisionSchema.parse(body);
+    const { email, name, role, nic, password } = provisionSchema.parse(body);
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    // --- GRACEFUL CONSTRAINT CHECKING ---
+    // Looks for a match on either Email or NIC to prevent a 500 DB Crash
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email },
+          { nic }
+        ]
+      }
+    });
+
     if (existingUser) {
-      return errorResponse("An account with this email already exists", 409);
+      if (existingUser.email === email) {
+        return errorResponse("An account with this email already exists", 409);
+      }
+      if (existingUser.nic === nic) {
+        return errorResponse("An account with this NIC already exists", 409);
+      }
     }
 
-    // Generate a secure setup token (Valid for 7 days)
-    const setupToken = crypto.randomBytes(32).toString('hex');
-    const tokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); 
+    // --- Hash the Admin-Provided Password (FLOW A) ---
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(password, salt);
+
+    // --- Legacy Token Logic (FLOW B) ---
+    // const setupToken = crypto.randomBytes(32).toString('hex');
+    // const tokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); 
 
     // THE SECURE TRANSACTION
     const newUser = await prisma.$transaction(async (tx) => {
@@ -48,24 +86,26 @@ export async function POST(request: Request) {
           name,
           role,
           nic,
-          status: 'UNVERIFIED',
+          status: 'VERIFIED',         // FLOW A: Instantly verified
+          password_hash,              // FLOW A: Password injected
           is_profile_complete: false,
-          reset_token: setupToken, 
-          reset_expires: tokenExpiry
+          
+          // FLOW B: Uncomment these if switching back to Email Setup
+          // status: 'UNVERIFIED',
+          // reset_token: setupToken, 
+          // reset_expires: tokenExpiry
         }
       });
 
       // 2. Create the Subtypes based on Role
       if (role === "DOCTOR" || role === "NURSE" || role === "PHARMACIST") {
-        // Create the Middle Tier
         const staff = await tx.medicalCenterStaff.create({
           data: {
-            staff_id: user.id, // PK maps to User ID
-            license_number: `PENDING-${user.id.substring(0, 8)}`, // Temporary placeholder
+            staff_id: user.id,
+            license_number: `PENDING-${user.id.substring(0, 8)}`,
           }
         });
 
-        // Create the Final Tier
         if (role === "DOCTOR") {
           await tx.doctor.create({ data: { doctor_id: staff.staff_id, specialization: "PENDING" } });
         } else if (role === "NURSE") {
@@ -73,7 +113,7 @@ export async function POST(request: Request) {
         } else if (role === "PHARMACIST") {
           await tx.pharmacist.create({ data: { pharmacist_id: staff.staff_id } });
         }
-      } else if (role === "AMBULANCE_DRIVER") { // FIX: Updated role check
+      } else if (role === "AMBULANCE_DRIVER") {
         await tx.ambulanceDriver.create({
           data: {
             driver_id: user.id,
@@ -92,7 +132,7 @@ export async function POST(request: Request) {
           entity_id: user.id,
           ip_address: ip,
           details: JSON.stringify({ 
-            message: `Admin provisioned a new ${role} account.`,
+            message: `Admin provisioned a new ${role} account (Direct Credential Flow).`,
             provisioned_email: email
           }),
         }
@@ -101,7 +141,10 @@ export async function POST(request: Request) {
       return user;
     });
 
-    // --- EMAIL DISPATCH ---
+    // ==========================================
+    // --- EMAIL DISPATCH (FLOW B - DISABLED) ---
+    // ==========================================
+    /*
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const setupLink = `${appUrl}/setup-account?token=${setupToken}`;
 
@@ -119,13 +162,14 @@ export async function POST(request: Request) {
         </div>
       `
     });
+    */
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password_hash, ...safeUser } = newUser;
+    const { password_hash: _ph, ...safeUser } = newUser;
 
     return successResponse(
       { user: safeUser }, 
-      `${role} account provisioned. Setup email sent successfully.`,
+      `${role} account successfully created and verified. Staff can now log in.`,
       201
     );
 
@@ -165,7 +209,6 @@ export async function GET(request: NextRequest) {
         { name: { contains: search, mode: 'insensitive' } },
         { email: { contains: search, mode: 'insensitive' } },
         { nic: { contains: search, mode: 'insensitive' } },
-        // FIX: Removed university_reg_number because it crashes the User table query
       ];
     }
 
