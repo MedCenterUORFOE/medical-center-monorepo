@@ -2,7 +2,7 @@ import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
-// import { getUserSession } from '@/lib/auth';
+import { getUserSession } from '@/lib/auth';
 
 // -----------------------------------------------------------------------------
 // ZOD VALIDATION SCHEMA
@@ -28,17 +28,14 @@ export async function POST(request: Request) {
     }
 
     // === PRODUCTION AUTH & RBAC BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // 
-    // // Only Patients (Students & Academic Staff) book appointments via the mobile app
-    // if (session.role !== "STUDENT" && session.role !== "ACADEMIC_STAFF") {
-    //   return apiErrors.forbidden("Only registered patients can book appointments.");
-    // }
-    // const patientId = session.id;
-
-    // === LOCAL TESTING MOCK ===
-    const patientId = "test-student-id"; 
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    
+    // Only Patients (Students & Academic Staff) book appointments via the mobile app
+    if (session.role !== "STUDENT" && session.role !== "ACADEMIC_STAFF") {
+      return apiErrors.forbidden("Only registered patients can book appointments.");
+    }
+    const patientId = session.id;
 
     const body = await request.json();
     const validatedData = bookAppointmentSchema.parse(body);

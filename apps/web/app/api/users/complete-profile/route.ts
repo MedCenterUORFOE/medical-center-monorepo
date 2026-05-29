@@ -17,7 +17,7 @@
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
-// import { getUserSession } from '@/lib/auth';
+import { getUserSession } from '@/lib/auth';
 
 const completeProfileSchema = z.object({
   role: z.enum(["STUDENT", "ACADEMIC_STAFF", "DOCTOR", "NURSE", "PHARMACIST", "AMBULANCE_DRIVER"]), // FIX: Updated to AMBULANCE_DRIVER
@@ -88,17 +88,13 @@ const completeProfileSchema = z.object({
   }
 });
 
-
 export async function PATCH(request: Request) {
   try {
     // === PRODUCTION AUTH BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // const userId = session.id;
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    const userId = session.id;
     
-    // === LOCAL TESTING MOCK ===
-    const userId = "test-user-id"; 
-
     const body = await request.json();
     const validatedData = completeProfileSchema.parse(body);
 

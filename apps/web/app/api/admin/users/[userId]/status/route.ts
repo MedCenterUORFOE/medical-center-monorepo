@@ -2,6 +2,7 @@ import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
+import { getUserSession } from '@/lib/auth';
 
 // Validate that they are only passing valid status strings
 const statusUpdateSchema = z.object({
@@ -21,8 +22,13 @@ export async function PATCH(
       return errorResponse('Too many requests. Please try again later.', 429);
     }
 
+    // === PRODUCTION AUTH BLOCK ===
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    if (session.role !== "ADMIN") return apiErrors.forbidden();
+    const adminId = session.id;
+
     const { userId } = params;
-    const adminId = request.headers.get('x-user-id') || 'system-admin';
 
     // --- SELF-LOCKOUT PROTECTION ---
     // Prevent an Admin from accidentally suspending their own account

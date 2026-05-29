@@ -1,6 +1,7 @@
 import { prisma } from '@medical-center/db';
 import { sendPushNotification } from '@/lib/firebase-admin';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
+import { getUserSession } from '@/lib/auth';
 
 // ============================================================================
 // POST: Driver Accepts an Emergency Request (Atomic Lock)
@@ -13,12 +14,9 @@ export async function POST(
     const requestId = params.id;
 
     // === PRODUCTION AUTH BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id || session.role !== 'DRIVER') return apiErrors.unauthorized();
-    // const userId = session.id;
-
-    // === LOCAL TESTING MOCK ===
-    const userId = "test-driver-id";
+    const session = await getUserSession();
+    if (!session?.id || session.role !== 'DRIVER') return apiErrors.unauthorized();
+    const userId = session.id;
 
     // 1. Get the Driver ID mapped to this User (Aligned with your schema)
     const driver = await prisma.ambulanceDriver.findUnique({

@@ -2,6 +2,7 @@ import { prisma } from '@medical-center/db';
 import { sendPushNotification } from '@/lib/firebase-admin';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { z } from 'zod';
+import { getUserSession } from '@/lib/auth';
 
 // -----------------------------------------------------------------------------
 // ZOD VALIDATION SCHEMA
@@ -23,12 +24,9 @@ export async function PATCH(
     const { reason } = cancelSchema.parse(body);
 
     // === PRODUCTION AUTH BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // const userId = session.id;
-
-    // === LOCAL TESTING MOCK ===
-    const userId = "test-user-id";
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    const userId = session.id;
 
     // 1. Fetch the Request to ensure it exists and check its current state
     const emergencyRequest = await prisma.emergencyRequest.findUnique({

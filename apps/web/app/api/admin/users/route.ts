@@ -25,6 +25,7 @@ import bcrypt from 'bcryptjs'; // ADDED: Required for Flow A
 //import { resend } from '@/lib/resend';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
+import { getUserSession } from '@/lib/auth';
 
 // Validating the Admin's input
 const provisionSchema = z.object({
@@ -44,6 +45,12 @@ export async function POST(request: Request) {
     if (!checkRateLimit(ip, 20, 3600000)) { 
       return errorResponse('Too many provisioning attempts.', 429);
     }
+
+    // === PRODUCTION AUTH BLOCK ===
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    if (session.role !== "ADMIN") return apiErrors.forbidden();
+    const adminId = session.id;
 
     const body = await request.json();
     const { email, name, role, nic, password } = provisionSchema.parse(body);
@@ -121,8 +128,6 @@ export async function POST(request: Request) {
           }
         });
       }
-
-      const adminId = request.headers.get('x-user-id') || 'system-admin';
 
       await tx.auditLog.create({
         data: {

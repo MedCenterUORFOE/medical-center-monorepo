@@ -1,17 +1,13 @@
-
 import { prisma } from '@medical-center/db';
 import { successResponse, apiErrors } from '@/lib/api-response';
-// import { getUserSession } from '@/lib/auth';
+import { getUserSession } from '@/lib/auth';
 
 export async function DELETE(request: Request) {
   try {
     // === PRODUCTION AUTH ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // const userId = session.id;
-
-    // === LOCAL TESTING ===
-    const userId = "test-user-id";
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    const userId = session.id;
 
     await prisma.$transaction(async (tx) => {
       const currentUser = await tx.user.findUnique({

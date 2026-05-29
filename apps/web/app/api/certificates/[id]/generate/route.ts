@@ -2,13 +2,18 @@ import { prisma } from '@medical-center/db';
 import { successResponse, apiErrors } from '@/lib/api-response';
 import { supabase } from '@/lib/supabase';
 import { generatePDF } from '@/lib/pdf-generator'; // Assume you use a library like 'pdfkit' or 'puppeteer'
-
+import { getUserSession } from '@/lib/auth';
 
 export async function POST(
   request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
+    // === PRODUCTION AUTH BLOCK ===
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    if (session.role !== "DOCTOR") return apiErrors.forbidden("Only doctors can generate certificates.");
+
     const { id } = params; // Certificate Request ID
 
     // 1. Fetch Request Details

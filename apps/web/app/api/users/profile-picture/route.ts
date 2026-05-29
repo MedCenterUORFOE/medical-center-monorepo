@@ -10,7 +10,7 @@ import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 // FIX: Use the centralized build-safe Supabase client!
 import { supabase } from '@/lib/supabase';
-// import { getUserSession } from '@/lib/auth';
+import { getUserSession } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
@@ -23,13 +23,10 @@ export async function POST(request: Request) {
     }
 
     // === PRODUCTION AUTH BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // const userId = session.id; // FIXED from session.userId
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    const userId = session.id; // FIXED from session.userId
     
-    // === LOCAL TESTING MOCK ===
-    const userId = "test-user-id"; 
-
     const formData = await request.formData();
     const file = formData.get('image') as File | null;
 
