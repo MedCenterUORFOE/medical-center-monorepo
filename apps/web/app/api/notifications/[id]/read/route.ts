@@ -1,8 +1,7 @@
-
 import { prisma } from '@medical-center/db';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
-// import { getUserSession } from '@/lib/auth';
+import { getUserSession } from '@/lib/auth';
 
 // ============================================================================
 // PATCH: Mark a specific notification as read
@@ -21,12 +20,10 @@ export async function PATCH(
     }
 
     // === PRODUCTION AUTH BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // const userId = session.id;
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    const userId = session.id;
 
-    // === LOCAL TESTING MOCK ===
-    const userId = "test-student-id"; 
     const { id } = params;
 
     // 1. Verify ownership to prevent users from marking other people's notifications as read

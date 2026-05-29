@@ -1,10 +1,9 @@
-
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
+import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import bcrypt from 'bcryptjs';
 import { checkRateLimit } from '@/lib/rate-limiter';
-import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
-// import { getUserSession } from '@/lib/auth';
+import { getUserSession } from '@/lib/auth';
 
 const changePasswordSchema = z.object({
   oldPassword: z.string().min(1, "Current password is required"),
@@ -22,12 +21,9 @@ export async function PATCH(request: Request) {
     }
 
     // === PRODUCTION AUTH BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // const userId = session.id;
-
-    // === LOCAL TESTING MOCK ===
-    const userId = "test-user-id";
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    const userId = session.id;
 
     const body = await request.json();
     const { oldPassword, newPassword } = changePasswordSchema.parse(body);

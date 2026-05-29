@@ -11,7 +11,7 @@ import { z } from 'zod';
 import bcrypt from 'bcryptjs'; 
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
-// import { getUserSession } from '@/lib/auth';
+import { getUserSession } from '@/lib/auth';
 
 const setPasswordSchema = z.object({
   newPassword: z.string().min(8, "Password must be at least 8 characters long"),
@@ -28,12 +28,9 @@ export async function POST(request: Request) {
     }
 
     // === PRODUCTION AUTH BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // const userId = session.id;
-    
-    // === LOCAL TESTING MOCK ===
-    const userId = "test-user-id"; 
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    const userId = session.id;
 
     const body = await request.json();
     const { newPassword } = setPasswordSchema.parse(body);
