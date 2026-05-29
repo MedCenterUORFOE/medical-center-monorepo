@@ -15,7 +15,8 @@ export async function POST(
 
     // === PRODUCTION AUTH BLOCK ===
     const session = await getUserSession();
-    if (!session?.id || session.role !== 'DRIVER') return apiErrors.unauthorized();
+    if (!session?.id) return apiErrors.unauthorized();
+    if (session.role !== 'AMBULANCE_DRIVER') return apiErrors.forbidden();
     const userId = session.id;
 
     // 1. Get the Driver ID mapped to this User (Aligned with your schema)
