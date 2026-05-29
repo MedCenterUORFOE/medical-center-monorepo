@@ -15,9 +15,9 @@ Firebase Admin SDK initialized successfully.
 Firebase Admin SDK initialized successfully.
 Firebase Admin SDK initialized successfully.
 Firebase Admin SDK initialized successfully.
-   Generating static pages (0/33) ...
+   Generating static pages (0/34) ...
+   Generating static pages (8/34) 
 Email Verification Error: ex [Error]: Dynamic server usage: Page couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
-   Generating static pages (8/33) 
     at Object.eP [as staticGenerationBailout] (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29358)
     at i (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:34692)
     at Object.get (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:34788)
@@ -31,6 +31,7 @@ Email Verification Error: ex [Error]: Dynamic server usage: Page couldn't be ren
   description: "Page couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
   digest: 'DYNAMIC_SERVER_USAGE'
 }
+   Generating static pages (16/34) 
 Patient Search Error: ex [Error]: Dynamic server usage: Page couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
     at eP (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29358)
     at Module.eE (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29694)
@@ -45,7 +46,6 @@ Patient Search Error: ex [Error]: Dynamic server usage: Page couldn't be rendere
   description: "Page couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
   digest: 'DYNAMIC_SERVER_USAGE'
 }
-   Generating static pages (16/33) 
 Notifications Fetch Error: ex [Error]: Dynamic server usage: Page couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
     at eP (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29358)
     at Module.eE (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29694)
@@ -60,7 +60,7 @@ Notifications Fetch Error: ex [Error]: Dynamic server usage: Page couldn't be re
   description: "Page couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
   digest: 'DYNAMIC_SERVER_USAGE'
 }
-   Generating static pages (24/33) 
+   Generating static pages (25/34) 
 Signed URL Generator Error: ex [Error]: Dynamic server usage: Page couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
     at eP (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29358)
     at Module.eE (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29694)
@@ -75,8 +75,7 @@ Signed URL Generator Error: ex [Error]: Dynamic server usage: Page couldn't be r
   description: "Page couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
   digest: 'DYNAMIC_SERVER_USAGE'
 }
-Firebase Admin SDK initialized successfully.
- ✓ Generating static pages (33/33) 
+ ✓ Generating static pages (34/34) 
    Finalizing page optimization ...
    Collecting build traces ...
 
@@ -114,6 +113,7 @@ Route (app)                                Size     First Load JS
 ├ λ /api/medicines/catalog                 0 B                0 B
 ├ λ /api/notifications                     0 B                0 B
 ├ λ /api/notifications/[id]/read           0 B                0 B
+├ λ /api/profiles                          0 B                0 B
 ├ λ /api/profiles/[patientId]              0 B                0 B
 ├ λ /api/records/[recordId]/upload-report  0 B                0 B
 ├ λ /api/records/create                    0 B                0 B

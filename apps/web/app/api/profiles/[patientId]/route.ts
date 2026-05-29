@@ -1,9 +1,8 @@
-
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
-// import { getUserSession } from '@/lib/auth';
+import { jwtVerify } from 'jose';
 
 const clinicalProfileSchema = z.object({
   blood_group: z.string().optional(),
@@ -31,13 +30,24 @@ export async function GET(
       return errorResponse('Too many profile fetch attempts. Please slow down.', 429);
     }
 
-    // === PRODUCTION AUTH & RBAC BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // 
-    // if (session.role !== "NURSE" && session.role !== "DOCTOR" && session.role !== "ADMIN") {
-    //   return apiErrors.forbidden("Medical Staff Only");
-    // }
+    // --- SMART RBAC SECURITY BLOCK ---
+    const requestHeaders = new Headers(request.headers);
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.substring(7) || requestHeaders.get('cookie')?.split('session_token=')[1]?.split(';')[0];
+    
+    if (!token) return apiErrors.unauthorized();
+
+    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+    const { payload } = await jwtVerify(token, secret);
+    
+    const isMedicalStaff = ["NURSE", "DOCTOR", "ADMIN"].includes(payload.role as string);
+    const isOwnProfile = payload.id === params.patientId;
+
+    // If they aren't staff, AND it's not their own profile, kick them out.
+    if (!isMedicalStaff && !isOwnProfile) {
+      return apiErrors.forbidden("You do not have permission to view this medical profile.");
+    }
+    // ----------------------------------
 
     const { patientId } = params;
 
@@ -81,18 +91,24 @@ export async function PUT(
   { params }: { params: { patientId: string } } 
 ) {
   try {
-    // === PRODUCTION AUTH & RBAC BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
-    // 
-    // if (session.role !== "NURSE" && session.role !== "DOCTOR" && session.role !== "ADMIN") {
-    //   return apiErrors.forbidden("Medical Staff Only");
-    // }
-    // const staffId = session.id;
+    // --- STRICT RBAC SECURITY BLOCK ---
+    const requestHeaders = new Headers(request.headers);
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.substring(7) || requestHeaders.get('cookie')?.split('session_token=')[1]?.split(';')[0];
+    
+    if (!token) return apiErrors.unauthorized();
 
-    // === LOCAL TESTING MOCK ===
-    const staffId = "test-nurse-id"; 
+    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+    const { payload } = await jwtVerify(token, secret);
+    
+    if (payload.role !== "NURSE" && payload.role !== "DOCTOR" && payload.role !== "ADMIN") {
+      return apiErrors.forbidden("Medical Staff Only");
+    }
+    
+    // Dynamically grab the REAL staff ID for the Audit Log!
+    const staffId = payload.id as string; 
     const { patientId } = params;
+    // ----------------------------------
 
     const body = await request.json();
     const validatedData = clinicalProfileSchema.parse(body);

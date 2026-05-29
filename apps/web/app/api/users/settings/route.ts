@@ -9,7 +9,6 @@
  * ---------------------------------------
  */
 
-
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
@@ -19,6 +18,7 @@ const settingsSchema = z.object({
   username: z.string().min(3).max(20).regex(/^[a-z0-9_]+$/).optional(),
   phone: z.string().min(10).optional(),
   nic: z.string().min(10).optional(),
+  fcm_token: z.string().optional(),
 
   emergency_contact_name: z.string().min(2).optional(),
   emergency_contact_number: z.string().min(10).optional(),
@@ -68,13 +68,14 @@ export async function PATCH(request: Request) {
 
     await prisma.$transaction(async (tx) => {
       
-      if (validatedData.username || validatedData.phone || validatedData.nic) {
+      if (validatedData.username || validatedData.phone || validatedData.nic || validatedData.fcm_token) {
         await tx.user.update({
           where: { id: userId },
           data: {
             ...(validatedData.username && { username: validatedData.username }), 
             ...(validatedData.phone && { phone: validatedData.phone }),
             ...(validatedData.nic && { nic: validatedData.nic }),
+            ...(validatedData.fcm_token && { fcm_token: validatedData.fcm_token }),
           },
         });
       }
