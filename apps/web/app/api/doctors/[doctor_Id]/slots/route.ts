@@ -1,9 +1,8 @@
-
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
-// import { getUserSession } from '@/lib/auth';
+import { getUserSession } from '@/lib/auth';
 
 const querySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format. Please use YYYY-MM-DD."),
@@ -30,8 +29,8 @@ export async function GET(
     }
 
     // === PRODUCTION AUTH BLOCK ===
-    // const session = await getUserSession();
-    // if (!session?.id) return apiErrors.unauthorized();
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
     
     const { doctor_id } = params;
     const { searchParams } = new URL(request.url);
