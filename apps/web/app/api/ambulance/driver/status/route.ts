@@ -19,7 +19,8 @@ export async function PATCH(request: Request) {
   try {
     // === PRODUCTION AUTH BLOCK ===
     const session = await getUserSession();
-    if (!session?.id || session.role !== 'DRIVER') return apiErrors.unauthorized();
+    if (!session?.id) return apiErrors.unauthorized();
+    if (session.role !== 'AMBULANCE_DRIVER') return apiErrors.forbidden();
     const userId = session.id;
 
     const body = await request.json();
