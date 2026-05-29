@@ -16,9 +16,9 @@ Firebase Admin SDK initialized successfully.
 Firebase Admin SDK initialized successfully.
 Firebase Admin SDK initialized successfully.
    Generating static pages (0/34) ...
-   Generating static pages (8/34) 
 Email Verification Error: ex [Error]: Dynamic server usage: Page couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
     at Object.eP [as staticGenerationBailout] (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29358)
+   Generating static pages (8/34) 
     at i (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:34692)
     at Object.get (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:34788)
     at p (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\.next\server\app\api\auth\verify\route.js:1:550)
@@ -31,8 +31,8 @@ Email Verification Error: ex [Error]: Dynamic server usage: Page couldn't be ren
   description: "Page couldn't be rendered statically because it used `request.url`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
   digest: 'DYNAMIC_SERVER_USAGE'
 }
-   Generating static pages (16/34) 
 Patient Search Error: ex [Error]: Dynamic server usage: Page couldn't be rendered statically because it used `headers`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+   Generating static pages (16/34) 
     at eP (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29358)
     at Module.eE (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29694)
     at i (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:34572)
@@ -51,7 +51,7 @@ Notifications Fetch Error: ex [Error]: Dynamic server usage: Page couldn't be re
     at Module.eE (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29694)
     at i (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:34572)
     at Object.get (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:34788)
-    at d (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\.next\server\app\api\notifications\route.js:1:541)
+    at d (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\.next\server\app\api\notifications\route.js:1:842)
     at C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:42490
     at C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\server\lib\trace\tracer.js:133:36
     at NoopContextManager.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\@opentelemetry\api\build\src\context\NoopContextManager.js:14:19)
@@ -66,7 +66,7 @@ Signed URL Generator Error: ex [Error]: Dynamic server usage: Page couldn't be r
     at Module.eE (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:29694)
     at i (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:34572)
     at Object.get (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:34788)
-    at c (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\.next\server\app\api\documents\sign-url\route.js:1:551)
+    at p (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\.next\server\app\api\documents\sign-url\route.js:1:852)
     at C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\compiled\next-server\app-route.runtime.prod.js:6:42490
     at C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\web\node_modules\next\dist\server\lib\trace\tracer.js:133:36
     at NoopContextManager.with (C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\node_modules\@opentelemetry\api\build\src\context\NoopContextManager.js:14:19)
