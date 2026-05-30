@@ -16,7 +16,6 @@ const prescriptionItemSchema = z.object({
   instructions: z.string().optional(),
   source: z.enum(["INTERNAL", "EXTERNAL"]),
 }).superRefine((data, ctx) => {
-  // Guardrail: Enforce correct fields based on INTERNAL vs EXTERNAL source
   if (data.source === "INTERNAL" && !data.medicine_id) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -35,6 +34,10 @@ const prescriptionItemSchema = z.object({
 
 const createRecordSchema = z.object({
   patient_id: z.string().uuid("Invalid Patient ID format"),
+  
+  // NEW: Accept an optional appointment ID for scheduled visits
+  appointment_id: z.string().uuid("Invalid Appointment ID").optional(),
+  
   symptoms: z.string().min(2, "Symptoms are required"),
   diagnosis: z.string().min(2, "Diagnosis is required"),
   treatment_plan: z.string().optional(),
@@ -42,7 +45,6 @@ const createRecordSchema = z.object({
   follow_up_date: z.coerce.date().optional(),
   notes: z.string().optional(),
   
-  // Nested prescription array matching Member B's payload structure
   prescription: z.object({
     items: z.array(prescriptionItemSchema)
   }).optional(),
@@ -53,16 +55,13 @@ const createRecordSchema = z.object({
 // ============================================================================
 export async function POST(request: Request) {
   try {
-    // --- RATE LIMITING ---
     const forwardedFor = request.headers.get('x-forwarded-for');
     const ip = forwardedFor ? forwardedFor.split(',')[0] : 'unknown-ip';
     
-    // Strict limit: 30 records created per minute per IP to prevent spam
     if (!checkRateLimit(ip, 30, 60000)) { 
       return errorResponse('Too many requests. Please slow down.', 429);
     }
 
-    // === PRODUCTION AUTH & RBAC BLOCK ===
     const session = await getUserSession();
     if (!session?.id) return apiErrors.unauthorized();
     
@@ -74,7 +73,6 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validatedData = createRecordSchema.parse(body);
 
-    // Verify the patient actually exists before writing clinical data
     const patientExists = await prisma.patientProfile.findUnique({
       where: { user_id: validatedData.patient_id }
     });
@@ -83,8 +81,6 @@ export async function POST(request: Request) {
       return apiErrors.notFound("Patient profile not found. Cannot create record.");
     }
 
-    // --- THE MASSIVE TRANSACTION ---
-    // If any step fails (e.g., invalid medicine ID), the entire block rolls back
     const result = await prisma.$transaction(async (tx) => {
       
       // 1. Create the Base Medical Record
@@ -92,6 +88,7 @@ export async function POST(request: Request) {
         data: {
           patient_id: validatedData.patient_id,
           doctor_id: doctorId,
+          appointment_id: validatedData.appointment_id || null, // Link it!
           symptoms: validatedData.symptoms,
           diagnosis: validatedData.diagnosis,
           treatment_plan: validatedData.treatment_plan,
@@ -101,15 +98,22 @@ export async function POST(request: Request) {
         }
       });
 
-      // 2. Create the Prescription & Items (If provided)
+      // 2. The Auto-Complete Magic
+      // If this record belongs to a scheduled appointment, close the appointment out!
+      if (validatedData.appointment_id) {
+        await tx.appointment.update({
+          where: { id: validatedData.appointment_id },
+          data: { status: "COMPLETED" }
+        });
+      }
+
+      // 3. Create the Prescription & Items
       let createdPrescription = null;
-      
       if (validatedData.prescription?.items && validatedData.prescription.items.length > 0) {
         createdPrescription = await tx.prescription.create({
           data: {
             record_id: record.id,
             doctor_id: doctorId,
-            // Using Prisma's nested write capability to create all items instantly
             items: {
               create: validatedData.prescription.items.map(item => ({
                 medicine_id: item.medicine_id,
@@ -121,11 +125,11 @@ export async function POST(request: Request) {
               }))
             }
           },
-          include: { items: true } // Return the created items in the response
+          include: { items: true } 
         });
       }
 
-      // 3. Write the Immutable Audit Log
+      // 4. Write the Immutable Audit Log
       await tx.auditLog.create({
         data: {
           user_id: doctorId,
@@ -135,6 +139,7 @@ export async function POST(request: Request) {
           ip_address: ip,
           details: JSON.stringify({ 
             patient_id: validatedData.patient_id,
+            is_walk_in: !validatedData.appointment_id, // Great for reporting!
             has_prescription: !!createdPrescription 
           }),
         }

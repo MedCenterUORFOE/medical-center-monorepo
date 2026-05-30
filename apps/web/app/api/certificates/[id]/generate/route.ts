@@ -1,7 +1,9 @@
+// apps/web/app/api/certificates/[id]/generate/route.ts
+
 import { prisma } from '@medical-center/db';
-import { successResponse, apiErrors } from '@/lib/api-response';
+import { successResponse, errorResponse, apiErrors } from '@/lib/api-response'; // <-- Added errorResponse
 import { supabase } from '@/lib/supabase';
-import { generatePDF } from '@/lib/pdf-generator'; // Assume you use a library like 'pdfkit' or 'puppeteer'
+import { generatePDF } from '@/lib/pdf-generator'; // Assume you use a library like 'pdf-lib'
 import { getUserSession } from '@/lib/auth';
 
 export async function POST(
@@ -15,6 +17,21 @@ export async function POST(
     if (session.role !== "DOCTOR") return apiErrors.forbidden("Only doctors can generate certificates.");
 
     const { id } = params; // Certificate Request ID
+
+    // ====================================================================
+    // DUPLICATION GUARDRAIL: Check if a certificate was already generated
+    // ====================================================================
+    const existingCert = await prisma.medicalCertificate.findUnique({
+      where: { request_id: id } 
+    });
+
+    if (existingCert) {
+      return errorResponse(
+        "A medical certificate has already been generated for this request.", 
+        409 
+      );
+    }
+    // ====================================================================
 
     // 1. Fetch Request Details
     const requestData = await prisma.medicalCertificateRequest.findUnique({
@@ -50,6 +67,7 @@ export async function POST(
 
     return successResponse(cert, "Certificate generated and saved.");
   } catch (error) {
+    console.error("Generate PDF Error:", error); 
     return apiErrors.internal();
   }
 }

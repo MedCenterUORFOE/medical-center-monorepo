@@ -66,6 +66,19 @@ export async function POST(request: Request) {
       return apiErrors.notFound("Selected doctor not found.");
     }
 
+    // ====================================================================
+    // --- THE GUARDRAIL: Check if appointments are paused globally ---
+    // ====================================================================
+    const pauseSetting = await prisma.systemSetting.findUnique({
+      where: { key: "APPOINTMENTS_PAUSED" }
+    });
+
+    // If the setting exists and is set to "true", kick the request out immediately
+    if (pauseSetting?.value === "true") {
+      return errorResponse("Appointment booking is temporarily paused by the administration. Please try again later or visit the medical center for emergencies.", 503);
+    }
+    // ====================================================================
+
     // --- CONCURRENCY LOCK & TRANSACTION ---
     const result = await prisma.$transaction(async (tx) => {
       
