@@ -10,7 +10,8 @@ import { getUserSession } from '@/lib/auth';
 // -----------------------------------------------------------------------------
 const uploadReportSchema = z.object({
   record_id: z.string().uuid("Invalid record ID"),
-  file_url: z.string().url("Must be a valid Supabase URL"),
+  // FIX: Changed from .url() to .min(1) to accept relative Supabase bucket paths
+  file_url: z.string().min(1, "File path is required"), 
   type: z.string().min(2, "Report type is required (e.g., X-RAY)"),
 });
 

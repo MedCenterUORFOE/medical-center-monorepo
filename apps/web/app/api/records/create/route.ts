@@ -7,7 +7,6 @@ import { getUserSession } from '@/lib/auth';
 // -----------------------------------------------------------------------------
 // ZOD VALIDATION SCHEMAS
 // -----------------------------------------------------------------------------
-
 const prescriptionItemSchema = z.object({
   medicine_id: z.string().nullable().optional(),
   external_medicine_name: z.string().nullable().optional(),
@@ -35,7 +34,7 @@ const prescriptionItemSchema = z.object({
 const createRecordSchema = z.object({
   patient_id: z.string().uuid("Invalid Patient ID format"),
   
-  // NEW: Accept an optional appointment ID for scheduled visits
+  // Accept an optional appointment ID for scheduled visits
   appointment_id: z.string().uuid("Invalid Appointment ID").optional(),
   
   symptoms: z.string().min(2, "Symptoms are required"),
@@ -80,6 +79,21 @@ export async function POST(request: Request) {
     if (!patientExists) {
       return apiErrors.notFound("Patient profile not found. Cannot create record.");
     }
+
+    // ========================================================================
+    // NEW SECURITY GUARDRAIL: Verify Appointment Ownership
+    // ========================================================================
+    if (validatedData.appointment_id) {
+      const targetAppointment = await prisma.appointment.findUnique({
+        where: { id: validatedData.appointment_id }
+      });
+      
+      // Prevent a doctor/user from attaching an appointment ID that belongs to a different patient
+      if (!targetAppointment || targetAppointment.patient_id !== validatedData.patient_id) {
+         return errorResponse("The provided appointment ID does not belong to this patient.", 400);
+      }
+    }
+    // ========================================================================
 
     const result = await prisma.$transaction(async (tx) => {
       

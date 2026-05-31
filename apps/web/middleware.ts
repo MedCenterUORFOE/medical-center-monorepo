@@ -19,25 +19,26 @@ const publicRoutes = [
   '/api/auth/forgot-password',
   '/api/auth/reset-password',
   '/api/auth/verify',
-  '/api/auth/resend-verification'
+  '/api/auth/resend-verification',
+  '/api/webhooks'
 ];
 
 // 2. The VIP List: Specific roles required for specific folders
 const roleAccessMap: Record<string, string[]> = {
-  // UI Routes
-  '/admin': ['ADMIN'],
-  '/dashboard/doctor': ['DOCTOR'],
-  '/dashboard/nurse': ['NURSE'],
-  '/dashboard/pharmacist': ['PHARMACIST'], // <-- ADDED
-  '/inventory': ['PHARMACIST', 'NURSE', 'ADMIN'],
+  // UI Routes (Add slashes here too for safety)
+  '/admin/': ['ADMIN'],
+  '/dashboard/doctor/': ['DOCTOR'],
+  '/dashboard/nurse/': ['NURSE'],
+  '/dashboard/pharmacist/': ['PHARMACIST'],
+  '/inventory/': ['PHARMACIST', 'NURSE', 'ADMIN'],
   
   // API Routes
-  '/api/admin': ['ADMIN'],
-  '/api/doctor': ['DOCTOR'],
-  '/api/nurse': ['NURSE'],
-  '/api/inventory': ['PHARMACIST', 'NURSE', 'ADMIN'],
-  '/api/medicines': ['ADMIN', 'DOCTOR', 'NURSE', 'PHARMACIST'], // <-- ADDED
-  '/api/dispensations': ['ADMIN', 'NURSE', 'PHARMACIST'],       // <-- ADDED
+  '/api/admin/': ['ADMIN'],
+  '/api/doctor/': ['DOCTOR'], // <--- This trailing slash fixes your bug!
+  '/api/nurse/': ['NURSE'],
+  '/api/inventory/': ['PHARMACIST', 'NURSE', 'ADMIN'],
+  '/api/medicines/': ['ADMIN', 'DOCTOR', 'NURSE', 'PHARMACIST'], 
+  '/api/dispensations/': ['ADMIN', 'NURSE', 'PHARMACIST'],       
 };
 
 export async function middleware(request: NextRequest) {
@@ -100,6 +101,7 @@ export async function middleware(request: NextRequest) {
     const requestHeaders = new Headers(request.headers);
     
     requestHeaders.set('x-user-id', payload.id as string);
+    requestHeaders.set('x-user-role', payload.role as string);
 
     return NextResponse.next({
       request: {

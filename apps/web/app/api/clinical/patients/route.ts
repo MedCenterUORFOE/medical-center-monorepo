@@ -19,9 +19,10 @@ export async function GET(request: NextRequest) {
     const query = searchParams.get('q')?.trim() || '';
 
     // If the search is empty or too short, return an empty array to save database resources
-    if (query.length < 2) {
-      return successResponse({ patients: [] }, 'Enter at least 2 characters to search');
-    }
+// If the search is empty or too short, return a 400 Bad Request
+if (query.length < 2) {
+  return errorResponse('Enter at least 2 characters to search', 400);
+}
 
     // 2. The Multi-Table Search Query
     // We are looking for Students or Academic Staff who match the query 

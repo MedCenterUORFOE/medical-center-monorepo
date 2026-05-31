@@ -1,5 +1,4 @@
 // apps/web/app/api/appointments/[appointmentId]/status/route.ts
-
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
@@ -14,23 +13,13 @@ export async function PATCH(
   { params }: { params: { appointmentId: string } }
 ) {
   try {
-    // === AUTH & RBAC ===
     const session = await getUserSession();
     if (!session?.id) return apiErrors.unauthorized();
     
-    // Only Doctors, Nurses, and Admins can update appointment statuses
-    const isMedicalStaff = ["DOCTOR", "NURSE", "ADMIN"].includes(session.role);
-    if (!isMedicalStaff) {
-      return apiErrors.forbidden("Only medical staff can update appointment statuses.");
-    }
-    
-    const staffId = session.id;
     const { appointmentId } = params;
-
     const body = await request.json();
     const validatedData = updateStatusSchema.parse(body);
 
-    // Verify appointment exists
     const existingAppointment = await prisma.appointment.findUnique({
       where: { id: appointmentId }
     });
@@ -39,20 +28,32 @@ export async function PATCH(
       return apiErrors.notFound("Appointment not found.");
     }
 
+    // === CONDITIONAL RBAC ===
+    if (['STUDENT', 'ACADEMIC_STAFF'].includes(session.role)) {
+      // Rule A: Patients can ONLY cancel
+      if (validatedData.status !== 'CANCELLED') {
+        return errorResponse("Patients are only permitted to cancel appointments.", 403);
+      }
+      // Rule B: Patients can ONLY cancel THEIR OWN appointments
+      if (existingAppointment.patient_id !== session.id) {
+        return errorResponse("Forbidden. You can only cancel your own appointments.", 403);
+      }
+    } else if (!["DOCTOR", "NURSE", "ADMIN"].includes(session.role)) {
+      return apiErrors.forbidden("Unauthorized role.");
+    }
+
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Update the status
       const updatedAppointment = await tx.appointment.update({
         where: { id: appointmentId },
         data: { status: validatedData.status }
       });
 
-      // 2. Write Audit Log
       const forwardedFor = request.headers.get('x-forwarded-for');
       const ip = forwardedFor ? forwardedFor.split(',')[0] : 'unknown-ip';
 
       await tx.auditLog.create({
         data: {
-          user_id: staffId,
+          user_id: session.id,
           action: `APPOINTMENT_MARKED_${validatedData.status}`,
           entity_type: "Appointment",
           entity_id: appointmentId,
@@ -67,10 +68,7 @@ export async function PATCH(
     return successResponse({ status: result.status }, `Appointment marked as ${result.status}.`);
 
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return errorResponse("Validation failed", 400, error.errors);
-    }
-    console.error("Update Appointment Status Error:", error);
+    if (error instanceof z.ZodError) return errorResponse("Validation failed", 400, error.errors);
     return apiErrors.internal();
   }
 }

@@ -34,8 +34,13 @@ export async function POST(request: Request) {
       return apiErrors.badRequest("No image file provided");
     }
 
-    const buffer = await file.arrayBuffer();
-    const fileExt = file.name.split('.').pop();
+    // --- THE BUFFER FIX ---
+    // Convert Web ArrayBuffer to Node.js Buffer to prevent 0-byte uploads in Supabase
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    // Safely extract extension with a fallback
+    const fileExt = file.name.includes('.') ? file.name.split('.').pop() : 'jpg';
     const fileName = `${userId}-${Date.now()}.${fileExt}`;
 
     const { error: uploadError } = await supabase.storage

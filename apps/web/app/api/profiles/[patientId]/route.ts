@@ -1,8 +1,10 @@
+// apps/web/app/api/profiles/[patientId]/route.ts
+
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
-import { jwtVerify } from 'jose';
+import { getUserSession } from '@/lib/auth'; // Switched to use your custom auth helper
 
 const clinicalProfileSchema = z.object({
   blood_group: z.string().optional(),
@@ -31,17 +33,11 @@ export async function GET(
     }
 
     // --- SMART RBAC SECURITY BLOCK ---
-    const requestHeaders = new Headers(request.headers);
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || requestHeaders.get('cookie')?.split('session_token=')[1]?.split(';')[0];
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
     
-    if (!token) return apiErrors.unauthorized();
-
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    
-    const isMedicalStaff = ["NURSE", "DOCTOR", "ADMIN"].includes(payload.role as string);
-    const isOwnProfile = payload.id === params.patientId;
+    const isMedicalStaff = ["NURSE", "DOCTOR", "ADMIN"].includes(session.role);
+    const isOwnProfile = session.id === params.patientId;
 
     // If they aren't staff, AND it's not their own profile, kick them out.
     if (!isMedicalStaff && !isOwnProfile) {
@@ -84,7 +80,7 @@ export async function GET(
 }
 
 // ============================================================================
-// PUT / PATCH: Upsert Patient Baseline Clinical Data (Nurses/Doctors)
+// PUT / PATCH: Upsert Patient Baseline Clinical Data
 // ============================================================================
 export async function PUT(
   request: Request,
@@ -92,26 +88,32 @@ export async function PUT(
 ) {
   try {
     // --- STRICT RBAC SECURITY BLOCK ---
-    const requestHeaders = new Headers(request.headers);
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || requestHeaders.get('cookie')?.split('session_token=')[1]?.split(';')[0];
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
     
-    if (!token) return apiErrors.unauthorized();
-
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    
-    if (payload.role !== "NURSE" && payload.role !== "DOCTOR" && payload.role !== "ADMIN") {
-      return apiErrors.forbidden("Medical Staff Only");
-    }
-    
-    // Dynamically grab the REAL staff ID for the Audit Log!
-    const staffId = payload.id as string; 
+    const staffId = session.id; 
     const { patientId } = params;
-    // ----------------------------------
-
+    
     const body = await request.json();
     const validatedData = clinicalProfileSchema.parse(body);
+
+    const isMedicalStaff = ["NURSE", "DOCTOR", "ADMIN"].includes(session.role);
+    
+    // ========================================================================
+    // CONDITIONAL RBAC LOGIC
+    // ========================================================================
+    if (!isMedicalStaff) {
+        // If it's a student/staff trying to update someone ELSE's profile
+        if (session.id !== patientId) {
+            return apiErrors.forbidden("You can only update your own profile.");
+        }
+        
+        // If it's a student trying to update restricted medical fields
+        if (validatedData.blood_group || validatedData.allergies || validatedData.special_notes) {
+            return apiErrors.forbidden("Only medical staff can update blood group, allergies, or special notes.");
+        }
+    }
+    // ========================================================================
 
     // Check if the base USER exists, not the profile shell!
     const userExists = await prisma.user.findUnique({
@@ -160,7 +162,7 @@ export async function PUT(
           entity_id: patientId, 
           ip_address: ip,
           details: JSON.stringify({ 
-            message: "Medical staff upserted patient baseline data",
+            message: isMedicalStaff ? "Medical staff upserted patient baseline data" : "Patient updated their own physical stats",
             updated_fields: changedKeys 
           }),
         }
