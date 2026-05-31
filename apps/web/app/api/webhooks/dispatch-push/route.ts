@@ -27,7 +27,10 @@ export async function POST(request: Request) {
 
     const user = await prisma.user.findUnique({
       where: { id: newNotification.user_id },
-      select: { fcm_token: true } 
+      select: { 
+        id: true, // <--- FIX: We explicitly ask for the ID here
+        fcm_token: true 
+      } 
     });
 
     if (user?.fcm_token) {
