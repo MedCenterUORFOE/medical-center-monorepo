@@ -110,7 +110,7 @@ export async function PUT(
         }
         
         // If it's a student trying to update restricted medical fields
-        if (validatedData.blood_group || validatedData.allergies || validatedData.special_notes) {
+        if (validatedData.blood_group !== undefined || validatedData.allergies !== undefined || validatedData.special_notes !== undefined) {
             return apiErrors.forbidden("Only medical staff can update blood group, allergies, or special notes.");
         }
     }
