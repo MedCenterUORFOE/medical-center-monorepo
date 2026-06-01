@@ -221,7 +221,7 @@ model MedicalRecord {
   patient_id         String // Maps to PatientProfile.user_id
   doctor_id          String // Maps to Doctor.doctor_id
   
-  // ADD THESE TWO LINES (Optional 1-to-1 link)
+  // Optional 1-to-1 link to the scheduled appointment this record was created from
   appointment_id     String?  @unique 
   appointment        Appointment? @relation(fields: [appointment_id], references: [id])
 
