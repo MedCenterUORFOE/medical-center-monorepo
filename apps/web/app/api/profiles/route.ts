@@ -37,7 +37,7 @@ export async function POST(request: Request) {
       }
 
       // Rule B: Patients CANNOT set restricted medical fields during creation
-      if (validatedData.blood_group || validatedData.allergies || validatedData.special_notes) {
+      if (validatedData.blood_group !== undefined || validatedData.allergies !== undefined || validatedData.special_notes !== undefined) {
         return apiErrors.forbidden("Only medical staff can set blood group, allergies, or special notes.");
       }
     }
