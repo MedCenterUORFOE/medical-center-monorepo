@@ -89,6 +89,10 @@ model User {
   emergencyRequests EmergencyRequest[]
   notifications     Notification[]
   auditLogs         AuditLog[] // Added for Compliance & Security
+  
+  // --- NEW: SYSTEM CONFIG RELATIONS ---
+  created_notices   SystemNotice[]
+  updated_settings  SystemSetting[]
 }
 
 // -----------------------------------------------------------------------------
@@ -207,13 +211,21 @@ model Appointment {
 
   patient PatientProfile @relation(fields: [patient_id], references: [user_id])
   doctor  Doctor         @relation(fields: [doctor_id], references: [doctor_id])
+  
+  // Optional 1-to-1 link to a medical record created for this appointment
+  medical_record MedicalRecord?
 }
 
 model MedicalRecord {
-  id              String   @id @default(uuid())
-  patient_id      String // Maps to PatientProfile.user_id
-  doctor_id       String // Maps to Doctor.doctor_id
-  visit_date_time DateTime @default(now())
+  id                 String   @id @default(uuid())
+  patient_id         String // Maps to PatientProfile.user_id
+  doctor_id          String // Maps to Doctor.doctor_id
+  
+  // Optional 1-to-1 link to the scheduled appointment this record was created from
+  appointment_id     String?  @unique 
+  appointment        Appointment? @relation(fields: [appointment_id], references: [id])
+
+  visit_date_time    DateTime @default(now())
 
   // --- SYNCED CLINICAL FIELDS ---
   symptoms           String
@@ -221,16 +233,17 @@ model MedicalRecord {
   treatment_plan     String?
   prescription_notes String?
   follow_up_date     DateTime?
-  notes              String? // General/legacy notes
+  notes              String? 
   // ------------------------------
 
-  patient              PatientProfile              @relation(fields: [patient_id], references: [user_id])
-  doctor               Doctor                      @relation(fields: [doctor_id], references: [doctor_id])
+  patient              PatientProfile            @relation(fields: [patient_id], references: [user_id])
+  doctor               Doctor                    @relation(fields: [doctor_id], references: [doctor_id])
   reports              MedicalReport[]
   prescription         Prescription?
   certificates         MedicalCertificate[]
   certificate_requests MedicalCertificateRequest[]
 }
+
 
 model MedicalReport {
   id          String   @id @default(uuid())
@@ -265,7 +278,7 @@ model InventoryBatch {
   stock_quantity Int
   expiry_date    DateTime
 
-  medicine      Medicine        @relation(fields: [medicine_id], references: [id], onDelete: Cascade)
+  medicine       Medicine        @relation(fields: [medicine_id], references: [id], onDelete: Cascade)
   dispensations DispensedItem[]
 
   // Prevents entering the exact same batch twice for the same medicine
@@ -351,16 +364,16 @@ model MedicalCertificateRequest {
   id           String            @id @default(uuid())
   patient_id   String // Maps to PatientProfile.user_id
   doctor_id    String // Maps to Doctor.doctor_id
-  record_id    String // Maps to MedicalRecord.id
+  record_id    String            @unique // <--- FIX: Added database-level unique constraint
   status       CertificateStatus @default(PENDING)
   doctor_notes String?
   created_at   DateTime          @default(now())
 
-  patient     PatientProfile              @relation(fields: [patient_id], references: [user_id])
-  doctor      Doctor                      @relation(fields: [doctor_id], references: [doctor_id])
-  record      MedicalRecord               @relation(fields: [record_id], references: [id])
-  recipients  ExtraCertificateRecipient[]
-  certificate MedicalCertificate?
+  patient      PatientProfile              @relation(fields: [patient_id], references: [user_id])
+  doctor       Doctor                      @relation(fields: [doctor_id], references: [doctor_id])
+  record       MedicalRecord               @relation(fields: [record_id], references: [id])
+  recipients   ExtraCertificateRecipient[]
+  certificate  MedicalCertificate?
 }
 
 model ExtraCertificateRecipient {
@@ -440,12 +453,13 @@ model PharmacistAvailability {
 // -----------------------------------------------------------------------------
 
 model Notification {
-  id      String   @id @default(uuid())
-  user_id String
-  type    String
-  message String
-  is_read Boolean  @default(false)
-  sent_at DateTime @default(now())
+  id         String   @id @default(uuid())
+  user_id    String
+  type       String
+  message    String
+  is_read    Boolean  @default(false)
+  action_url String?  // <-- NEW FIELD ADDED
+  sent_at    DateTime @default(now())
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }
@@ -465,4 +479,30 @@ model AuditLog {
   created_at  DateTime @default(now())
 
   user User @relation(fields: [user_id], references: [id])
+}
+
+// -----------------------------------------------------------------------------
+// SYSTEM CONFIG & ANNOUNCEMENTS
+// -----------------------------------------------------------------------------
+
+model SystemNotice {
+  id           String    @id @default(uuid())
+  title        String
+  message      String
+  target_roles Role[]    
+  is_active    Boolean   @default(true)
+  expires_at   DateTime? // Auto-hide notice after a certain date
+  created_by   String    // Maps to User.id (Doctor or Admin)
+  created_at   DateTime  @default(now())
+
+  creator      User      @relation(fields: [created_by], references: [id])
+}
+
+model SystemSetting {
+  key          String   @id // e.g., "APPOINTMENTS_PAUSED"
+  value        String   // e.g., "true" or "false"
+  updated_by   String   // Maps to User.id
+  updated_at   DateTime @updatedAt
+  
+  updater      User     @relation(fields: [updated_by], references: [id])
 }

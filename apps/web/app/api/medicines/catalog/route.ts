@@ -109,8 +109,8 @@ export async function POST(request: Request) {
     const session = await getUserSession();
     if (!session?.id) return apiErrors.unauthorized();
     
-    // Only Doctors, Pharmacists, and Admins can define new catalog concepts
-    if (session.role !== "DOCTOR" && session.role !== "PHARMACIST" && session.role !== "ADMIN") {
+    // Only Doctors, Nurses, Pharmacists, and Admins can define new catalog concepts
+    if (session.role !== "DOCTOR" && session.role !== "NURSE" && session.role !== "PHARMACIST" && session.role !== "ADMIN") {
       return apiErrors.forbidden("Unauthorized. Only authorized staff can expand the medical catalog.");
     }
     const initiatorId = session.id;

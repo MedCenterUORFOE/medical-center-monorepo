@@ -18,9 +18,10 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get('q')?.trim() || '';
 
-    // If the search is empty or too short, return an empty array to save database resources
+    // If the search is empty or too short, return a 400 Bad Request
+    // FIX: Re-indented to match the surrounding 4-space block level
     if (query.length < 2) {
-      return successResponse({ patients: [] }, 'Enter at least 2 characters to search');
+      return errorResponse('Enter at least 2 characters to search', 400);
     }
 
     // 2. The Multi-Table Search Query

@@ -1,3 +1,5 @@
+// apps/web/app/api/records/history/[patientId]/route.ts
+
 import { prisma } from '@medical-center/db';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
@@ -23,12 +25,19 @@ export async function GET(
     const session = await getUserSession();
     if (!session?.id) return apiErrors.unauthorized();
     
-    // Only medical staff OR the actual patient can view this history
-    if (session.role !== "NURSE" && session.role !== "DOCTOR" && session.id !== params.patientId) {
-      return apiErrors.forbidden("Unauthorized access to medical records.");
-    }
-
     const { patientId } = params;
+
+    // ========================================================================
+    // STRICT CONDITIONAL RBAC LOGIC
+    // ========================================================================
+    const isMedicalStaff = ["NURSE", "DOCTOR", "ADMIN"].includes(session.role);
+    const isOwner = session.id === patientId;
+
+    // Rule: You must either be a recognized medical staff member, OR you must own this record.
+    if (!isMedicalStaff && !isOwner) {
+      return apiErrors.forbidden("Unauthorized access to medical records. You can only view your own history.");
+    }
+    // ========================================================================
 
     // Verify patient profile actually exists
     const patientExists = await prisma.patientProfile.findUnique({
@@ -68,6 +77,24 @@ export async function GET(
       doctor_name: record.doctor.staff.user.name,
       doctor: undefined // Strip the deeply nested object
     }));
+
+    // ========================================================================
+    // SILENT READ AUDIT LOG (Compliance Feature)
+    // If a staff member looks at a patient's history, log the access. 
+    // We don't log when patients look at their own data to save DB space.
+    // ========================================================================
+    if (isMedicalStaff && !isOwner) {
+        await prisma.auditLog.create({
+            data: {
+                user_id: session.id,
+                action: "READ_MEDICAL_HISTORY",
+                entity_type: "PatientProfile",
+                entity_id: patientId,
+                ip_address: ip,
+                details: JSON.stringify({ message: "Staff accessed patient medical history" })
+            }
+        });
+    }
 
     return successResponse({ history: formattedHistory }, "Medical history retrieved successfully.");
 

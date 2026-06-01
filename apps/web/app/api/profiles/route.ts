@@ -1,7 +1,10 @@
+// apps/web/app/api/profiles/route.ts
+
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
-import { jwtVerify } from 'jose';
+import { getUserSession } from '@/lib/auth';
+import { verifyPatientStatus } from '@/lib/patient-verification';
 
 const createProfileSchema = z.object({
   user_id: z.string().uuid("Invalid user ID"),
@@ -16,22 +19,29 @@ const createProfileSchema = z.object({
 export async function POST(request: Request) {
   try {
     // --- ACTIVE RBAC SECURITY BLOCK ---
-    const requestHeaders = new Headers(request.headers);
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || requestHeaders.get('cookie')?.split('session_token=')[1]?.split(';')[0];
-    
-    if (!token) return apiErrors.unauthorized();
-
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    
-    if (payload.role !== "NURSE" && payload.role !== "DOCTOR" && payload.role !== "ADMIN") {
-      return apiErrors.forbidden("Medical Staff Only");
-    }
-    // ----------------------------------
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
 
     const body = await request.json();
     const validatedData = createProfileSchema.parse(body);
+
+    const isMedicalStaff = ["NURSE", "DOCTOR", "ADMIN"].includes(session.role);
+
+    // ========================================================================
+    // CONDITIONAL RBAC LOGIC
+    // ========================================================================
+    if (!isMedicalStaff) {
+      // Rule A: Patients can ONLY create their own profile
+      if (validatedData.user_id !== session.id) {
+        return apiErrors.forbidden("You can only create a profile for yourself.");
+      }
+
+      // Rule B: Patients CANNOT set restricted medical fields during creation
+      if (validatedData.blood_group !== undefined || validatedData.allergies !== undefined || validatedData.special_notes !== undefined) {
+        return apiErrors.forbidden("Only medical staff can set blood group, allergies, or special notes.");
+      }
+    }
+    // ========================================================================
 
     // 1. Verify the user actually exists
     const userExists = await prisma.user.findUnique({
@@ -40,6 +50,11 @@ export async function POST(request: Request) {
 
     if (!userExists) {
       return apiErrors.notFound("Associated user account not found.");
+    }
+
+    if (isMedicalStaff) {
+      const patientStatusError = await verifyPatientStatus(validatedData.user_id);
+      if (patientStatusError) return patientStatusError;
     }
 
     // 2. Prevent duplicate profiles

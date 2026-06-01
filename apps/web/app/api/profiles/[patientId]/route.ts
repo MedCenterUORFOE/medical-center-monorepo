@@ -1,8 +1,11 @@
+// apps/web/app/api/profiles/[patientId]/route.ts
+
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
-import { jwtVerify } from 'jose';
+import { getUserSession } from '@/lib/auth';
+import { verifyPatientStatus } from '@/lib/patient-verification';
 
 const clinicalProfileSchema = z.object({
   blood_group: z.string().optional(),
@@ -31,17 +34,11 @@ export async function GET(
     }
 
     // --- SMART RBAC SECURITY BLOCK ---
-    const requestHeaders = new Headers(request.headers);
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || requestHeaders.get('cookie')?.split('session_token=')[1]?.split(';')[0];
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
     
-    if (!token) return apiErrors.unauthorized();
-
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    
-    const isMedicalStaff = ["NURSE", "DOCTOR", "ADMIN"].includes(payload.role as string);
-    const isOwnProfile = payload.id === params.patientId;
+    const isMedicalStaff = ["NURSE", "DOCTOR", "ADMIN"].includes(session.role);
+    const isOwnProfile = session.id === params.patientId;
 
     // If they aren't staff, AND it's not their own profile, kick them out.
     if (!isMedicalStaff && !isOwnProfile) {
@@ -84,7 +81,7 @@ export async function GET(
 }
 
 // ============================================================================
-// PUT / PATCH: Update Patient Baseline Clinical Data (Nurses/Doctors)
+// PUT / PATCH: Upsert Patient Baseline Clinical Data
 // ============================================================================
 export async function PUT(
   request: Request,
@@ -92,46 +89,79 @@ export async function PUT(
 ) {
   try {
     // --- STRICT RBAC SECURITY BLOCK ---
-    const requestHeaders = new Headers(request.headers);
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || requestHeaders.get('cookie')?.split('session_token=')[1]?.split(';')[0];
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
     
-    if (!token) return apiErrors.unauthorized();
-
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    
-    if (payload.role !== "NURSE" && payload.role !== "DOCTOR" && payload.role !== "ADMIN") {
-      return apiErrors.forbidden("Medical Staff Only");
-    }
-    
-    // Dynamically grab the REAL staff ID for the Audit Log!
-    const staffId = payload.id as string; 
+    const staffId = session.id; 
     const { patientId } = params;
-    // ----------------------------------
-
+    
     const body = await request.json();
     const validatedData = clinicalProfileSchema.parse(body);
 
-    const patientExists = await prisma.patientProfile.findUnique({
-      where: { user_id: patientId }
+    const isMedicalStaff = ["NURSE", "DOCTOR", "ADMIN"].includes(session.role);
+    
+    // ========================================================================
+    // CONDITIONAL RBAC LOGIC
+    // ========================================================================
+    if (!isMedicalStaff) {
+        // If it's a student/staff trying to update someone ELSE's profile
+        if (session.id !== patientId) {
+            return apiErrors.forbidden("You can only update your own profile.");
+        }
+        
+        // If it's a student trying to update restricted medical fields
+        if (validatedData.blood_group !== undefined || validatedData.allergies !== undefined || validatedData.special_notes !== undefined) {
+            return apiErrors.forbidden("Only medical staff can update blood group, allergies, or special notes.");
+        }
+    }
+    // ========================================================================
+
+    // ========================================================================
+    // FIX: Verify base user exists AND is a valid patient-class role
+    // ========================================================================
+    const userExists = await prisma.user.findUnique({
+      where: { id: patientId },
+      select: { id: true, role: true } // Grab the role so we can validate it
     });
 
-    if (!patientExists) {
-      return apiErrors.notFound("Patient profile not found.");
+    if (!userExists) {
+      return apiErrors.notFound("Patient account not found.");
     }
+
+    const validPatientRoles = ["STUDENT", "ACADEMIC_STAFF", "AMBULANCE_DRIVER"];
+    if (!validPatientRoles.includes(userExists.role)) {
+      return errorResponse("Cannot create a clinical profile for a non-patient staff role.", 400);
+    }
+
+    if (isMedicalStaff) {
+      const patientStatusError = await verifyPatientStatus(patientId);
+      if (patientStatusError) return patientStatusError;
+    }
+    // ========================================================================
 
     const result = await prisma.$transaction(async (tx) => {
       
-      const updatedProfile = await tx.patientProfile.update({
+      // THE BULLETPROOF UPSERT
+      const upsertedProfile = await tx.patientProfile.upsert({
         where: { user_id: patientId },
-        data: {
+        update: {
+          // If the shell exists (Good Student), update it
           ...(validatedData.blood_group !== undefined && { blood_group: validatedData.blood_group }),
           ...(validatedData.allergies !== undefined && { allergies: validatedData.allergies }),
           ...(validatedData.special_notes !== undefined && { special_notes: validatedData.special_notes }),
           ...(validatedData.height !== undefined && { height: validatedData.height }),
           ...(validatedData.weight !== undefined && { weight: validatedData.weight }),
           ...(validatedData.date_of_birth !== undefined && { date_of_birth: validatedData.date_of_birth }),
+        },
+        create: {
+          // If the shell is missing (Lazy Student), create it from scratch
+          user_id: patientId,
+          blood_group: validatedData.blood_group,
+          allergies: validatedData.allergies,
+          special_notes: validatedData.special_notes,
+          height: validatedData.height,
+          weight: validatedData.weight,
+          date_of_birth: validatedData.date_of_birth,
         }
       });
 
@@ -147,16 +177,16 @@ export async function PUT(
           entity_id: patientId, 
           ip_address: ip,
           details: JSON.stringify({ 
-            message: "Medical staff updated patient baseline data",
+            message: isMedicalStaff ? "Medical staff upserted patient baseline data" : "Patient updated their own physical stats",
             updated_fields: changedKeys 
           }),
         }
       });
 
-      return updatedProfile;
+      return upsertedProfile;
     });
 
-    return successResponse(result, "Patient clinical profile updated.");
+    return successResponse(result, "Patient clinical profile successfully saved.");
 
   } catch (error) {
     if (error instanceof z.ZodError) {

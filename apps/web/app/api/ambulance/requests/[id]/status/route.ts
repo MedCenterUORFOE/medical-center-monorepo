@@ -3,6 +3,7 @@ import { sendPushNotification } from '@/lib/firebase-admin';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { z } from 'zod';
 import { getUserSession } from '@/lib/auth';
+import { verifyPatientStatus } from '@/lib/patient-verification';
 
 // -----------------------------------------------------------------------------
 // ZOD VALIDATION SCHEMA
@@ -45,6 +46,11 @@ export async function PATCH(
     // Security check: Only the assigned driver can update this request
     if (emergencyRequest.driver_id !== userId) {
       return apiErrors.unauthorized("You are not assigned to this emergency.");
+    }
+
+    if (status === 'COMPLETED') {
+      const patientStatusError = await verifyPatientStatus(emergencyRequest.requester_id);
+      if (patientStatusError) return patientStatusError;
     }
 
     // 2. Update the Request Status

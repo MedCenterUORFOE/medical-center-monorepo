@@ -18,75 +18,81 @@ import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { getUserSession } from '@/lib/auth';
+import { verifyPatientStatus } from '@/lib/patient-verification';
 
-const completeProfileSchema = z.object({
-  role: z.enum(["STUDENT", "ACADEMIC_STAFF", "DOCTOR", "NURSE", "PHARMACIST", "AMBULANCE_DRIVER"]), // FIX: Updated to AMBULANCE_DRIVER
-  
-  username: z.string()
-    .min(3, "Username must be at least 3 characters")
-    .max(20, "Username must be less than 20 characters")
-    .regex(/^[a-z0-9_]+$/, "Username can only contain lowercase letters, numbers, and underscores")
-    .optional(),
-  
-  phone: z.string().min(10, "Valid phone number required"),
-  nic: z.string().min(10, "NIC is required"),
-  
-  // These are optional because Medical Staff and Drivers don't have these fields in the DB schema
-  emergency_contact_name: z.string().optional(),
-  emergency_contact_number: z.string().optional(),
-  university_email: z.string().email().optional(),
+// 1. DYNAMIC SCHEMA FACTORY
+// We pass the secure database role into this function to build the exact validation rules needed.
+const buildProfileSchema = (secureRole: string) => {
+  return z.object({
+    // Notice: 'role' is completely removed from the incoming payload!
 
-  // --- NESTED PAYLOADS (Mapped to Frontend Structure) ---
-  student_details: z.object({
-    university_reg_number: z.string(),
-    faculty: z.string(),
-    department: z.string().optional(),
-    year_of_study: z.coerce.number(),
-    batch: z.string(),
-  }).optional(),
+    username: z.string()
+      .min(3, "Username must be at least 3 characters")
+      .max(20, "Username must be less than 20 characters")
+      .regex(/^[a-z0-9_]+$/, "Username can only contain lowercase letters, numbers, and underscores")
+      .optional(),
+    
+    phone: z.string().min(10, "Valid phone number required"),
+    nic: z.string().min(10, "NIC is required"),
+    
+    // These are optional because Medical Staff and Drivers don't have these fields in the DB schema
+    emergency_contact_name: z.string().optional(),
+    emergency_contact_number: z.string().optional(),
+    university_email: z.string().email().optional(),
 
-  academic_staff_details: z.object({
-    university_staff_id: z.string(),
-    department: z.string(),
-    position: z.string(),
-  }).optional(),
+    // --- NESTED PAYLOADS (Mapped to Frontend Structure) ---
+    student_details: z.object({
+      university_reg_number: z.string(),
+      faculty: z.string(),
+      department: z.string().optional(),
+      year_of_study: z.coerce.number(),
+      batch: z.string(),
+    }).optional(),
 
-  medical_staff_details: z.object({
-    license_number: z.string().min(4, "Valid license number is required"),
-    university_staff_id: z.string().optional(),
-  }).optional(),
+    academic_staff_details: z.object({
+      university_staff_id: z.string(),
+      department: z.string(),
+      position: z.string(),
+    }).optional(),
 
-  doctor_details: z.object({
-    specialization: z.string().min(2, "Specialization is required"),
-  }).optional(),
+    medical_staff_details: z.object({
+      license_number: z.string().min(4, "Valid license number is required"),
+      university_staff_id: z.string().optional(),
+    }).optional(),
 
-  driver_details: z.object({
-    vehicle_registration: z.string().min(4, "Vehicle registration is required"),
-    university_staff_id: z.string().optional(),
-  }).optional(),
+    doctor_details: z.object({
+      specialization: z.string().min(2, "Specialization is required"),
+    }).optional(),
 
-}).superRefine((data, ctx) => {
-  // Strict conditional validation ensuring the correct nested object is provided
-  if (data.role === "STUDENT" && !data.student_details) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "student_details object is required", path: ["student_details"] });
-  }
-  if (data.role === "ACADEMIC_STAFF" && !data.academic_staff_details) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "academic_staff_details object is required", path: ["academic_staff_details"] });
-  }
-  
-  const medicalRoles = ["DOCTOR", "NURSE", "PHARMACIST"];
-  if (medicalRoles.includes(data.role) && !data.medical_staff_details) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "medical_staff_details object is required", path: ["medical_staff_details"] });
-  }
-  if (data.role === "DOCTOR" && !data.doctor_details) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "doctor_details object is required for doctors", path: ["doctor_details"] });
-  }
+    driver_details: z.object({
+      vehicle_registration: z.string().min(4, "Vehicle registration is required"),
+      university_staff_id: z.string().optional(),
+    }).optional(),
 
-  // FIX: Updated to AMBULANCE_DRIVER
-  if (data.role === "AMBULANCE_DRIVER" && !data.driver_details) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "driver_details object is required", path: ["driver_details"] });
-  }
-});
+  }).superRefine((data, ctx) => {
+    // Strict conditional validation ensuring the correct nested object is provided
+    // We use the 'secureRole' from the database, ignoring anything the client might have tried to inject.
+    if (secureRole === "STUDENT" && !data.student_details) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "student_details object is required", path: ["student_details"] });
+    }
+    if (secureRole === "ACADEMIC_STAFF" && !data.academic_staff_details) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "academic_staff_details object is required", path: ["academic_staff_details"] });
+    }
+    
+    const medicalRoles = ["DOCTOR", "NURSE", "PHARMACIST"];
+    if (medicalRoles.includes(secureRole) && !data.medical_staff_details) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "medical_staff_details object is required", path: ["medical_staff_details"] });
+    }
+    if (secureRole === "DOCTOR" && !data.doctor_details) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "doctor_details object is required for doctors", path: ["doctor_details"] });
+    }
+
+    // FIX: Updated to AMBULANCE_DRIVER
+    if (secureRole === "AMBULANCE_DRIVER" && !data.driver_details) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "driver_details object is required", path: ["driver_details"] });
+    }
+  });
+};
 
 export async function PATCH(request: Request) {
   try {
@@ -95,8 +101,21 @@ export async function PATCH(request: Request) {
     if (!session?.id) return apiErrors.unauthorized();
     const userId = session.id;
     
+    // === FETCH TRUE ROLE FROM DB ===
+    const currentUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true }
+    });
+
+    if (!currentUser) return apiErrors.unauthorized("User not found in database");
+    const trueRole = currentUser.role;
+
+    const patientStatusError = await verifyPatientStatus(userId);
+    if (patientStatusError) return patientStatusError;
+
     const body = await request.json();
-    const validatedData = completeProfileSchema.parse(body);
+    const schema = buildProfileSchema(trueRole);
+    const validatedData = schema.parse(body);
 
     if (validatedData.username) {
       const existingUser = await prisma.user.findUnique({
@@ -116,7 +135,7 @@ export async function PATCH(request: Request) {
           ...(validatedData.username && { username: validatedData.username }),
           phone: validatedData.phone,
           nic: validatedData.nic,
-          role: validatedData.role, 
+          // Notice: We completely removed 'role: validatedData.role' here. 
           is_profile_complete: true,
         },
       });
@@ -129,7 +148,7 @@ export async function PATCH(request: Request) {
       });
 
       // --- SUBTYPE ROUTING ---
-      if (validatedData.role === "STUDENT") {
+      if (trueRole === "STUDENT") {
         const sd = validatedData.student_details!;
         await tx.student.upsert({
           where: { student_id: userId },
@@ -155,7 +174,7 @@ export async function PATCH(request: Request) {
             emergency_contact_number: validatedData.emergency_contact_number || "",
           }
         });
-      } else if (validatedData.role === "ACADEMIC_STAFF") {
+      } else if (trueRole === "ACADEMIC_STAFF") {
         const ad = validatedData.academic_staff_details!;
         await tx.academicStaff.upsert({
           where: { academic_staff_id: userId },
@@ -177,7 +196,7 @@ export async function PATCH(request: Request) {
             emergency_contact_number: validatedData.emergency_contact_number || "",
           }
         });
-      } else if (["DOCTOR", "NURSE", "PHARMACIST"].includes(validatedData.role)) {
+      } else if (["DOCTOR", "NURSE", "PHARMACIST"].includes(trueRole)) {
         // We use UPDATE here because the Admin Provisioning route already created the rows!
         const md = validatedData.medical_staff_details!;
         await tx.medicalCenterStaff.update({
@@ -188,14 +207,14 @@ export async function PATCH(request: Request) {
           }
         });
 
-        if (validatedData.role === "DOCTOR") {
+        if (trueRole === "DOCTOR") {
           const dd = validatedData.doctor_details!;
           await tx.doctor.update({
             where: { doctor_id: userId },
             data: { specialization: dd.specialization }
           });
         }
-      } else if (validatedData.role === "AMBULANCE_DRIVER") { // FIX: Updated to AMBULANCE_DRIVER
+      } else if (trueRole === "AMBULANCE_DRIVER") { // FIX: Updated to AMBULANCE_DRIVER
         const dd = validatedData.driver_details!;
         await tx.ambulanceDriver.update({
           where: { driver_id: userId },
@@ -218,7 +237,7 @@ export async function PATCH(request: Request) {
           ip_address: ip,
           details: JSON.stringify({ 
             message: "Initial profile completion",
-            role: validatedData.role 
+            role: trueRole 
           }),
         }
       });

@@ -2,6 +2,7 @@ import { prisma } from '@medical-center/db';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { supabase } from '@/lib/supabase';
 import { getUserSession } from '@/lib/auth';
+import { verifyPatientStatus } from '@/lib/patient-verification';
 //import { checkRateLimit } from '@/lib/rate-limiter';
 
 export async function POST(
@@ -31,6 +32,9 @@ export async function POST(
     if (session.role === "DOCTOR" && targetRecord.doctor_id !== session.id) {
       return apiErrors.forbidden("You do not have permission to upload reports to this specific record.");
     }
+
+    const patientStatusError = await verifyPatientStatus(targetRecord.patient_id);
+    if (patientStatusError) return patientStatusError;
 
     const formData = await request.formData();
     const file = formData.get('file') as File;

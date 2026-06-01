@@ -3,11 +3,14 @@ import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { getUserSession } from '@/lib/auth';
+import { verifyPatientStatus } from '@/lib/patient-verification';
 
 // -----------------------------------------------------------------------------
 // ZOD VALIDATION SCHEMA
 // -----------------------------------------------------------------------------
 const bookAppointmentSchema = z.object({
+  // NEW: Make patient_id optional so the mobile app doesn't break, but staff can pass it
+  patient_id: z.string().uuid("Invalid Patient ID").optional(),
   doctor_id: z.string().uuid("Invalid Doctor ID"),
   scheduled_time: z.string().datetime("Must be a valid ISO DateTime string"),
   reason: z.string().max(500, "Reason cannot exceed 500 characters").optional(),
@@ -31,14 +34,31 @@ export async function POST(request: Request) {
     const session = await getUserSession();
     if (!session?.id) return apiErrors.unauthorized();
     
-    // Only Patients (Students & Academic Staff) book appointments via the mobile app
-    if (session.role !== "STUDENT" && session.role !== "ACADEMIC_STAFF") {
-      return apiErrors.forbidden("Only registered patients can book appointments.");
-    }
-    const patientId = session.id;
-
     const body = await request.json();
     const validatedData = bookAppointmentSchema.parse(body);
+
+    // ========================================================================
+    // --- CONDITIONAL RBAC: Patient vs Staff Booking Logic ---
+    // ========================================================================
+    let targetPatientId = session.id; // Default to the person making the request
+
+    if (["STUDENT", "ACADEMIC_STAFF"].includes(session.role)) {
+      // Rule A: Patients can ONLY book for themselves. 
+      // If they try to pass a different patient_id in the body, block them.
+      if (validatedData.patient_id && validatedData.patient_id !== session.id) {
+        return apiErrors.forbidden("You can only book appointments for yourself.");
+      }
+    } else if (["NURSE", "ADMIN"].includes(session.role)) {
+      // Rule B: Staff MUST provide a patient ID in the request body to book on someone's behalf
+      if (!validatedData.patient_id) {
+        return errorResponse("patient_id is required when booking on behalf of a patient.", 400);
+      }
+      targetPatientId = validatedData.patient_id; // Override the target ID
+    } else {
+      return apiErrors.forbidden("Your role is not authorized to book appointments.");
+    }
+    // ========================================================================
+
     const requestedTime = new Date(validatedData.scheduled_time);
 
     // 1. Validate the time is not in the past
@@ -46,15 +66,18 @@ export async function POST(request: Request) {
       return errorResponse("Cannot book appointments in the past.", 400);
     }
 
-    // 2. Verify Patient Profile exists
+    // 2. Verify Patient Profile exists (using the securely resolved targetPatientId)
     const patientProfile = await prisma.patientProfile.findUnique({
-      where: { user_id: patientId },
+      where: { user_id: targetPatientId },
       include: { user: { select: { name: true } } }
     });
 
     if (!patientProfile) {
       return errorResponse("No verified medical profile on file. Please complete registration.", 403);
     }
+
+    const patientStatusError = await verifyPatientStatus(targetPatientId);
+    if (patientStatusError) return patientStatusError;
 
     // 3. Verify Doctor exists
     const doctor = await prisma.doctor.findUnique({
@@ -65,6 +88,19 @@ export async function POST(request: Request) {
     if (!doctor) {
       return apiErrors.notFound("Selected doctor not found.");
     }
+
+    // ====================================================================
+    // --- THE GUARDRAIL: Check if appointments are paused globally ---
+    // ====================================================================
+    const pauseSetting = await prisma.systemSetting.findUnique({
+      where: { key: "APPOINTMENTS_PAUSED" }
+    });
+
+    // If the setting exists and is set to "true", kick the request out immediately
+    if (pauseSetting?.value === "true") {
+      return errorResponse("Appointment booking is temporarily paused by the administration. Please try again later or visit the medical center for emergencies.", 503);
+    }
+    // ====================================================================
 
     // --- CONCURRENCY LOCK & TRANSACTION ---
     const result = await prisma.$transaction(async (tx) => {
@@ -85,7 +121,7 @@ export async function POST(request: Request) {
       // B. Create the Appointment
       const newAppointment = await tx.appointment.create({
         data: {
-          patient_id: patientId,
+          patient_id: targetPatientId, // Uses the securely resolved ID
           doctor_id: validatedData.doctor_id,
           scheduled_time: requestedTime,
           reason: validatedData.reason,
@@ -100,7 +136,7 @@ export async function POST(request: Request) {
       // C. Dispatch In-App Notification to the Patient
       await tx.notification.create({
         data: {
-          user_id: patientId,
+          user_id: targetPatientId, // Uses the securely resolved ID
           type: "APPOINTMENT_CONFIRMED",
           message: `Your appointment with ${doctor.staff.user.name} is confirmed for ${formattedTime}.`,
         }
@@ -109,7 +145,7 @@ export async function POST(request: Request) {
       // D. Dispatch In-App Notification to the Doctor
       await tx.notification.create({
         data: {
-          user_id: doctor.doctor_id, // FIX: Used the shared primary key!
+          user_id: doctor.doctor_id,
           type: "NEW_APPOINTMENT",
           message: `New appointment booked by ${patientProfile.user.name} for ${formattedTime}.`,
         }
@@ -118,13 +154,14 @@ export async function POST(request: Request) {
       // E. Write the Immutable Audit Ledger
       await tx.auditLog.create({
         data: {
-          user_id: patientId,
+          user_id: session.id, // Log exactly who pressed the button (the Student OR the Nurse)
           action: "BOOKED_APPOINTMENT",
           entity_type: "Appointment",
           entity_id: newAppointment.id,
           ip_address: ip,
           details: JSON.stringify({ 
             doctor_id: validatedData.doctor_id,
+            patient_id: targetPatientId,
             scheduled_time: validatedData.scheduled_time 
           }),
         }

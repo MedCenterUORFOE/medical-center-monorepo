@@ -1,13 +1,17 @@
+// apps/web/app/api/certificates/request/route.ts
+
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { getUserSession } from '@/lib/auth';
+import { verifyPatientStatus } from '@/lib/patient-verification';
 
 const certificateRequestSchema = z.object({
   record_id: z.string().uuid("Invalid Medical Record ID"),
   doctor_id: z.string().uuid("Invalid Doctor ID"),
-  recipient_staff_ids: z.array(z.string()).min(1, "Must tag at least one academic staff member"),
+  // FIX: Array is now optional and defaults to empty. Students do not have to tag anyone.
+  recipient_staff_ids: z.array(z.string()).optional().default([]),
 });
 
 // ============================================================================
@@ -34,6 +38,21 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validatedData = certificateRequestSchema.parse(body);
 
+    // ====================================================================
+    // DUPLICATION GUARDRAIL: Check if a request already exists
+    // ====================================================================
+    const existingRequest = await prisma.medicalCertificateRequest.findUnique({
+      where: { record_id: validatedData.record_id }
+    });
+
+    if (existingRequest) {
+      return errorResponse(
+        "A medical certificate has already been requested for this visit.", 
+        409 
+      );
+    }
+    // ====================================================================
+
     // Verify the underlying medical record belongs to this patient
     const medicalRecord = await prisma.medicalRecord.findUnique({
       where: { id: validatedData.record_id }
@@ -42,6 +61,9 @@ export async function POST(request: Request) {
     if (!medicalRecord || medicalRecord.patient_id !== patientId) {
       return apiErrors.forbidden("Unauthorized. You can only request certificates for your own medical records.");
     }
+
+    const patientStatusError = await verifyPatientStatus(patientId);
+    if (patientStatusError) return patientStatusError;
 
     const result = await prisma.$transaction(async (tx) => {
       
@@ -56,12 +78,15 @@ export async function POST(request: Request) {
       });
 
       // 2. Map the array of tagged Academic Staff directly via createMany
-      await tx.extraCertificateRecipient.createMany({
-        data: validatedData.recipient_staff_ids.map(staffId => ({
-          request_id: certRequest.id,
-          staff_id: staffId
-        }))
-      });
+      // FIX: Guard clause added so Prisma doesn't crash if the array is empty
+      if (validatedData.recipient_staff_ids.length > 0) {
+        await tx.extraCertificateRecipient.createMany({
+          data: validatedData.recipient_staff_ids.map(staffId => ({
+            request_id: certRequest.id,
+            staff_id: staffId
+          }))
+        });
+      }
 
       // 3. Notify the Doctor that a request is waiting for them
       await tx.notification.create({
