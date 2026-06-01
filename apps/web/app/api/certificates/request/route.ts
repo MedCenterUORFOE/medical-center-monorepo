@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     // ====================================================================
     // DUPLICATION GUARDRAIL: Check if a request already exists
     // ====================================================================
-    const existingRequest = await prisma.medicalCertificateRequest.findFirst({
+    const existingRequest = await prisma.medicalCertificateRequest.findUnique({
       where: { record_id: validatedData.record_id }
     });
 
