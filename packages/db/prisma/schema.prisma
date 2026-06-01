@@ -364,7 +364,7 @@ model MedicalCertificateRequest {
   id           String            @id @default(uuid())
   patient_id   String // Maps to PatientProfile.user_id
   doctor_id    String // Maps to Doctor.doctor_id
-  record_id    String // Maps to MedicalRecord.id
+  record_id    String            @unique // <--- FIX: Added database-level unique constraint
   status       CertificateStatus @default(PENDING)
   doctor_notes String?
   created_at   DateTime          @default(now())

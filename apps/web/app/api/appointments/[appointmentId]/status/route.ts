@@ -3,6 +3,7 @@ import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { getUserSession } from '@/lib/auth';
+import { verifyPatientStatus } from '@/lib/patient-verification';
 
 const updateStatusSchema = z.object({
   status: z.enum(['SCHEDULED', 'COMPLETED', 'CANCELLED']),
@@ -40,6 +41,12 @@ export async function PATCH(
       }
     } else if (!["DOCTOR", "NURSE", "ADMIN"].includes(session.role)) {
       return apiErrors.forbidden("Unauthorized role.");
+    }
+
+    const isMedicalStaff = ["DOCTOR", "NURSE", "ADMIN"].includes(session.role);
+    if (isMedicalStaff) {
+      const patientStatusError = await verifyPatientStatus(existingAppointment.patient_id);
+      if (patientStatusError) return patientStatusError;
     }
 
     const result = await prisma.$transaction(async (tx) => {

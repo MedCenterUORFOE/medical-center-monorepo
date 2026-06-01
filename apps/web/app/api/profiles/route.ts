@@ -4,6 +4,7 @@ import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { getUserSession } from '@/lib/auth';
+import { verifyPatientStatus } from '@/lib/patient-verification';
 
 const createProfileSchema = z.object({
   user_id: z.string().uuid("Invalid user ID"),
@@ -49,6 +50,11 @@ export async function POST(request: Request) {
 
     if (!userExists) {
       return apiErrors.notFound("Associated user account not found.");
+    }
+
+    if (isMedicalStaff) {
+      const patientStatusError = await verifyPatientStatus(validatedData.user_id);
+      if (patientStatusError) return patientStatusError;
     }
 
     // 2. Prevent duplicate profiles

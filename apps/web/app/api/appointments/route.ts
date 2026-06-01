@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { getUserSession } from '@/lib/auth';
+import { verifyPatientStatus } from '@/lib/patient-verification';
 
 // -----------------------------------------------------------------------------
 // ZOD VALIDATION SCHEMA
@@ -74,6 +75,9 @@ export async function POST(request: Request) {
     if (!patientProfile) {
       return errorResponse("No verified medical profile on file. Please complete registration.", 403);
     }
+
+    const patientStatusError = await verifyPatientStatus(targetPatientId);
+    if (patientStatusError) return patientStatusError;
 
     // 3. Verify Doctor exists
     const doctor = await prisma.doctor.findUnique({

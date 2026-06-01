@@ -1,9 +1,8 @@
-// apps/web/app/api/reports/upload/route.ts
-
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { getUserSession } from '@/lib/auth';
+import { verifyPatientStatus } from '@/lib/patient-verification';
 
 // -----------------------------------------------------------------------------
 // ZOD VALIDATION SCHEMA
@@ -37,10 +36,22 @@ export async function POST(request: Request) {
       return apiErrors.notFound("Medical record not found.");
     }
 
-    // SECURITY: Ensure the person uploading is actually the patient who owns the record
-    if (medicalRecord.patient_id !== userId && session.role === "STUDENT") {
+    // ========================================================================
+    // SECURITY FIX: Prevent Horizontal Privilege Escalation
+    // ========================================================================
+    // Explicitly define who is allowed to bypass the ownership check
+    const isMedicalStaff = ["DOCTOR", "NURSE", "PHARMACIST", "ADMIN"].includes(session.role);
+    
+    // If they aren't medical staff, they MUST own the record to upload to it
+    if (!isMedicalStaff && medicalRecord.patient_id !== userId) {
       return apiErrors.forbidden("You do not have permission to attach reports to this record.");
     }
+
+    if (isMedicalStaff) {
+      const patientStatusError = await verifyPatientStatus(medicalRecord.patient_id);
+      if (patientStatusError) return patientStatusError;
+    }
+    // ========================================================================
 
     // 2. Transaction: Create the report AND notify the doctor simultaneously
     const result = await prisma.$transaction(async (tx) => {

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { getUserSession } from '@/lib/auth';
+import { verifyPatientStatus } from '@/lib/patient-verification';
 
 const certificateRequestSchema = z.object({
   record_id: z.string().uuid("Invalid Medical Record ID"),
@@ -60,6 +61,9 @@ export async function POST(request: Request) {
     if (!medicalRecord || medicalRecord.patient_id !== patientId) {
       return apiErrors.forbidden("Unauthorized. You can only request certificates for your own medical records.");
     }
+
+    const patientStatusError = await verifyPatientStatus(patientId);
+    if (patientStatusError) return patientStatusError;
 
     const result = await prisma.$transaction(async (tx) => {
       

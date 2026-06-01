@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { getUserSession } from '@/lib/auth';
+import { verifyPatientStatus } from '@/lib/patient-verification';
 
 // -----------------------------------------------------------------------------
 // ZOD VALIDATION SCHEMAS
@@ -79,6 +80,9 @@ export async function POST(request: Request) {
     if (!patientExists) {
       return apiErrors.notFound("Patient profile not found. Cannot create record.");
     }
+
+    const patientStatusError = await verifyPatientStatus(validatedData.patient_id);
+    if (patientStatusError) return patientStatusError;
 
     // ========================================================================
     // NEW SECURITY GUARDRAIL: Verify Appointment Ownership

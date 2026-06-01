@@ -18,6 +18,7 @@ import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { getUserSession } from '@/lib/auth';
+import { verifyPatientStatus } from '@/lib/patient-verification';
 
 // 1. DYNAMIC SCHEMA FACTORY
 // We pass the secure database role into this function to build the exact validation rules needed.
@@ -108,6 +109,9 @@ export async function PATCH(request: Request) {
 
     if (!currentUser) return apiErrors.unauthorized("User not found in database");
     const trueRole = currentUser.role;
+
+    const patientStatusError = await verifyPatientStatus(userId);
+    if (patientStatusError) return patientStatusError;
 
     const body = await request.json();
     const schema = buildProfileSchema(trueRole);

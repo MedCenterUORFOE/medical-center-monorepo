@@ -4,7 +4,8 @@ import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
-import { getUserSession } from '@/lib/auth'; // Switched to use your custom auth helper
+import { getUserSession } from '@/lib/auth';
+import { verifyPatientStatus } from '@/lib/patient-verification';
 
 const clinicalProfileSchema = z.object({
   blood_group: z.string().optional(),
@@ -115,14 +116,28 @@ export async function PUT(
     }
     // ========================================================================
 
-    // Check if the base USER exists, not the profile shell!
+    // ========================================================================
+    // FIX: Verify base user exists AND is a valid patient-class role
+    // ========================================================================
     const userExists = await prisma.user.findUnique({
-      where: { id: patientId }
+      where: { id: patientId },
+      select: { id: true, role: true } // Grab the role so we can validate it
     });
 
     if (!userExists) {
       return apiErrors.notFound("Patient account not found.");
     }
+
+    const validPatientRoles = ["STUDENT", "ACADEMIC_STAFF", "AMBULANCE_DRIVER"];
+    if (!validPatientRoles.includes(userExists.role)) {
+      return errorResponse("Cannot create a clinical profile for a non-patient staff role.", 400);
+    }
+
+    if (isMedicalStaff) {
+      const patientStatusError = await verifyPatientStatus(patientId);
+      if (patientStatusError) return patientStatusError;
+    }
+    // ========================================================================
 
     const result = await prisma.$transaction(async (tx) => {
       

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { getUserSession } from '@/lib/auth';
+import { verifyPatientStatus } from '@/lib/patient-verification';
 
 // -----------------------------------------------------------------------------
 // ZOD VALIDATION SCHEMA
@@ -47,12 +48,24 @@ export async function POST(request: Request) {
     // 1. Verify the Prescription Item exists and requires internal fulfillment
     const prescriptionItem = await prisma.prescriptionItem.findUnique({
       where: { id: validatedData.prescription_item_id },
-      include: { dispensations: true }
+      include: {
+        dispensations: true,
+        prescription: {
+          include: {
+            medical_record: { select: { patient_id: true } },
+          },
+        },
+      },
     });
 
     if (!prescriptionItem) {
       return apiErrors.notFound("Prescription item not found.");
     }
+
+    const patientStatusError = await verifyPatientStatus(
+      prescriptionItem.prescription.medical_record.patient_id
+    );
+    if (patientStatusError) return patientStatusError;
 
     if (prescriptionItem.source === "EXTERNAL") {
       return errorResponse("External prescriptions cannot be fulfilled from internal inventory.", 400);

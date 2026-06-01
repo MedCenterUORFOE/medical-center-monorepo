@@ -4,6 +4,7 @@ import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { z } from 'zod';
 import { getUserSession } from '@/lib/auth';
+import { verifyPatientStatus } from '@/lib/patient-verification';
 
 // -----------------------------------------------------------------------------
 // ZOD VALIDATION SCHEMA
@@ -36,6 +37,9 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const validatedData = createEmergencySchema.parse(body);
+
+    const patientStatusError = await verifyPatientStatus(requesterId);
+    if (patientStatusError) return patientStatusError;
 
     // 1. Create the Emergency Request in the database
     const newRequest = await prisma.emergencyRequest.create({
