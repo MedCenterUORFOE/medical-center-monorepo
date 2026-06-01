@@ -212,8 +212,8 @@ model Appointment {
   patient PatientProfile @relation(fields: [patient_id], references: [user_id])
   doctor  Doctor         @relation(fields: [doctor_id], references: [doctor_id])
   
-  // ADD THIS LINE TO FIX THE ERROR:
-  medical_record MedicalRecord? 
+  // Optional 1-to-1 link to a medical record created for this appointment
+  medical_record MedicalRecord?
 }
 
 model MedicalRecord {
