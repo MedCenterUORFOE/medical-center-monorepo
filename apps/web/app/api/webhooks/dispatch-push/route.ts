@@ -9,7 +9,13 @@ export async function POST(request: Request) {
     // 1. THE SECRET HANDSHAKE
     // ========================================================================
     const authHeader = request.headers.get('authorization');
-    const expectedSecret = process.env.WEBHOOK_SECRET; 
+    const expectedSecret = process.env.WEBHOOK_SECRET;
+
+    // Fail closed if the secret isn't configured
+    if (!expectedSecret) {
+      console.error('WEBHOOK_SECRET is not configured.');
+      return NextResponse.json({ error: 'Webhook not configured' }, { status: 500 });
+    }
 
     // Block the request if the header is missing or doesn't match our secret
     if (!authHeader || authHeader !== `Bearer ${expectedSecret}`) {
