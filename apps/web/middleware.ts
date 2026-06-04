@@ -4,41 +4,58 @@ import { jwtVerify } from 'jose';
 
 // 1. The Whitelist: The ONLY routes allowed without a token
 const publicRoutes = [
-  '/api/auth/login',
-  '/api/auth/register', 
-  '/api/health',
+  // UI Routes
   '/login',
-  '/register'
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/setup-account', 
+  
+  // API Routes
+  '/api/health',
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/google',
+  '/api/auth/forgot-password',
+  '/api/auth/reset-password',
+  '/api/auth/verify',
+  '/api/auth/resend-verification',
+  '/api/webhooks' // <-- Protected by exact match or sub-directory logic now
 ];
 
 // 2. The VIP List: Specific roles required for specific folders
 const roleAccessMap: Record<string, string[]> = {
-  // UI Routes
+  // UI Routes (Slashes removed from keys for proper exact matching)
   '/admin': ['ADMIN'],
   '/dashboard/doctor': ['DOCTOR'],
   '/dashboard/nurse': ['NURSE'],
+  '/dashboard/pharmacist': ['PHARMACIST'],
   '/inventory': ['PHARMACIST', 'NURSE', 'ADMIN'],
   
   // API Routes
   '/api/admin': ['ADMIN'],
-  '/api/doctor': ['DOCTOR'],
+  '/api/doctor': ['DOCTOR'], 
   '/api/nurse': ['NURSE'],
   '/api/inventory': ['PHARMACIST', 'NURSE', 'ADMIN'],
+  '/api/medicines': ['ADMIN', 'DOCTOR', 'NURSE', 'PHARMACIST'], 
+  '/api/dispensations': ['ADMIN', 'NURSE', 'PHARMACIST'],       
 };
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // --- A. IS IT ON THE WHITELIST? ---
-  // If the URL starts with any of our public routes, open the door immediately.
-  if (publicRoutes.some(route => pathname.startsWith(route))) {
+  // FIX: Safely checks for exact match OR sub-directory match
+  if (publicRoutes.some(route => pathname === route || pathname.startsWith(route + '/'))) {
     return NextResponse.next();
   }
 
   // --- B. THE BULLETPROOF CHECK ---
   const isApiRoute = pathname.startsWith('/api/');
+  
+  // FIX: Applies the same exact match OR sub-directory match logic to VIP routes
   const requiredRoles = Object.entries(roleAccessMap).find(([route]) => 
-    pathname.startsWith(route)
+    pathname === route || pathname.startsWith(route + '/')
   )?.[1];
 
   // If it is NOT an API route, and it doesn't have a specific role requirement, 
@@ -56,7 +73,7 @@ export async function middleware(request: NextRequest) {
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.substring(7);
   } else {
-    token = request.cookies.get('umc_session')?.value;
+    token = request.cookies.get('session_token')?.value;
   }
 
   // --- D. NO TOKEN? KICK THEM OUT ---
@@ -84,9 +101,10 @@ export async function middleware(request: NextRequest) {
     }
 
     // --- G. PASS THE USER ID TO THE BACKEND ---
-    // We safely inject the verified ID into the headers so the API routes can use it!
     const requestHeaders = new Headers(request.headers);
-    requestHeaders.set('x-user-id', payload.userId as string);
+    
+    requestHeaders.set('x-user-id', payload.id as string);
+    requestHeaders.set('x-user-role', payload.role as string);
 
     return NextResponse.next({
       request: {

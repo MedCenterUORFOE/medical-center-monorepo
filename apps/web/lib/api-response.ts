@@ -15,7 +15,7 @@ export function successResponse<T>(data: T, message: string = 'Success', status:
 }
 
 // Standard Error Response
-export function errorResponse(message: string, status: number = 400, errors?: any) {
+export function errorResponse(message: string, status: number = 400, errors?: unknown) {
   return NextResponse.json(
     {
       success: false,
