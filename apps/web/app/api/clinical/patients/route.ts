@@ -2,9 +2,20 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@medical-center/db';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
+import { getUserSession } from '@/lib/auth';
+
+const ALLOWED_ROLES = ["DOCTOR", "NURSE", "ADMIN", "PHARMACIST"] as const;
 
 export async function GET(request: NextRequest) {
   try {
+    // === PRODUCTION AUTH & RBAC BLOCK ===
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+
+    if (!(ALLOWED_ROLES as readonly string[]).includes(session.role)) {
+      return apiErrors.forbidden("Only clinical and pharmacy staff can search patient records.");
+    }
+
     // --- RATE LIMITING ---
     const forwardedFor = request.headers.get('x-forwarded-for');
     const ip = forwardedFor ? forwardedFor.split(',')[0] : 'unknown-ip';

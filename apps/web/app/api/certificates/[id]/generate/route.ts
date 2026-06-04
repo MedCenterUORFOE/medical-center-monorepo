@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { generatePDF } from '@/lib/pdf-generator'; 
 import { getUserSession } from '@/lib/auth';
 import { verifyPatientStatus } from '@/lib/patient-verification';
-import { resend } from '@/lib/resend'; // <-- ADDED FOR EMAIL DISPATCH
+import { resend } from '@/lib/resend';
 
 export async function POST(
   request: Request,
@@ -69,13 +69,6 @@ export async function POST(
         .map((r) => ({ staff_id: r.staff_id, email: r.staff?.user?.email ?? null })),
     });
 
-    if (targetEmails.length === 0) {
-      return errorResponse(
-        "No recipient email addresses found for this certificate request. Tag at least one academic staff member with a valid email before generating.",
-        400
-      );
-    }
-
     // 2. Generate PDF Buffer
     const pdfBuffer = await generatePDF({
       patientName: requestData.patient.user.name,
@@ -101,59 +94,68 @@ export async function POST(
     });
 
     // ------------------------------------------------------------------------
-    // THE AUTO-SEND EMAIL WORKER
+    // THE AUTO-SEND EMAIL WORKER (Now Conditional)
     // ------------------------------------------------------------------------
-    console.log("[certificate/generate] Dispatching via Resend", {
-      requestId: id,
-      to: targetEmails,
-      from: "Medical Center <onboarding@resend.dev>",
-    });
+    let dispatchMessage = "No external recipients tagged. Skipped email dispatch.";
 
-    try {
-      const { data: emailData, error: emailError } = await resend.emails.send({
-        from: "Medical Center <onboarding@resend.dev>",
+    if (targetEmails.length > 0) {
+      console.log("[certificate/generate] Dispatching via Resend", {
+        requestId: id,
         to: targetEmails,
-        subject: `Medical Leave Certificate: ${requestData.patient.user.name}`,
-        text: `Please find the authorized medical leave certificate attached for ${requestData.patient.user.name}.`,
-        attachments: [
-          {
-            filename: `Medical_Certificate_${requestData.patient.user.name.replace(/\s+/g, '_')}.pdf`,
-            content: pdfBuffer,
-          },
-        ],
+        from: "Medical Center <onboarding@resend.dev>",
       });
 
-      if (emailError) {
-        console.error("[certificate/generate] Resend API error:", emailError);
+      try {
+        const { data: emailData, error: emailError } = await resend.emails.send({
+          from: "Medical Center <onboarding@resend.dev>",
+          to: targetEmails,
+          subject: `Medical Leave Certificate: ${requestData.patient.user.name}`,
+          text: `Please find the authorized medical leave certificate attached for ${requestData.patient.user.name}.`,
+          attachments: [
+            {
+              filename: `Medical_Certificate_${requestData.patient.user.name.replace(/\s+/g, '_')}.pdf`,
+              content: pdfBuffer,
+            },
+          ],
+        });
+
+        if (emailError) {
+          console.error("[certificate/generate] Resend API error:", emailError);
+          return errorResponse(
+            "Certificate was saved, but email dispatch failed. Please check Resend configuration and try again.",
+            500,
+            emailError
+          );
+        }
+
+        console.log("[certificate/generate] Resend accepted message", {
+          requestId: id,
+          resendId: emailData?.id,
+          to: targetEmails,
+        });
+
+        await prisma.extraCertificateRecipient.updateMany({
+          where: { request_id: id },
+          data: { sent_at: new Date() },
+        });
+
+        dispatchMessage = "Dispatched to tagged academic staff.";
+
+      } catch (emailError) {
+        console.error("[certificate/generate] Resend dispatch exception:", emailError);
         return errorResponse(
-          "Certificate was saved, but email dispatch failed. Please check Resend configuration and try again.",
+          "Certificate was saved, but email dispatch failed unexpectedly.",
           500,
           emailError
         );
       }
-
-      console.log("[certificate/generate] Resend accepted message", {
-        requestId: id,
-        resendId: emailData?.id,
-        to: targetEmails,
-      });
-
-      await prisma.extraCertificateRecipient.updateMany({
-        where: { request_id: id },
-        data: { sent_at: new Date() },
-      });
-    } catch (emailError) {
-      console.error("[certificate/generate] Resend dispatch exception:", emailError);
-      return errorResponse(
-        "Certificate was saved, but email dispatch failed unexpectedly.",
-        500,
-        emailError
-      );
+    } else {
+      console.log("[certificate/generate] Email dispatch skipped (0 recipients).");
     }
 
     return successResponse(
       cert,
-      "Certificate generated, saved, and dispatched to recipients."
+      `Certificate generated and saved successfully. ${dispatchMessage}`
     );
   } catch (error) {
     console.error("Generate PDF Error:", error); 
