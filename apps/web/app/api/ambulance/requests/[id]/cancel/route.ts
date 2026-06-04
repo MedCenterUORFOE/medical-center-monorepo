@@ -41,6 +41,16 @@ export async function PATCH(
       return apiErrors.notFound("Emergency request not found.");
     }
 
+    // === RESOURCE OWNERSHIP CHECK ===
+    // Only the original requester, the assigned driver, or an Admin may cancel.
+    const isRequester = emergencyRequest.requester_id === userId;
+    const isAssignedDriver = emergencyRequest.driver_id !== null && emergencyRequest.driver_id === userId;
+    const isAdmin = session.role === "ADMIN";
+
+    if (!isRequester && !isAssignedDriver && !isAdmin) {
+      return apiErrors.forbidden("You do not have permission to cancel this emergency request.");
+    }
+
     if (['COMPLETED', 'CANCELLED'].includes(emergencyRequest.status)) {
       return errorResponse(`Cannot cancel a request that is already ${emergencyRequest.status}.`, 400);
     }

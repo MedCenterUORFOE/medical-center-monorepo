@@ -1,4 +1,5 @@
-/**
+ 
+ /**
  * PROFILE COMPLETION ENDPOINT (PATCH /api/users/complete-profile)
  * * --- AUTHENTICATION TESTING STRATEGY ---
  * * DEVELOPMENT MODE (Current):
@@ -101,13 +102,19 @@ export async function PATCH(request: Request) {
     if (!session?.id) return apiErrors.unauthorized();
     const userId = session.id;
     
-    // === FETCH TRUE ROLE FROM DB ===
+    // === FETCH TRUE ROLE & STATUS FROM DB ===
     const currentUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true }
+      select: { role: true, is_profile_complete: true }
     });
 
     if (!currentUser) return apiErrors.unauthorized("User not found in database");
+    
+    // THE RESTORED GUARDRAIL
+    if (currentUser.is_profile_complete) {
+      return errorResponse("This profile is already complete.", 400);
+    }
+
     const trueRole = currentUser.role;
 
     const patientStatusError = await verifyPatientStatus(userId);

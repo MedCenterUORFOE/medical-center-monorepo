@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     if (patientStatusError) return patientStatusError;
 
     // ========================================================================
-    // NEW SECURITY GUARDRAIL: Verify Appointment Ownership
+    // SECURITY GUARDRAIL: Verify Appointment Ownership
     // ========================================================================
     if (validatedData.appointment_id) {
       const targetAppointment = await prisma.appointment.findUnique({
@@ -95,6 +95,58 @@ export async function POST(request: Request) {
       // Prevent a doctor/user from attaching an appointment ID that belongs to a different patient
       if (!targetAppointment || targetAppointment.patient_id !== validatedData.patient_id) {
          return errorResponse("The provided appointment ID does not belong to this patient.", 400);
+      }
+    }
+    // ========================================================================
+
+    // ========================================================================
+    // PRE-FLIGHT VALIDATION ENGINE: Check Medicine Catalog & Active Stock
+    // ========================================================================
+    if (validatedData.prescription?.items && validatedData.prescription.items.length > 0) {
+      
+      // 1. Isolate only the internal prescription items
+      const internalItems = validatedData.prescription.items.filter(
+        item => item.source === "INTERNAL" && item.medicine_id
+      );
+
+      if (internalItems.length > 0) {
+        // Extract unique IDs in case a doctor prescribed the same medicine twice with different dosages
+        const uniqueMedicineIds = Array.from(new Set(internalItems.map(item => item.medicine_id as string)));
+        const currentDate = new Date();
+
+        // 2. Fetch the catalog data alongside active, unexpired inventory
+        const catalogMedicines = await prisma.medicine.findMany({
+          where: { id: { in: uniqueMedicineIds } },
+          include: {
+            inventory_batches: {
+              where: {
+                stock_quantity: { gt: 0 },
+                expiry_date: { gt: currentDate }
+              }
+            }
+          }
+        });
+
+        // 3. Verify Existence: Did any of the requested IDs fail to return from the DB?
+        if (catalogMedicines.length !== uniqueMedicineIds.length) {
+          const foundIds = catalogMedicines.map(m => m.id);
+          const missingId = uniqueMedicineIds.find(id => !foundIds.includes(id));
+          return errorResponse(`Invalid prescription: No medicine found in the catalog for ID ${missingId}`, 400);
+        }
+
+        // 4. Verify Stock: Do we have enough unexpired medicine to fulfill the quantity?
+        for (const item of internalItems) {
+          const matchedMedicine = catalogMedicines.find(m => m.id === item.medicine_id);
+          
+          if (matchedMedicine) {
+            // Aggregate total valid stock across all batches
+            const totalAvailableStock = matchedMedicine.inventory_batches.reduce((sum, batch) => sum + batch.stock_quantity, 0);
+            
+            if (item.quantity > totalAvailableStock) {
+              return errorResponse(`Insufficient stock for ${matchedMedicine.name}. Requested: ${item.quantity}, Available: ${totalAvailableStock}`, 400);
+            }
+          }
+        }
       }
     }
     // ========================================================================
