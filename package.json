@@ -14,11 +14,13 @@
     "postinstall": "cd packages/db && npx prisma generate"
   },
   "devDependencies": {
+    "@babel/plugin-transform-class-static-block": "^7.29.7",
+    "@babel/plugin-transform-parameters": "^7.29.7",
+    "@babel/plugin-transform-template-literals": "^7.29.7",
     "tsx": "^4.21.0",
     "turbo": "^2.9.12"
   },
   "dependencies": {
-    "eslint-config-next": "^14.1.4",
-    "next": "^14.1.4"
-  }
+  "eslint-config-next": "^14.1.4"
+}
 }
