@@ -1,26 +1,27 @@
 import React, { useState } from 'react';
 import { 
-  View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator, Image 
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context'; // Updated view context component wrapper
 import { useRouter } from 'expo-router';
 
 // Import libraries for Google Login
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 
-// Completes the auth session if the app was closed during login
+// Completes the auth session if the app was closed during login redirect flows
 WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [email, setEmail] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const router = useRouter();
 
-  // IMPORTANT: Replace '192.168.X.X' with your actual computer IP address
-  const BACKEND_URL = 'http://10.125.77.119:3000';
+  // ✅ Decoupled hardcoded strings. Reading directly from global dynamic environment config package
+  const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
   // --- Function to handle standard Email/Password Login ---
   const handleLogin = async () => {
@@ -31,7 +32,7 @@ export default function LoginScreen() {
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
+      const response = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim(), password }),
@@ -45,7 +46,7 @@ export default function LoginScreen() {
         Alert.alert('Login Failed', data.message || 'Incorrect Email or Password!');
       }
     } catch (error) {
-      Alert.alert('Network Error', 'Could not connect to the server. Please check your IP address.');
+      Alert.alert('Network Error', 'Could not connect to the server. Please check your network and environment settings.');
     } finally {
       setIsLoading(false);
     }
@@ -55,7 +56,7 @@ export default function LoginScreen() {
   const handleGoogleLogin = async () => {
     try {
       const redirectUrl = Linking.createURL('/dashboard');
-      const authUrl = `${BACKEND_URL}/api/auth/google?redirect=${encodeURIComponent(redirectUrl)}`;
+      const authUrl = `${API_URL}/api/auth/google?redirect=${encodeURIComponent(redirectUrl)}`;
 
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
 
@@ -71,7 +72,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         
         {/* --- Top Header Section --- */}
@@ -87,10 +88,21 @@ export default function LoginScreen() {
             <View style={styles.innerWhiteBox}>
               
               <Text style={styles.label}>Email</Text>
-              <TextInput style={styles.input} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+              <TextInput 
+                style={styles.input} 
+                value={email} 
+                onChangeText={setEmail} 
+                keyboardType="email-address" 
+                autoCapitalize="none" 
+              />
               
               <Text style={styles.label}>Password</Text>
-              <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry />
+              <TextInput 
+                style={styles.input} 
+                value={password} 
+                onChangeText={setPassword} 
+                secureTextEntry 
+              />
 
               <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={isLoading}>
                 {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Sign In</Text>}
@@ -109,17 +121,16 @@ export default function LoginScreen() {
               <View style={styles.dividerLine} />
             </View>
 
-            {/* --- NEW: Standard Google Login Button --- */}
+            {/* --- Standard Guideline Google Login Button --- */}
             <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin}>
               <Image 
-                // Using a remote URL for the standard multi-colored Google "G" logo
                 source={{ uri: 'https://img.icons8.com/color/48/000000/google-logo.png' }} 
                 style={styles.googleIconImage} 
               />
               <Text style={styles.googleButtonText}>Continue with Google</Text>
             </TouchableOpacity>
 
-            {/* --- Footer text --- */}
+            {/* --- Footer Links Text --- */}
             <View style={styles.footerContainer}>
               <Text style={styles.footerText}>Don't have an account? </Text>
               <TouchableOpacity onPress={() => router.push('/create-account')}>
@@ -135,7 +146,7 @@ export default function LoginScreen() {
   );
 }
 
-// --- Design Styles ---
+// --- Design Layout Core Styling Configuration ---
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1D666A' },
   headerSection: { paddingHorizontal: 30, paddingTop: 40, paddingBottom: 20 },
@@ -153,8 +164,6 @@ const styles = StyleSheet.create({
   dividerContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 30 },
   dividerLine: { flex: 1, height: 1, backgroundColor: 'rgba(0, 0, 0, 0.54)' },
   dividerText: { marginHorizontal: 10, color: 'rgba(0, 0, 0, 0.54)', fontSize: 14 },
-  
-  // Updated Google Button Styles to match official guidelines
   googleButton: { 
     flexDirection: 'row', 
     backgroundColor: '#FFFFFF', 
@@ -164,7 +173,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     marginBottom: 30, 
     borderWidth: 1,
-    borderColor: '#E0E0E0', // Subtle border
+    borderColor: '#E0E0E0', 
     elevation: 2, 
     shadowColor: '#000', 
     shadowOffset: { width: 0, height: 1 }, 
@@ -177,11 +186,10 @@ const styles = StyleSheet.create({
     marginRight: 12 
   },
   googleButtonText: { 
-    color: '#757575', // Official Google text color
+    color: '#757575', 
     fontSize: 16, 
     fontWeight: '600' 
   },
-  
   footerContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   footerText: { color: 'rgba(0, 0, 0, 0.87)', fontSize: 15 },
   footerLink: { color: '#1D666A', fontWeight: 'bold', fontSize: 15 },

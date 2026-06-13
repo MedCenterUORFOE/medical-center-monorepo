@@ -1,4 +1,4 @@
 
-import DashboardScreen from '../src/screens/DashboardScreen';
+import DashboardScreen from '../src/screens/DashboardScreen.tsx';
 
 export default DashboardScreen;

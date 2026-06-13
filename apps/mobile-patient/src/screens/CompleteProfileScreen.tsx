@@ -1,56 +1,87 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator, Platform, StatusBar, KeyboardAvoidingView
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  TextInput, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, StatusBar
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+
+// Define rigid data type contracts matching the backend validation expectations
+interface StudentDetails {
+  university_reg_number: string;
+  faculty: string;
+  department: string;
+  year_of_study: number;
+  batch: string;
+}
+
+interface AcademicStaffDetails {
+  university_staff_id: string;
+  department: string;
+  position: string;
+  university_email: string;
+  ExtraCertificateRecipient: string | null;
+}
+
+interface CompleteProfilePayload {
+  role: 'STUDENT' | 'ACADEMIC_STAFF';
+  nic: string;
+  phone: string;
+  emergency_contact_name: string;
+  emergency_contact_number: string;
+  student_details?: StudentDetails;
+  academic_staff_details?: AcademicStaffDetails;
+}
 
 export default function CompleteProfileScreen() {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
+  const params = useLocalSearchParams();
 
-  // Role State (Will render fields dynamically)
-  const [role, setRole] = useState('STUDENT'); 
-  const [nic, setNic] = useState('');
+  // Enforce types safely from search parameters or fallback to student context
+  const targetRole = (params.role as 'STUDENT' | 'ACADEMIC_STAFF') || 'STUDENT';
+  const [role, setRole] = useState<'STUDENT' | 'ACADEMIC_STAFF'>(targetRole);
+  const [nic, setNic] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   // ── STUDENT Fields ──────────────────────────────
-  const [batch, setBatch] = useState('');
-  const [studentDepartment, setStudentDepartment] = useState('');
-  const [studentFullName, setStudentFullName] = useState('');       
-  const [studentPhone, setStudentPhone] = useState('');             
-  const [faculty, setFaculty] = useState('');
-  const [studentEmail, setStudentEmail] = useState('');             
-  const [universityRegNumber, setUniversityRegNumber] = useState(''); 
-  const [yearOfStudy, setYearOfStudy] = useState('');               
+  const [batch, setBatch] = useState<string>('');
+  const [studentDepartment, setStudentDepartment] = useState<string>('');
+  const [studentFullName, setStudentFullName] = useState<string>('');       
+  const [studentPhone, setStudentPhone] = useState<string>('');             
+  const [faculty, setFaculty] = useState<string>('');
+  const [studentEmail, setStudentEmail] = useState<string>('');             
+  const [universityRegNumber, setUniversityRegNumber] = useState<string>(''); 
+  const [yearOfStudy, setYearOfStudy] = useState<string>('');               
 
   // ── ACADEMIC STAFF Fields ───────────────────────
-  const [universityStaffId, setUniversityStaffId] = useState('');   
-  const [staffDepartment, setStaffDepartment] = useState('');
-  const [staffFullName, setStaffFullName] = useState('');           
-  const [staffPhone, setStaffPhone] = useState('');                 
-  const [position, setPosition] = useState('');
-  const [staffEmail, setStaffEmail] = useState('');                 
-  const [extraCertificate, setExtraCertificate] = useState('');     
+  const [universityStaffId, setUniversityStaffId] = useState<string>('');   
+  const [staffDepartment, setStaffDepartment] = useState<string>('');
+  const [staffFullName, setStaffFullName] = useState<string>('');           
+  const [staffPhone, setStaffPhone] = useState<string>('');                 
+  const [position, setPosition] = useState<string>('');
+  const [staffEmail, setStaffEmail] = useState<string>('');                 
+  const [extraCertificate, setExtraCertificate] = useState<string>('');     
 
   // Dropdowns Visibility Toggles
-  const [showStudentDeptDropdown, setShowStudentDeptDropdown] = useState(false);
-  const [showStaffDeptDropdown, setShowStaffDeptDropdown] = useState(false);
-  const [showPosDropdown, setShowPosDropdown] = useState(false);
-  const [showYearDropdown, setShowYearDropdown] = useState(false);
+  const [showStudentDeptDropdown, setShowStudentDeptDropdown] = useState<boolean>(false);
+  const [showStaffDeptDropdown, setShowStaffDeptDropdown] = useState<boolean>(false);
+  const [showPosDropdown, setShowPosDropdown] = useState<boolean>(false);
+  const [showYearDropdown, setShowYearDropdown] = useState<boolean>(false);
 
-  const departments = ['DEIE', 'DCEE', 'DMME', 'DCE', 'DMANAE'];
-  const positions = ['Senior Lecturer', 'Visiting Lecturer', 'Prof', 'Dr', 'Probationary Lecturer'];
-  const studyYears = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
+  const departments: string[] = ['DEIE', 'DCEE', 'DMME', 'DCE', 'DMANAE'];
+  const positions: string[] = ['Senior Lecturer', 'Visiting Lecturer', 'Prof', 'Dr', 'Probationary Lecturer'];
+  const studyYears: string[] = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
 
-  const BACKEND_URL = 'http://10.125.77.119:3000'; 
+  // ✅ Extracted dynamically from centralized mobile system environment configs
+  const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-  const yearStringToInt = (val) => {
-    const map = { '1st Year': 1, '2nd Year': 2, '3rd Year': 3, '4th Year': 4 };
+  const yearStringToInt = (val: string): number => {
+    const map: Record<string, number> = { '1st Year': 1, '2nd Year': 2, '3rd Year': 3, '4th Year': 4 };
     return map[val] ?? 1;
   };
 
-  const formatPhoneNumber = (num) => {
+  const formatPhoneNumber = (num: string): string => {
     let cleaned = num.trim();
     if (cleaned.length === 9 && !cleaned.startsWith('0')) return `+94${cleaned}`;
     if (cleaned.length === 10 && cleaned.startsWith('0')) return `+94${cleaned.substring(1)}`;
@@ -63,7 +94,7 @@ export default function CompleteProfileScreen() {
       return;
     }
 
-    let payload = {};
+    let payload: Partial<CompleteProfilePayload> = {};
 
     // 1. STUDENT Payload Structure mapping exactly to Postman Schema
     if (role === 'STUDENT') {
@@ -106,7 +137,7 @@ export default function CompleteProfileScreen() {
         phone: validatedPhone,
         emergency_contact_name: staffFullName.trim(),
         emergency_contact_number: validatedPhone,
-        academic_staff_details: { // ✅ CHANGED TO academic_staff_details EXACTLY
+        academic_staff_details: { 
           university_staff_id: universityStaffId.trim(),
           department: staffDepartment,
           position: position,
@@ -118,7 +149,7 @@ export default function CompleteProfileScreen() {
 
     setIsLoading(true);
     try {
-      const endpoint = `${BACKEND_URL}/api/users/complete-profile`; 
+      const endpoint = `${API_URL}/api/users/complete-profile`; 
       
       console.log("🚀 Sending Patch Request to:", endpoint);
       console.log("📦 Payload:", JSON.stringify(payload, null, 2));
@@ -161,7 +192,7 @@ export default function CompleteProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
 
         {/* HEADER */}
@@ -316,7 +347,7 @@ export default function CompleteProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1D666A', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
+  container: { flex: 1, backgroundColor: '#1D666A' },
   headerSection: { paddingHorizontal: 30, paddingTop: 10, paddingBottom: 20 },
   backButton: { marginBottom: 15, width: 40 },
   headerTitle: { color: '#FFFFFF', fontSize: 28, fontWeight: 'bold', marginBottom: 6 },

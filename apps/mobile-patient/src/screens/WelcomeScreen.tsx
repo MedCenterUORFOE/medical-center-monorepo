@@ -5,19 +5,19 @@ import {
   StyleSheet, 
   Image, 
   TouchableOpacity, 
-  SafeAreaView, 
   Platform,
   StatusBar
 } from 'react-native';
-// 1. Import useRouter for navigation between screens
+import { SafeAreaView } from 'react-native-safe-area-context'; // ✅ Swapped to modern context view wrapper
 import { useRouter } from 'expo-router';
 
 export default function WelcomeScreen() {
-  // 2. Initialize the router
+  // Initialize the routing context module hooks
   const router = useRouter();
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <StatusBar barStyle="light-content" backgroundColor="#1D666A" />
       <View style={styles.content}>
         
         <View style={styles.spacerDouble} />
@@ -25,7 +25,6 @@ export default function WelcomeScreen() {
         {/* 1. The White Logo Box */}
         <View style={styles.logoContainer}>
           <Image
-            // Using the exact image path you provided
             source={require('../../assets/images/appimage.png')} 
             style={styles.logoImage}
             resizeMode="cover"
@@ -45,9 +44,9 @@ export default function WelcomeScreen() {
         <TouchableOpacity 
           style={styles.primaryButton}
           onPress={() => {
-            // Navigate to the Create Account screen using expo-router
             router.push('/create-account');
           }}
+          activeOpacity={0.8}
         >
           <Text style={styles.primaryButtonText}>Get Started</Text>
         </TouchableOpacity>
@@ -58,9 +57,9 @@ export default function WelcomeScreen() {
         <TouchableOpacity 
           style={styles.secondaryButton}
           onPress={() => {
-            // Navigate to the Login screen using expo-router
             router.push('/login');
           }}
+          activeOpacity={0.8}
         >
           <Text style={styles.secondaryButtonText}>I have already an account</Text>
         </TouchableOpacity>
@@ -76,13 +75,11 @@ export default function WelcomeScreen() {
   );
 }
 
-// Design Styles
+// Design Layout Core Styling Configuration
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1D666A', // Dark teal background
-    // Ensure content stays below the status bar on Android
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    backgroundColor: '#1D666A', // Dark teal background base layer
   },
   content: {
     flex: 1,
@@ -100,7 +97,7 @@ const styles = StyleSheet.create({
     height: 110,
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    overflow: 'hidden', // Prevents the image from spilling over the rounded corners
+    overflow: 'hidden', // Forces image assets to bend exactly around boundary clips
   },
   logoImage: {
     width: '100%',

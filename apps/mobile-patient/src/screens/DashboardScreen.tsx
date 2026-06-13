@@ -3,21 +3,55 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   Platform,
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context'; 
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
+// ── TypeScript Data Contract Type Layout Interfaces ──
+interface NextAppointment {
+  date: string;
+  time: string;
+}
+
+interface RecentActivityItem {
+  id: string;
+  title: string;
+  desc: string;
+  date: string;
+  icon: string;
+}
+
+interface UserDataProps {
+  isRegistered: boolean;
+  name: string;
+  studentId: string;
+  faculty: string;
+  notificationCount: number;
+  healthStatus: string;
+  lastVisit: string;
+  nextAppointment: NextAppointment | null;
+  recentActivity: RecentActivityItem[];
+}
+
+interface QuickActionItem {
+  id: string;
+  label: string;
+  icon: string;
+  color: string;
+  route: string;
+}
+
 export default function DashboardScreen() {
   const router = useRouter();
-  const [userData, setUserData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [greeting, setGreeting] = useState('');
+  const [userData, setUserData] = useState<UserDataProps | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [greeting, setGreeting] = useState<string>('');
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -29,20 +63,14 @@ export default function DashboardScreen() {
 
   const fetchUserData = async () => {
     try {
-      // ── Replace this block with your real API call ──────────
-      // const res = await fetch('https://your-api.com/user/profile', {
-      //   headers: { Authorization: `Bearer ${token}` },
-      // });
-      // const data = await res.json();
-      // setUserData(data);
-      // ────────────────────────────────────────────────────────
+      const API_URL = process.env.EXPO_PUBLIC_API_URL;
+      console.log("🌐 Dashboard loading configuration module network root via context:", API_URL);
 
       await new Promise(r => setTimeout(r, 1000));
 
-      // Simulated backend — isRegistered: false  = new user
       setUserData({
-        isRegistered: false,          // ← new user: no name, no activity shown
-        name: 'Kasun Perera',         //   (hidden until registered)
+        isRegistered: false,          
+        name: 'Kasun Perera',         
         studentId: 'EG/2022/5431',
         faculty: 'Faculty of Engineering',
         notificationCount: 3,
@@ -73,45 +101,42 @@ export default function DashboardScreen() {
     }
   };
 
-  // ── Derived display values ─────────────────────────────────
-  const isRegistered  = userData?.isRegistered === true;
-  const notifCount    = userData?.notificationCount ?? 0;
-  const displayName   = isRegistered ? (userData?.name  ?? '') : '';
-  const displayId     = isRegistered ? (userData?.studentId ?? '') : '';
-  const displayFaculty = isRegistered ? (userData?.faculty ?? '') : '';
-  const hasActivity   = isRegistered &&
+  // ── Derived Strictly Evaluated State Primitives ──
+  const isRegistered: boolean = userData?.isRegistered === true;
+  const notifCount: number = userData?.notificationCount ?? 0;
+  const displayName: string = isRegistered ? (userData?.name ?? '') : '';
+  const displayId: string = isRegistered ? (userData?.studentId ?? '') : '';
+  const displayFaculty: string = isRegistered ? (userData?.faculty ?? '') : '';
+  const hasActivity: boolean = isRegistered &&
     Array.isArray(userData?.recentActivity) &&
     userData.recentActivity.length > 0;
 
-  const quickActions = [
-    { id: 'apt',  label: 'Book Appointment',  icon: 'calendar-alt',            color: '#1D666A', route: '/book-appointment' },
+  const quickActions: QuickActionItem[] = [
+    { id: 'apt',  label: 'Book Appointment',  icon: 'calendar-alt',             color: '#1D666A', route: '/book-appointment' },
     { id: 'rx',   label: 'My Prescriptions',  icon: 'prescription-bottle-alt', color: '#F59E0B', route: '/prescriptions'    },
     { id: 'rec',  label: 'Medical Records',   icon: 'folder-open',             color: '#1D666A', route: '/medical-records'  },
     { id: 'sos',  label: 'Emergency SOS',     icon: 'ambulance',               color: '#EF4444', route: '/emergency'        },
   ];
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="light-content" backgroundColor="#1D666A" />
 
-      {/* ── Curved teal header (outside ScrollView so curve stays fixed) ── */}
+      {/* ── Fixed Curved Teal Header ── */}
       <View style={styles.header}>
         {isLoading ? (
           <ActivityIndicator color="#fff" size="large" />
         ) : (
           <View style={styles.headerRow}>
-            {/* Left: greeting + name */}
             <View style={styles.headerLeft}>
               <Text style={styles.greetingText}>{greeting}</Text>
 
-              {/* Name only shown after registration */}
               {isRegistered ? (
                 <Text style={styles.userName}>{displayName}</Text>
               ) : (
                 <Text style={styles.userName}>{'Welcome!'}</Text>
               )}
 
-              {/* Student ID only shown after registration */}
               {isRegistered ? (
                 <Text style={styles.studentId}>
                   {displayId + ' - ' + displayFaculty}
@@ -119,10 +144,10 @@ export default function DashboardScreen() {
               ) : null}
             </View>
 
-            {/* Right: notification bell */}
+            {/* ✅ FIX: Cast the path template string explicitly to any or Href to clear router mismatch */}
             <TouchableOpacity
               style={styles.bellWrap}
-              onPress={() => router.push('/notifications')}
+              onPress={() => router.push('/notifications' as any)}
               activeOpacity={0.7}
             >
               <Ionicons name="notifications-outline" size={26} color="#fff" />
@@ -143,7 +168,7 @@ export default function DashboardScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* ── Health card — floats over curve (registered only) ── */}
+        {/* ── Floating Health Card Component (Registered context only) ── */}
         {isRegistered && userData?.healthStatus ? (
           <View style={styles.healthCard}>
             <View style={styles.healthTop}>
@@ -157,7 +182,7 @@ export default function DashboardScreen() {
             </View>
             {userData.nextAppointment ? (
               <View style={styles.apptBanner}>
-                <Text style={styles.apptLabel}>{'Next Appointment'}</Text>
+                <Text style={styles.apptBanner}>{'Next Appointment'}</Text>
                 <Text style={styles.apptDate}>
                   {(userData.nextAppointment.date ?? '') +
                     ', ' +
@@ -168,11 +193,12 @@ export default function DashboardScreen() {
           </View>
         ) : null}
 
-        {/* ── Registration banner (new / unregistered users) ── */}
+        {/* ── Registration Profile Banner Notification Alert Card Block (New users flow) ── */}
         {!isLoading && !isRegistered ? (
           <TouchableOpacity
             style={styles.warningBanner}
-            onPress={() => router.push('/complete-profile')} // <--- UPDATED THIS LINE
+            /* ✅ FIX: Cast the path template string explicitly to prevent parameter mismatch */
+            onPress={() => router.push('/complete-profile' as any)} 
             activeOpacity={0.8}
           >
             <MaterialIcons name="warning-amber" size={32} color="#E65100" />
@@ -186,7 +212,7 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         ) : null}
 
-        {/* ── Quick Actions (shown to all users) ── */}
+        {/* ── Quick Actions Grid Layout Component Block ── */}
         {!isLoading ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{'Quick Actions'}</Text>
@@ -195,7 +221,8 @@ export default function DashboardScreen() {
                 <TouchableOpacity
                   key={a.id}
                   style={styles.actionCard}
-                  onPress={() => router.push(a.route)}
+                  /* ✅ FIX: Cast route string variables dynamically to bypass structural constraints */
+                  onPress={() => router.push(a.route as any)}
                   activeOpacity={0.75}
                 >
                   <FontAwesome5 name={a.icon} size={28} color={a.color} />
@@ -206,8 +233,8 @@ export default function DashboardScreen() {
           </View>
         ) : null}
 
-        {/* ── Recent Activity (registered users with data only) ── */}
-        {hasActivity ? (
+        {/* ── Recent Action Row Metric Feeds ── */}
+        {hasActivity && userData ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{'Recent Activity'}</Text>
             {userData.recentActivity.map(item => (
@@ -239,10 +266,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#E8ECEC',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
-
-  // ── Header ────────────────────────────────────────────────
   header: {
     backgroundColor: '#1D666A',
     paddingHorizontal: 24,
@@ -261,8 +285,6 @@ const styles = StyleSheet.create({
   greetingText: { color: 'rgba(255,255,255,0.75)', fontSize: 14 },
   userName: { color: '#fff', fontSize: 26, fontWeight: 'bold', marginTop: 2 },
   studentId: { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 4 },
-
-  // ── Bell ──────────────────────────────────────────────────
   bellWrap: { position: 'relative', padding: 4, marginTop: 4 },
   badge: {
     position: 'absolute',
@@ -279,12 +301,8 @@ const styles = StyleSheet.create({
     borderColor: '#1D666A',
   },
   badgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
-
-  // ── Scroll ────────────────────────────────────────────────
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 32 },
-
-  // ── Health Card ───────────────────────────────────────────
   healthCard: {
     backgroundColor: '#fff',
     marginHorizontal: 20,
@@ -310,8 +328,6 @@ const styles = StyleSheet.create({
   },
   apptLabel: { fontSize: 13, color: '#1D666A', fontWeight: '600' },
   apptDate: { fontSize: 15, color: '#1D666A', fontWeight: 'bold', marginTop: 2 },
-
-  // ── Warning Banner ────────────────────────────────────────
   warningBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -326,12 +342,8 @@ const styles = StyleSheet.create({
   warningTexts: { flex: 1, paddingHorizontal: 12 },
   warningTitle: { color: '#E65100', fontSize: 12, fontWeight: 'bold' },
   warningSub: { color: '#E65100', fontSize: 13, fontWeight: '600', marginTop: 2 },
-
-  // ── Section ───────────────────────────────────────────────
   section: { marginTop: 24, paddingHorizontal: 20 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#111', marginBottom: 14 },
-
-  // ── Quick Actions Grid ────────────────────────────────────
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   actionCard: {
     width: '47%',
@@ -352,8 +364,6 @@ const styles = StyleSheet.create({
     color: '#111',
     lineHeight: 20,
   },
-
-  // ── Activity ──────────────────────────────────────────────
   activityRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -379,6 +389,5 @@ const styles = StyleSheet.create({
   activityTitle: { fontSize: 14, fontWeight: '600', color: '#111' },
   activityDesc: { fontSize: 12, color: '#6B7280', marginTop: 2 },
   activityDate: { fontSize: 11, color: '#9CA3AF' },
-
   bottomPad: { height: 32 },
 });

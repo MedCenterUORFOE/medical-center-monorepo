@@ -1,13 +1,25 @@
 import React, { useState } from 'react';
 import { 
-  View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, StatusBar 
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context'; 
 import { Ionicons } from '@expo/vector-icons'; 
 import { useRouter } from 'expo-router';
 
-// Helper component for inputs
-const InputField = ({ label, value, onChangeText, isPassword = false, keyboardType = 'default', autoCapitalize = 'none' }) => (
+// Define strict type boundaries for the input field properties
+interface InputFieldProps {
+  label: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  isPassword?: boolean;
+  keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad';
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+}
+
+const InputField: React.FC<InputFieldProps> = ({ 
+  label, value, onChangeText, isPassword = false, keyboardType = 'default', autoCapitalize = 'none' 
+}) => (
   <View style={styles.inputContainer}>
     <Text style={styles.inputLabel}>{label}</Text>
     <View style={{ height: 6 }} />
@@ -25,17 +37,19 @@ const InputField = ({ label, value, onChangeText, isPassword = false, keyboardTy
 );
 
 export default function CreateAccountScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState(''); // 'STUDENT' or 'ACADEMIC_STAFF'
-  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [email, setEmail] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [confirmPassword, setConfirmPassword] = useState<string>('');
+  const [role, setRole] = useState<string>(''); // Stores 'STUDENT' or 'ACADEMIC_STAFF'
+  const [showRoleDropdown, setShowRoleDropdown] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const router = useRouter();
-  const BACKEND_URL = 'http://10.125.77.119:3000'; // PC IP Address
+  
+  // ✅ Removed hardcoded URL string. Dynamically reading endpoint from mobile .env package
+  const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-  const isStrongPassword = (pass) => {
+  const isStrongPassword = (pass: string): boolean => {
     const minLength = 8;
     const hasUpperCase = /[A-Z]/.test(pass);
     const hasLowerCase = /[a-z]/.test(pass);
@@ -46,13 +60,11 @@ export default function CreateAccountScreen() {
   };
 
   const handleCreateAccount = async () => {
-    // 1. Validation Check
     if (!email || !password || !confirmPassword || !role) {
       Alert.alert('Validation Error', 'Please fill all fields and select a role.');
       return;
     }
 
-    // 2. Password Strength Check
     if (!isStrongPassword(password)) {
       Alert.alert(
         'Weak Password', 
@@ -61,7 +73,6 @@ export default function CreateAccountScreen() {
       return;
     }
 
-    // 3. Password Match Check
     if (password !== confirmPassword) {
       Alert.alert('Error', 'Passwords do not match.');
       return;
@@ -69,12 +80,11 @@ export default function CreateAccountScreen() {
 
     setIsLoading(true);
     try {
-      // Sending real selected role to database during initial sign up
       const payload = {
         name: "New User", 
         email: email.trim(),
         password: password,
-        role: role, // ✅ Passes STUDENT or ACADEMIC_STAFF dynamically
+        role: role, 
         phone: "0000000000",
         nic: "Not Provided",
         emergency_contact_name: "N/A",
@@ -84,7 +94,7 @@ export default function CreateAccountScreen() {
         batch: "Pending"
       };
 
-      const response = await fetch(`${BACKEND_URL}/api/auth/register`, {
+      const response = await fetch(`${API_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -97,14 +107,14 @@ export default function CreateAccountScreen() {
         Alert.alert('Registration Failed', errorData.message || 'Email already exists or check your data.');
       }
     } catch (e) {
-      Alert.alert('Error', 'Network connection failed. Check your IP address.');
+      Alert.alert('Error', 'Network connection failed. Check your environment configuration.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         
         {/* Header Section */}
@@ -123,7 +133,7 @@ export default function CreateAccountScreen() {
               
               <InputField label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
               
-              {/* ✅ NEW ROLE DROPDOWN UI ADDED */}
+              {/* Dynamic Dropdown Field Container */}
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Select Your Role *</Text>
                 <View style={{ height: 6 }} />
@@ -172,7 +182,7 @@ export default function CreateAccountScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1D666A', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
+  container: { flex: 1, backgroundColor: '#1D666A' },
   headerSection: { paddingHorizontal: 30, paddingTop: 10, paddingBottom: 20 },
   backButton: { marginBottom: 15, width: 40 },
   headerTitle: { color: '#FFFFFF', fontSize: 32, fontWeight: 'bold', marginBottom: 10 },
