@@ -6,7 +6,7 @@
   "scripts": {
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
-    "db:studio": "prisma studio",
+    "db:studio": "prisma studio --browser none",
     "seed": "tsx seed.ts"
   },
   "prisma": {
