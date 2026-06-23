@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator, Image 
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context'; // Updated view context component wrapper
+import { SafeAreaView } from 'react-native-safe-area-context'; 
 import { useRouter } from 'expo-router';
 
-// Import libraries for Google Login
+// Import libraries for Google Login Web Overlays
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 
-// Completes the auth session if the app was closed during login redirect flows
+// Completes the auth session context if the app was closed during login redirect flows
 WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
@@ -20,13 +21,14 @@ export default function LoginScreen() {
 
   const router = useRouter();
 
-  // ✅ Decoupled hardcoded strings. Reading directly from global dynamic environment config package
+  // Dynamically decoupled environment config package reference
   const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-  // --- Function to handle standard Email/Password Login ---
+  // --- Function to handle standard Email/Password Login Navigation Flow ---
+  // --- Function to handle standard Email/Password Login Navigation Flow ---
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Validation Error', 'Please enter both email and password.');
+      Alert.alert('Validation Error', 'Please enter both your email address and secure password.');
       return;
     }
 
@@ -39,20 +41,39 @@ export default function LoginScreen() {
       });
 
       const data = await response.json();
+      console.log("🟢 BACKEND LOGIN RESPONSE:", JSON.stringify(data, null, 2));
 
       if (response.ok || response.status === 200 || response.status === 201) {
-        router.push('/dashboard'); 
+        
+        // ✅ නිවැරදි කිරීම: 'data.data' ඇතුළෙන් අදාළ තොරතුරු ඇදගැනීම
+        const activeUserId = data.data?.user?.id;
+        const activeToken = data.data?.token;
+        
+        if (activeUserId) {
+           await AsyncStorage.setItem('userId', String(activeUserId));
+        } else {
+           console.warn("⚠️ Warning: User ID not found in data.data.user.id");
+        }
+
+        // ✅ නිවැරදි කිරීම: Token එක Save කිරීම
+        if (activeToken) {
+           await AsyncStorage.setItem('userToken', String(activeToken));
+        }
+        
+        router.push('/dashboard' as any); 
+
       } else {
-        Alert.alert('Login Failed', data.message || 'Incorrect Email or Password!');
+        Alert.alert('Login Failed', data.message || 'Incorrect Email or Password combination!');
       }
     } catch (error) {
-      Alert.alert('Network Error', 'Could not connect to the server. Please check your network and environment settings.');
+      console.error("Login Error:", error);
+      Alert.alert('Network Error', 'Could not connect to the server.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // --- Function to handle Google Login ---
+  // --- Function to handle Google SSO Login Cloud Handshake ---
   const handleGoogleLogin = async () => {
     try {
       const redirectUrl = Linking.createURL('/dashboard');
@@ -61,13 +82,13 @@ export default function LoginScreen() {
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
 
       if (result.type === 'success') {
-         router.push('/dashboard');
+         router.push('/dashboard' as any);
       } else if (result.type === 'cancel') {
-         console.log("Google Login cancelled by user.");
+         console.log("Google Login sequence intentionally aborted by the user constraint.");
       }
     } catch (error) {
-      console.log("Google Login Error: ", error);
-      Alert.alert("Error", "Something went wrong with Google Login.");
+      console.log("Google Login Compilation Error: ", error);
+      Alert.alert("Authentication Error", "Something went critically wrong attempting to link your Google Workspace identity.");
     }
   };
 
@@ -81,7 +102,7 @@ export default function LoginScreen() {
           <Text style={styles.headerSubtitle}>sign in to your UniMed account</Text>
         </View>
 
-        {/* --- Bottom White Card Section --- */}
+        {/* --- Bottom White Card Layout Section --- */}
         <View style={styles.bottomCard}>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
             
@@ -108,20 +129,20 @@ export default function LoginScreen() {
                 {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Sign In</Text>}
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/create-account')}>
+              <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/create-account' as any)}>
                 <Text style={styles.outlineButtonText}>Register New Account</Text>
               </TouchableOpacity>
 
             </View>
 
-            {/* --- OR Divider --- */}
+            {/* --- OR Visual Separator Divider --- */}
             <View style={styles.dividerContainer}>
               <View style={styles.dividerLine} />
               <Text style={styles.dividerText}>OR</Text>
               <View style={styles.dividerLine} />
             </View>
 
-            {/* --- Standard Guideline Google Login Button --- */}
+            {/* --- Standard Guideline Google Login Button Elements --- */}
             <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin}>
               <Image 
                 source={{ uri: 'https://img.icons8.com/color/48/000000/google-logo.png' }} 
@@ -130,10 +151,10 @@ export default function LoginScreen() {
               <Text style={styles.googleButtonText}>Continue with Google</Text>
             </TouchableOpacity>
 
-            {/* --- Footer Links Text --- */}
+            {/* --- Footer Links Navigation Text --- */}
             <View style={styles.footerContainer}>
               <Text style={styles.footerText}>Don't have an account? </Text>
-              <TouchableOpacity onPress={() => router.push('/create-account')}>
+              <TouchableOpacity onPress={() => router.push('/create-account' as any)}>
                 <Text style={styles.footerLink}>Register</Text>
               </TouchableOpacity>
             </View>
@@ -146,7 +167,7 @@ export default function LoginScreen() {
   );
 }
 
-// --- Design Layout Core Styling Configuration ---
+// --- Design Layout Core Styling Configuration Mapping Rules ---
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1D666A' },
   headerSection: { paddingHorizontal: 30, paddingTop: 40, paddingBottom: 20 },

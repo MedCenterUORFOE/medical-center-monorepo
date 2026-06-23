@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // Security Token එක යැවීමට
 
 // Define rigid data type contracts matching the backend validation expectations
 interface StudentDetails {
@@ -25,6 +26,7 @@ interface AcademicStaffDetails {
 }
 
 interface CompleteProfilePayload {
+  name: string; // ✅ අලුතින් එකතු කළා: Backend එක බලාපොරොත්තු වන අනිවාර්ය Name field එක
   role: 'STUDENT' | 'ACADEMIC_STAFF';
   nic: string;
   phone: string;
@@ -106,6 +108,7 @@ export default function CompleteProfileScreen() {
       const validatedPhone = formatPhoneNumber(studentPhone);
 
       payload = {
+        name: studentFullName.trim(), // ✅ අලුතින් එකතු කළා: Student Name
         role: "STUDENT",
         nic: nic.trim(), 
         phone: validatedPhone, 
@@ -132,6 +135,7 @@ export default function CompleteProfileScreen() {
       const finalEmail = staffEmail.trim() || `${universityStaffId.toLowerCase().replace(/[^a-z0-9]/g, "")}@eng.ruh.ac.lk`;
 
       payload = {
+        name: staffFullName.trim(), // ✅ අලුතින් එකතු කළා: Staff Name
         role: "ACADEMIC_STAFF",
         nic: nic.trim(), 
         phone: validatedPhone,
@@ -150,6 +154,7 @@ export default function CompleteProfileScreen() {
     setIsLoading(true);
     try {
       const endpoint = `${API_URL}/api/users/complete-profile`; 
+      const token = await AsyncStorage.getItem('userToken'); // යූසර්ගේ ටෝකන් එක ලබා ගැනීම
       
       console.log("🚀 Sending Patch Request to:", endpoint);
       console.log("📦 Payload:", JSON.stringify(payload, null, 2));
@@ -159,6 +164,8 @@ export default function CompleteProfileScreen() {
         headers: { 
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          // Token එක තිබේනම් Headers වලට Authorization යැවීම
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}) 
         },
         body: JSON.stringify(payload),
       });
