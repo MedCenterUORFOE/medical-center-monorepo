@@ -16,13 +16,17 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { email, password } = body;
+    const { email, driver_id, password } = body;
 
-    if (!email || !password) {
-      return apiErrors.badRequest('Email and password are required');
+    const loginIdentifier = (driver_id ?? email)?.trim();
+
+    if (!loginIdentifier || !password) {
+      return apiErrors.badRequest('Driver ID or email and password are required');
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = driver_id
+      ? await prisma.user.findUnique({ where: { nic: loginIdentifier } })
+      : await prisma.user.findUnique({ where: { email: loginIdentifier } });
 
     if (!user || !user.password_hash) {
       return apiErrors.unauthorized('Invalid credentials');

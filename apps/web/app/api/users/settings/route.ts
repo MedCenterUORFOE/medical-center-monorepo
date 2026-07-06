@@ -12,7 +12,7 @@
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
-import { getUserSession } from '@/lib/auth';
+import { getUserSessionFromRequest } from '@/lib/auth';
 
 const settingsSchema = z.object({
   username: z.string().min(3).max(20).regex(/^[a-z0-9_]+$/).optional(),
@@ -37,7 +37,7 @@ const settingsSchema = z.object({
 export async function PATCH(request: Request) {
   try {
     // === PRODUCTION AUTH BLOCK ===
-    const session = await getUserSession();
+    const session = await getUserSessionFromRequest(request);
     if (!session?.id) return apiErrors.unauthorized();
     const userId = session.id;
     

@@ -1,7 +1,7 @@
 import { prisma } from '@medical-center/db';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { z } from 'zod';
-import { getUserSession } from '@/lib/auth';
+import { getUserSessionFromRequest } from '@/lib/auth';
 
 // -----------------------------------------------------------------------------
 // ZOD VALIDATION SCHEMA
@@ -18,7 +18,7 @@ const statusSchema = z.object({
 export async function PATCH(request: Request) {
   try {
     // === PRODUCTION AUTH BLOCK ===
-    const session = await getUserSession();
+    const session = await getUserSessionFromRequest(request);
     if (!session?.id) return apiErrors.unauthorized();
     if (session.role !== 'AMBULANCE_DRIVER') return apiErrors.forbidden();
     const userId = session.id;
