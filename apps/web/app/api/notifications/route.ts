@@ -1,7 +1,7 @@
 import { prisma } from '@medical-center/db';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
-import { getUserSession } from '@/lib/auth';
+import { getUserSessionFromRequest } from '@/lib/auth';
 
 // ============================================================================
 // GET: Fetch User Notifications & Unread Count
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     }
 
     // === PRODUCTION AUTH BLOCK ===
-    const session = await getUserSession();
+    const session = await getUserSessionFromRequest(request);
     if (!session?.id) return apiErrors.unauthorized();
     const userId = session.id;
 
