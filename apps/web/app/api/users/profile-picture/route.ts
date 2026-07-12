@@ -1,3 +1,5 @@
+//apps/web/app/api/users/profile-picture/route.ts
+
 /**
  * PROFILE PICTURE UPLOAD ENDPOINT (POST /api/users/profile-picture)
  * * --- AUTHENTICATION TESTING STRATEGY ---
