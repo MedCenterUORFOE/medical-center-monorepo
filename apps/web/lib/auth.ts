@@ -1,3 +1,5 @@
+//apps/web/lib/auth.ts
+
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 
