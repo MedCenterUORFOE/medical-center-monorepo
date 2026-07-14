@@ -121,7 +121,7 @@ export function Students({ store }: { store: DataStore }) {
                   </TableCell>
                   <TableCell className="max-w-[200px] truncate">{student.allergies || "—"}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => setViewing(student)}>
+                    <Button variant="ghost" size="icon" aria-label="View student" onClick={() => setViewing(student)}>
                       <Eye className="size-4" />
                     </Button>
                     <Button variant="ghost" size="icon" onClick={() => openEdit(student)}>
