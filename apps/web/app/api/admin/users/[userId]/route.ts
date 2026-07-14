@@ -30,7 +30,7 @@ export async function DELETE(
       return errorResponse("Action blocked: You cannot delete your own active administrator account.", 403);
     }
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       const targetUser = await tx.user.findUnique({
         where: { id: targetUserId },
         select: { role: true },
@@ -305,7 +305,7 @@ export async function PATCH(
 
     const changedFields = Object.keys(validatedData);
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       if (validatedData.name || validatedData.email || validatedData.nic) {
         await tx.user.update({
           where: { id: targetUserId },

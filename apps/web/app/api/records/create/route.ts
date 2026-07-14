@@ -178,7 +178,7 @@ export async function POST(request: Request) {
       }
 
       // 3. Create the Prescription & Items
-      let createdPrescription = null;
+      let createdPrescription: any = null;
       if (validatedData.prescription?.items && validatedData.prescription.items.length > 0) {
         createdPrescription = await tx.prescription.create({
           data: {
