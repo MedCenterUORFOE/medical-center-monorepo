@@ -2,11 +2,3 @@
 > mobile-driver@1.0.0 lint
 > eslint . --ext .js,.jsx,.ts,.tsx
 
-
-C:\My Files\Software Projects\MedicalCenter\medical-center-monorepo\apps\mobile-driver\src\screens\HomeScreen.tsx
-  19:39  warning  'setSessionToken' is defined but never used                  @typescript-eslint/no-unused-vars
-  46:21  warning  Array type using 'Array<T>' is forbidden. Use 'T[]' instead  @typescript-eslint/array-type
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
