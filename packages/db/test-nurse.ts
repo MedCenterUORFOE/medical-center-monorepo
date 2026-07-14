@@ -5,7 +5,7 @@ async function test() {
   try {
     const email = 'test-nurse-' + Date.now() + '@medcenter.lk';
     const name = 'Test Nurse';
-    const nic = '990000000X';
+    const nic = `99${String(Date.now()).slice(-9)}X`;
     const role = 'NURSE';
     const university_staff_id = 'STAFF-' + Date.now();
     const license_number = 'LIC-' + Date.now();
