@@ -61,6 +61,9 @@ export async function PATCH(
       data: { status: 'CANCELLED' }
     });
 
+    // Debugging: Add console.log to verify database actually processes the change
+    console.log("🟢 CANCELLED EMERGENCY REQUEST:", updatedRequest);
+
     // 3. Free up the Driver (If one was already assigned)
     if (emergencyRequest.driver_id) {
       await prisma.driverAvailability.update({

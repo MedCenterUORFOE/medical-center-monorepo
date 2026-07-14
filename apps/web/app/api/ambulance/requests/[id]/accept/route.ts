@@ -42,6 +42,9 @@ export async function POST(
       }
     });
 
+    // Debugging: Add console.log to trace database process
+    console.log("🟢 ACCEPT RACE-LOCK UPDATE COUNT:", updateResult.count);
+
     // 3. Evaluate the Race Condition
     if (updateResult.count === 0) {
       const checkReq = await prisma.emergencyRequest.findUnique({ where: { id: requestId } });
@@ -61,6 +64,9 @@ export async function POST(
       where: { id: requestId },
       include: { requester: true }
     });
+
+    // Debugging: Add console.log to verify database actually processes the change
+    console.log("🟢 ACCEPTED EMERGENCY REQUEST IN DB:", emergencyRequest);
 
     const patientToken = emergencyRequest?.requester?.fcm_token;
 
