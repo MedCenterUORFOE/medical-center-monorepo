@@ -33,7 +33,7 @@ interface EmergencyRequest {
 }
 
 // Client-safe Supabase Realtime initializer
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jelyylffijxsnajtnlmm.supabase.co';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
@@ -124,8 +124,14 @@ export default function EmergencyDashboard() {
       return;
     }
 
+    const mapsKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (!mapsKey) {
+      console.error('Google Maps API Key is missing in client environment configuration.');
+      return;
+    }
+
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyAj8xcif25vkEcIqYLVhrRuR-j0HVvy6H0'}`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${mapsKey}`;
     script.async = true;
     script.defer = true;
     script.onload = () => setMapLoaded(true);

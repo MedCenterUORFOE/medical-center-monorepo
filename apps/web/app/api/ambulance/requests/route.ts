@@ -112,7 +112,7 @@ export async function POST(request: Request) {
 }
 
 // ============================================================================
-// GET: Fetch Active Emergency Requests (PENDING, DISPATCHED, ASSIGNED)
+// GET: Fetch Active Emergency Requests (PENDING, DISPATCHED, ASSIGNED, ARRIVED)
 // ============================================================================
 export async function GET(request: Request) {
   try {
