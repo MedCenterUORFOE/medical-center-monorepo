@@ -41,7 +41,17 @@ export async function POST(request: Request) {
     const patientStatusError = await verifyPatientStatus(requesterId);
     if (patientStatusError) return patientStatusError;
 
-    // 1. Find all currently AVAILABLE drivers
+    // 1. Create the Emergency Request in the database
+    const newRequest = await prisma.emergencyRequest.create({
+      data: {
+        requester_id: requesterId,
+        patient_location_lat: validatedData.pickup_lat,
+        patient_location_lng: validatedData.pickup_lng,
+        status: 'PENDING',
+      }
+    });
+
+    // 2. Find all currently AVAILABLE drivers
     const availableDrivers = await prisma.driverAvailability.findMany({
       where: { is_available: true },
       include: {
@@ -52,39 +62,23 @@ export async function POST(request: Request) {
     });
 
     if (availableDrivers.length === 0) {
-      console.warn(`No drivers available for Emergency SOS request`);
-      return errorResponse("No drivers available", 404);
+      console.warn(`No drivers available for Emergency Request: ${newRequest.id}`);
+      return successResponse(newRequest, "Emergency logged, but no drivers are currently online.", 201);
     }
 
-    const assignedDriver = availableDrivers[0];
-
-    // 2. Create the Emergency Request in the database with ASSIGNED status and driver_id
-    const newRequest = await prisma.emergencyRequest.create({
-      data: {
-        requester_id: requesterId,
-        patient_location_lat: validatedData.pickup_lat,
-        patient_location_lng: validatedData.pickup_lng,
-        driver_id: assignedDriver.driver_id,
-        status: 'ASSIGNED',
-      }
+    // 3. Extract Firebase FCM Tokens
+    const tokens: string[] = [];
+    availableDrivers.forEach(availability => {
+      const token = availability.driver.user.fcm_token;
+      if (token) tokens.push(token);
     });
 
-    // Debugging: Add console.log right after the database operation as requested
-    console.log("🟢 CREATED EMERGENCY REQUEST:", newRequest);
-
-    // 3. Mark the assigned driver as unavailable
-    await prisma.driverAvailability.update({
-      where: { driver_id: assignedDriver.driver_id },
-      data: { is_available: false }
-    });
-
-    // 4. Fire Push Notification to the assigned driver
-    const token = assignedDriver.driver.user.fcm_token;
-    if (token) {
+    // 4. Broadcast via Firebase Cloud Messaging
+    if (tokens.length > 0) {
       await sendPushNotification({
-        tokens: token,
-        title: `🚨 Emergency SOS Assigned!`,
-        body: `You have been assigned to an emergency request. Tap to view location.`,
+        tokens: tokens,
+        title: `🚨 Emergency Request!`,
+        body: `Tap to view location and accept.`,
         data: {
           request_id: newRequest.id,
           type: "NEW_EMERGENCY",
@@ -102,11 +96,10 @@ export async function POST(request: Request) {
         entity_type: "EmergencyRequest",
         entity_id: newRequest.id,
         ip_address: ip,
-        details: JSON.stringify({ assigned_driver_id: assignedDriver.driver_id })
       }
     });
 
-    return successResponse(newRequest, "Emergency request created and driver assigned.", 201);
+    return successResponse(newRequest, "Emergency request created and broadcasted to fleet.", 201);
 
   } catch (error) {
     if (error instanceof z.ZodError) {

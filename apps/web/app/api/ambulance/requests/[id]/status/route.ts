@@ -59,9 +59,6 @@ export async function PATCH(
       data: { status }
     });
 
-    // Debugging: Add console.log to verify database actually processes the change
-    console.log("🟢 UPDATED EMERGENCY REQUEST STATUS:", updatedRequest);
-
     // 3. Handle specific lifecycle events
     if (status === 'COMPLETED') {
       // Create the official clinical Emergency Record
