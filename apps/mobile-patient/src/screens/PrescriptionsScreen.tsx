@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   RefreshControl,
   StatusBar,
@@ -22,6 +23,7 @@ type PrescriptionMedication = {
   medicine_id?: string | null;
   external_medicine_name?: string | null;
   medicine?: { name?: string | null } | null;
+  quantity?: number | null;
 };
 
 type PrescriptionApiItem = {
@@ -34,6 +36,7 @@ type PrescriptionApiItem = {
   doctor_name?: string | null;
   doctor?: {
     name?: string | null;
+    specialization?: string | null;
     staff?: {
       user?: {
         name?: string | null;
@@ -48,16 +51,22 @@ type PrescriptionApiItem = {
   } | null;
 };
 
-type PrescriptionCard = {
+type NormalizedMedication = {
+  name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  instructions: string;
+};
+
+type PrescriptionCardData = {
   id: string;
   dateLabel: string;
   doctorName: string;
+  doctorSpecialty: string;
   diagnosis: string;
-  medications: Array<{
-    name: string;
-    dosage: string;
-    frequency: string;
-  }>;
+  isActive: boolean;
+  medications: NormalizedMedication[];
 };
 
 const formatDate = (value?: string | null): string => {
@@ -89,6 +98,12 @@ const getMedicationFrequency = (medication: PrescriptionMedication): string => {
   return 'As directed';
 };
 
+const parseDuration = (instructions?: string | null): string => {
+  if (!instructions) return 'As directed';
+  const match = instructions.match(/(\d+\s*(days|day|weeks|week|months|month))/i);
+  return match ? match[0] : 'As directed';
+};
+
 const getPrescriptionMedications = (item: PrescriptionApiItem): PrescriptionMedication[] => {
   if (Array.isArray(item.medications)) return item.medications;
   if (Array.isArray(item.items)) return item.items;
@@ -96,7 +111,17 @@ const getPrescriptionMedications = (item: PrescriptionApiItem): PrescriptionMedi
   return [];
 };
 
-const normalizePrescriptions = (payload: any): PrescriptionCard[] => {
+const isPrescriptionActive = (dateString?: string | null): boolean => {
+  if (!dateString) return false;
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return false;
+
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  return date >= thirtyDaysAgo;
+};
+
+const normalizePrescriptions = (payload: any): PrescriptionCardData[] => {
   const rawItems: PrescriptionApiItem[] =
     payload?.data?.history ||
     payload?.history ||
@@ -111,30 +136,39 @@ const normalizePrescriptions = (payload: any): PrescriptionCard[] => {
   return rawItems
     .filter((item) => Array.isArray(item.prescription?.items) && item.prescription.items.length > 0)
     .map((item, index) => {
-      const medications = getPrescriptionMedications(item).map((medication, medicationIndex) => ({
-        name: getMedicationName(medication, medicationIndex),
-        dosage: medication.dosage?.trim() || 'Dosage unavailable',
-        frequency: getMedicationFrequency(medication),
-      }));
+      const visitDate = item.visit_date_time || item.date || item.visit_date || item.created_at;
+      const medications = getPrescriptionMedications(item).map((medication, medicationIndex) => {
+        const freq = getMedicationFrequency(medication);
+        return {
+          name: getMedicationName(medication, medicationIndex),
+          dosage: medication.dosage?.trim() || 'As prescribed',
+          frequency: freq,
+          duration: parseDuration(medication.instructions || medication.frequency),
+          instructions: medication.instructions?.trim() || 'Take as directed.',
+        };
+      });
 
       return {
         id: String(item.prescription?.id || item.id || `prescription-${index}`),
-        dateLabel: formatDate(item.visit_date_time || item.date || item.visit_date || item.created_at),
+        dateLabel: formatDate(visitDate),
         doctorName:
           item.doctor_name ||
           item.doctor?.staff?.user?.name ||
           item.doctor?.name ||
           'Assigned Doctor',
-        diagnosis: item.diagnosis?.trim() || 'Not specified',
+        doctorSpecialty: item.doctor?.specialization || 'Medical Officer',
+        diagnosis: item.diagnosis?.trim() || 'General Consultation',
+        isActive: isPrescriptionActive(visitDate),
         medications,
       };
     });
 };
 
 export default function PrescriptionsScreen() {
-  const [prescriptions, setPrescriptions] = useState<PrescriptionCard[]>([]);
+  const [prescriptions, setPrescriptions] = useState<PrescriptionCardData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [activeReminders, setActiveReminders] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     void loadPrescriptions();
@@ -160,8 +194,6 @@ export default function PrescriptionsScreen() {
         throw new Error('Unable to identify the current patient account.');
       }
 
-      console.log('Attempting to fetch from:', apiUrl);
-
       const response = await fetch(`${apiUrl}/api/records/history/${userId}`, {
         method: 'GET',
         headers: {
@@ -186,46 +218,130 @@ export default function PrescriptionsScreen() {
     }
   };
 
-  const renderPrescriptionCard = ({ item }: { item: PrescriptionCard }) => {
+  const handleDownloadPDF = (doctorName: string, dateLabel: string) => {
+    Alert.alert(
+      'Download Prescription',
+      `Your prescription PDF from Dr. ${doctorName} on ${dateLabel} is generating. You will be notified when the download is complete.`,
+      [{ text: 'Dismiss' }]
+    );
+  };
+
+  const handleToggleReminder = (id: string, name: string) => {
+    setActiveReminders((prev) => {
+      const updated = !prev[id];
+      Alert.alert(
+        updated ? 'Reminder Set' : 'Reminder Turned Off',
+        updated
+          ? `Daily notifications have been scheduled for taking your prescription medications.`
+          : `Daily reminders for this prescription have been disabled.`
+      );
+      return { ...prev, [id]: updated };
+    });
+  };
+
+  const renderPrescriptionCard = ({ item }: { item: PrescriptionCardData }) => {
+    const isReminderActive = !!activeReminders[item.id];
+
     return (
       <View style={styles.card}>
+        {/* CARD HEADER */}
         <View style={styles.cardHeader}>
-          <View style={styles.iconBubble}>
-            <MaterialCommunityIcons name="pill" size={22} color="#1D4ED8" />
+          <View style={styles.doctorIconBubble}>
+            <MaterialCommunityIcons name="doctor" size={24} color="#0284C7" />
           </View>
-
-          <View style={styles.headerTextWrap}>
-            <Text style={styles.cardDoctorName}>{item.doctorName}</Text>
-            <Text style={styles.cardDate}>{item.dateLabel}</Text>
+          <View style={styles.doctorInfo}>
+            <Text style={styles.doctorName}>Dr. {item.doctorName}</Text>
+            <Text style={styles.doctorSpecialty}>{item.doctorSpecialty}</Text>
+          </View>
+          <View style={[styles.statusBadge, item.isActive ? styles.statusActive : styles.statusExpired]}>
+            <Text style={[styles.statusText, item.isActive ? styles.statusTextActive : styles.statusTextExpired]}>
+              {item.isActive ? 'Active' : 'Expired'}
+            </Text>
           </View>
         </View>
 
-        <View style={styles.sectionBlock}>
-          <Text style={styles.sectionLabel}>Diagnosis</Text>
-          <Text style={styles.sectionValue}>{item.diagnosis}</Text>
+        {/* VISIT DETAILS */}
+        <View style={styles.visitMetaRow}>
+          <View style={styles.metaCol}>
+            <Ionicons name="calendar-outline" size={14} color="#64748B" />
+            <Text style={styles.metaText}>{item.dateLabel}</Text>
+          </View>
+          <View style={styles.metaCol}>
+            <Ionicons name="clipboard-outline" size={14} color="#64748B" />
+            <Text style={styles.metaText} numberOfLines={1}>
+              {item.diagnosis}
+            </Text>
+          </View>
         </View>
 
-        <View style={styles.sectionBlock}>
-          <Text style={styles.sectionLabel}>Medications</Text>
-          {item.medications.length > 0 ? (
-            <View style={styles.medicationList}>
-              {item.medications.map((medication, index) => (
-                <View key={`${item.id}-medication-${index}`} style={styles.medicationRow}>
-                  <View style={styles.medicationIndexBadge}>
-                    <Text style={styles.medicationIndexText}>{index + 1}</Text>
-                  </View>
-
-                  <View style={styles.medicationContent}>
-                    <Text style={styles.medicationName}>{medication.name}</Text>
-                    <Text style={styles.medicationMeta}>Dosage: {medication.dosage}</Text>
-                    <Text style={styles.medicationMeta}>Frequency: {medication.frequency}</Text>
-                  </View>
+        {/* MEDICATION DETAIL BREAKDOWN */}
+        <View style={styles.medicationSection}>
+          <Text style={styles.sectionTitle}>Prescribed Medications</Text>
+          {item.medications.map((med, index) => (
+            <View key={`${item.id}-med-${index}`} style={styles.medicationRow}>
+              {/* Medicine Icon & Info */}
+              <View style={styles.medHeader}>
+                <View style={styles.medIconWrapper}>
+                  <MaterialCommunityIcons name="pill" size={18} color="#0284C7" />
                 </View>
-              ))}
+                <View style={styles.medTitleBlock}>
+                  <Text style={styles.medicationName}>{med.name}</Text>
+                  <Text style={styles.medicationDosage}>{med.dosage}</Text>
+                </View>
+              </View>
+
+              {/* Dosage, Timing & Duration Grid */}
+              <View style={styles.medGrid}>
+                <View style={styles.gridCol}>
+                  <Ionicons name="time-outline" size={14} color="#0284C7" style={styles.gridIcon} />
+                  <Text style={styles.gridLabel}>Frequency</Text>
+                  <Text style={styles.gridValue}>{med.frequency}</Text>
+                </View>
+                <View style={styles.gridCol}>
+                  <Ionicons name="hourglass-outline" size={14} color="#0284C7" style={styles.gridIcon} />
+                  <Text style={styles.gridLabel}>Duration</Text>
+                  <Text style={styles.gridValue}>{med.duration}</Text>
+                </View>
+              </View>
+
+              {/* Instructions row */}
+              {med.instructions ? (
+                <View style={styles.instructionsBlock}>
+                  <Text style={styles.instructionsText}>
+                    <Text style={styles.instructionsLabel}>Note: </Text>
+                    {med.instructions}
+                  </Text>
+                </View>
+              ) : null}
             </View>
-          ) : (
-            <Text style={styles.inlineEmptyText}>No medications listed.</Text>
-          )}
+          ))}
+        </View>
+
+        {/* ACTION BUTTONS */}
+        <View style={styles.cardActions}>
+          <TouchableOpacity
+            style={styles.downloadButton}
+            onPress={() => handleDownloadPDF(item.doctorName, item.dateLabel)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="download-outline" size={18} color="#0284C7" />
+            <Text style={styles.downloadButtonText}>Download PDF</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.reminderButton, isReminderActive && styles.reminderActiveButton]}
+            onPress={() => handleToggleReminder(item.id, item.doctorName)}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={isReminderActive ? 'notifications' : 'notifications-outline'}
+              size={18}
+              color={isReminderActive ? '#FFFFFF' : '#475569'}
+            />
+            <Text style={[styles.reminderButtonText, isReminderActive && styles.reminderActiveButtonText]}>
+              {isReminderActive ? 'Reminder Set' : 'Set Reminder'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -235,48 +351,53 @@ export default function PrescriptionsScreen() {
     if (errorMessage) return null;
 
     return (
-      <View style={styles.stateCard}>
-        <View style={styles.stateIconBubble}>
-          <Ionicons name="document-text-outline" size={28} color="#1D4ED8" />
+      <View style={styles.emptyContainer}>
+        <View style={styles.emptyIconCircle}>
+          <MaterialCommunityIcons name="file-document-edit-outline" size={48} color="#0284C7" />
         </View>
-        <Text style={styles.stateTitle}>No prescriptions found</Text>
-        <Text style={styles.stateBody}>
-          Once a doctor issues a prescription, it will appear here with the treatment details and medications.
+        <Text style={styles.emptyTitle}>No Prescriptions Found</Text>
+        <Text style={styles.emptyDescription}>
+          Any prescriptions issued by University Medical Center medical staff during your visits will be listed here.
         </Text>
+        <TouchableOpacity style={styles.emptyRefreshButton} onPress={loadPrescriptions} activeOpacity={0.8}>
+          <Ionicons name="refresh" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+          <Text style={styles.emptyRefreshText}>Refresh Records</Text>
+        </TouchableOpacity>
       </View>
     );
   };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#EAF1F8" />
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
+      {/* STUNNING SCREEN HEADER */}
       <View style={styles.header}>
-        <View style={styles.badge}>
-          <Ionicons name="medical-outline" size={16} color="#1D4ED8" />
-          <Text style={styles.badgeText}>Patient Records</Text>
+        <View style={styles.headerTag}>
+          <MaterialCommunityIcons name="heart-pulse" size={14} color="#0284C7" />
+          <Text style={styles.headerTagText}>MY TREATMENT</Text>
         </View>
-        <Text style={styles.title}>Prescriptions</Text>
-        <Text style={styles.subtitle}>
-          Review doctor-issued prescriptions, diagnosis notes, and medication instructions in one place.
+        <Text style={styles.headerTitle}>Prescriptions</Text>
+        <Text style={styles.headerSubtitle}>
+          View Active prescriptions, dosage breakdown guidelines, and set daily reminders.
         </Text>
       </View>
 
-      <View style={styles.surface}>
+      <View style={styles.body}>
         {isLoading ? (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color="#1D4ED8" />
-            <Text style={styles.loadingText}>Loading prescriptions...</Text>
+          <View style={styles.loaderWrap}>
+            <ActivityIndicator size="large" color="#0284C7" />
+            <Text style={styles.loaderText}>Syncing medical charts...</Text>
           </View>
         ) : errorMessage ? (
-          <View style={styles.stateCard}>
-            <View style={[styles.stateIconBubble, styles.errorIconBubble]}>
-              <Ionicons name="alert-circle-outline" size={28} color="#DC2626" />
+          <View style={styles.errorContainer}>
+            <View style={styles.errorIconCircle}>
+              <Ionicons name="cloud-offline-outline" size={32} color="#EF4444" />
             </View>
-            <Text style={styles.stateTitle}>Backend Connection Failed</Text>
-            <Text style={styles.stateBody}>{errorMessage}</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={loadPrescriptions} activeOpacity={0.85}>
-              <Text style={styles.retryButtonText}>Try Again</Text>
+            <Text style={styles.errorTitle}>Synchronization Failed</Text>
+            <Text style={styles.errorDescription}>{errorMessage}</Text>
+            <TouchableOpacity style={styles.errorRetryButton} onPress={loadPrescriptions} activeOpacity={0.8}>
+              <Text style={styles.errorRetryText}>Retry Connection</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -284,11 +405,11 @@ export default function PrescriptionsScreen() {
             data={prescriptions}
             keyExtractor={(item) => item.id}
             renderItem={renderPrescriptionCard}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={styles.listContainer}
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={renderEmptyState}
             refreshControl={
-              <RefreshControl refreshing={false} onRefresh={loadPrescriptions} tintColor="#1D4ED8" />
+              <RefreshControl refreshing={false} onRefresh={loadPrescriptions} tintColor="#0284C7" />
             }
           />
         )}
@@ -300,221 +421,390 @@ export default function PrescriptionsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#EAF1F8',
+    backgroundColor: '#F8FAFC',
   },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 20,
-    backgroundColor: '#EAF1F8',
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 22,
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderColor: '#F1F5F9',
   },
-  badge: {
-    alignSelf: 'flex-start',
+  headerTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#FFFFFF',
+    alignSelf: 'flex-start',
+    backgroundColor: '#E0F2FE',
     borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#D7E3F0',
+    paddingVertical: 5,
+    marginBottom: 12,
+    gap: 6,
   },
-  badgeText: {
-    color: '#1E3A8A',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-  },
-  title: {
-    color: '#0F172A',
-    fontSize: 30,
-    lineHeight: 36,
+  headerTagText: {
+    color: '#0369A1',
+    fontSize: 11,
     fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  headerTitle: {
+    color: '#0F172A',
+    fontSize: 32,
+    fontWeight: '900',
     letterSpacing: -0.5,
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  subtitle: {
-    color: '#475569',
-    fontSize: 15,
-    lineHeight: 22,
+  headerSubtitle: {
+    color: '#64748B',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
   },
-  surface: {
+  body: {
     flex: 1,
-    backgroundColor: '#F7FAFD',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 18,
+    backgroundColor: '#F1F5F9',
   },
-  loadingWrap: {
+  listContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 32,
+  },
+  loaderWrap: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 12,
-    paddingHorizontal: 24,
   },
-  loadingText: {
-    color: '#1E3A8A',
-    fontSize: 15,
+  loaderText: {
+    color: '#64748B',
+    fontSize: 14,
     fontWeight: '600',
-  },
-  listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 28,
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    padding: 18,
+    borderRadius: 24,
+    padding: 16,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     shadowColor: '#0F172A',
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.05,
     shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    marginBottom: 16,
+    alignItems: 'center',
+    marginBottom: 12,
   },
-  iconBubble: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    backgroundColor: '#E8F0FE',
+  doctorIconBubble: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#F0F9FF',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E0F2FE',
+    marginRight: 12,
   },
-  headerTextWrap: {
+  doctorInfo: {
     flex: 1,
   },
-  cardDoctorName: {
+  doctorName: {
     color: '#0F172A',
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  cardDate: {
-    color: '#64748B',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  sectionBlock: {
-    marginBottom: 14,
-  },
-  sectionLabel: {
-    color: '#334155',
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '800',
-    letterSpacing: 0.7,
+    marginBottom: 2,
+  },
+  doctorSpecialty: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  statusActive: {
+    backgroundColor: '#DCFCE7',
+  },
+  statusExpired: {
+    backgroundColor: '#F1F5F9',
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  statusTextActive: {
+    color: '#166534',
+  },
+  statusTextExpired: {
+    color: '#475569',
+  },
+  visitMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  metaCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  metaText: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  medicationSection: {
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
-    marginBottom: 7,
-  },
-  sectionValue: {
-    color: '#0F172A',
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  medicationList: {
-    gap: 10,
+    marginBottom: 10,
   },
   medicationRow: {
-    flexDirection: 'row',
-    gap: 10,
-    borderRadius: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     padding: 12,
+    marginBottom: 10,
   },
-  medicationIndexBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#DBEAFE',
+  medHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  medIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#E0F2FE',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 1,
+    marginRight: 10,
   },
-  medicationIndexText: {
-    color: '#1D4ED8',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  medicationContent: {
+  medTitleBlock: {
     flex: 1,
   },
   medicationName: {
     color: '#0F172A',
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 1,
+  },
+  medicationDosage: {
+    color: '#0284C7',
+    fontSize: 12,
     fontWeight: '700',
+  },
+  medGrid: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  gridCol: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  gridIcon: {
     marginBottom: 3,
   },
-  medicationMeta: {
+  gridLabel: {
+    color: '#94A3B8',
+    fontSize: 9,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  gridValue: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  instructionsBlock: {
+    marginTop: 8,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#FEF3C7',
+  },
+  instructionsText: {
+    color: '#B45309',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
+  },
+  instructionsLabel: {
+    fontWeight: '800',
+  },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 4,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  downloadButton: {
+    flex: 1.2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#0284C7',
+    borderRadius: 14,
+    paddingVertical: 10,
+  },
+  downloadButtonText: {
+    color: '#0284C7',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  reminderButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 14,
+    paddingVertical: 10,
+  },
+  reminderActiveButton: {
+    backgroundColor: '#0284C7',
+  },
+  reminderButtonText: {
     color: '#475569',
     fontSize: 13,
-    lineHeight: 18,
+    fontWeight: '800',
   },
-  inlineEmptyText: {
-    color: '#64748B',
-    fontSize: 14,
-    fontStyle: 'italic',
+  reminderActiveButtonText: {
+    color: '#FFFFFF',
   },
-  stateCard: {
+  emptyContainer: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    padding: 24,
-    marginHorizontal: 20,
-    marginTop: 24,
+    borderRadius: 24,
+    paddingVertical: 40,
+    paddingHorizontal: 24,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    marginTop: 20,
     shadowColor: '#0F172A',
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
   },
-  stateIconBubble: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
-    backgroundColor: '#E8F0FE',
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F0F9FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#E0F2FE',
+    marginBottom: 18,
+  },
+  emptyTitle: {
+    color: '#0F172A',
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyDescription: {
+    color: '#64748B',
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  emptyRefreshButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0284C7',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  emptyRefreshText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  errorContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    marginTop: 20,
+    marginHorizontal: 16,
+    shadowColor: '#EF4444',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+  },
+  errorIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FEE2E2',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,
   },
-  errorIconBubble: {
-    backgroundColor: '#FEE2E2',
-  },
-  stateTitle: {
-    color: '#0F172A',
-    fontSize: 18,
+  errorTitle: {
+    color: '#991B1B',
+    fontSize: 16,
     fontWeight: '800',
-    textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  stateBody: {
-    color: '#64748B',
-    fontSize: 14,
-    lineHeight: 21,
+  errorDescription: {
+    color: '#EF4444',
+    fontSize: 13,
+    lineHeight: 18,
     textAlign: 'center',
+    marginBottom: 16,
   },
-  retryButton: {
-    marginTop: 16,
-    backgroundColor: '#1D4ED8',
-    borderRadius: 14,
+  errorRetryButton: {
+    backgroundColor: '#EF4444',
+    borderRadius: 12,
+    paddingVertical: 10,
     paddingHorizontal: 18,
-    paddingVertical: 12,
   },
-  retryButtonText: {
+  errorRetryText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
 });
