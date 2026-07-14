@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -16,59 +17,46 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiFetch, setSessionToken } from '../lib/api';
 import { registerForPushNotificationsAsync } from '../lib/push';
 
+type LoginResponse = {
+  message?: string;
+  data?: {
+    token: string;
+  };
+};
+
 export default function LoginScreen() {
   const router = useRouter();
-  const [driverId, setDriverId] = useState('12345');
-  const [password, setPassword] = useState('Kalahe');
-
-  type LoginResponse = {
-    message?: string;
-    data?: {
-      token: string;
-    };
-  };
-
-  const parseLoginResponse = async (response: Response): Promise<LoginResponse | null> => {
-    const rawBody = await response.text();
-
-    if (!rawBody.trim()) {
-      return null;
-    }
-
-    try {
-      return JSON.parse(rawBody) as LoginResponse;
-    } catch {
-      return {
-        message: rawBody,
-      };
-    }
-  };
-
-  const isDemoCredentials = (id: string, pass: string) => id === '12345' && pass === 'Kalahe';
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSignIn = async () => {
-    if (!driverId.trim() || !password.trim()) {
-      Alert.alert('Missing details', 'Enter your driver ID and password to continue.');
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail || !password.trim()) {
+      Alert.alert('Missing details', 'Enter your email and password to continue.');
       return;
     }
 
-    if (isDemoCredentials(driverId.trim(), password)) {
-      await setSessionToken('demo-driver-session');
-      router.replace('/home?demo=1');
-      return;
-    }
+    setIsLoading(true);
 
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}/api/auth/login`, {
+      const response = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          driver_id: driverId.trim(),
+          email: trimmedEmail,
           password,
         }),
       });
 
-      const body = await parseLoginResponse(response);
+      const rawBody = await response.text();
+      let body: LoginResponse | null = null;
+      try {
+        body = JSON.parse(rawBody);
+      } catch {
+        body = { message: rawBody };
+      }
 
       if (!response.ok) {
         Alert.alert('Sign in failed', body?.message || 'Check your credentials and try again.');
@@ -82,18 +70,24 @@ export default function LoginScreen() {
 
       await setSessionToken(body.data.token);
 
-      const pushToken = await registerForPushNotificationsAsync();
-      if (pushToken) {
-        await apiFetch('/api/users/settings', {
-          method: 'PATCH',
-          body: JSON.stringify({ fcm_token: pushToken }),
-        });
-      }
+      // Async push notification sync - completely non-blocking
+      registerForPushNotificationsAsync()
+        .then((pushToken) => {
+          if (pushToken) {
+            apiFetch('/api/users/settings', {
+              method: 'PATCH',
+              body: JSON.stringify({ fcm_token: pushToken }),
+            }).catch((err) => console.warn('Failed to upload push token:', err));
+          }
+        })
+        .catch((err) => console.warn('Failed to register push token:', err));
 
       router.replace('/home');
     } catch (error) {
       console.error(error);
       Alert.alert('Network error', 'Could not reach the backend.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -107,24 +101,26 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.container}>
           <View style={styles.header}>
-            <Pressable onPress={() => router.back()} hitSlop={12}>
+            <Pressable onPress={() => router.back()} hitSlop={12} disabled={isLoading}>
               <Text style={styles.backLink}>Back</Text>
             </Pressable>
             <Text style={styles.title}>Driver Login</Text>
             <Text style={styles.subtitle}>
-              Sign in with your staff credentials to access routes and transport requests.
+              Sign in with the email and password created by the admin.
             </Text>
           </View>
 
           <View style={styles.formCard}>
-            <Text style={styles.label}>Driver ID</Text>
+            <Text style={styles.label}>Email</Text>
             <TextInput
-              value={driverId}
-              onChangeText={setDriverId}
-              placeholder="Enter your driver ID"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Enter your email"
               placeholderTextColor="#94A3B8"
               autoCapitalize="none"
+              keyboardType="email-address"
               style={styles.input}
+              editable={!isLoading}
             />
 
             <Text style={styles.label}>Password</Text>
@@ -135,23 +131,27 @@ export default function LoginScreen() {
               placeholderTextColor="#94A3B8"
               secureTextEntry
               style={styles.input}
+              editable={!isLoading}
             />
 
-            <Text style={styles.demoHint}>Test credentials are prefilled for local app testing.</Text>
-
             <View style={styles.rowBetween}>
-              <Pressable onPress={() => Alert.alert('Recovery', 'Add password recovery when ready.')}>
+              <Pressable
+                onPress={() => Alert.alert('Recovery', 'Add password recovery when ready.')}
+                disabled={isLoading}>
                 <Text style={styles.secondaryAction}>Forgot password?</Text>
               </Pressable>
               <Text style={styles.helperText}>Secure access only</Text>
             </View>
 
-            <Pressable style={styles.primaryButton} onPress={handleSignIn}>
-              <Text style={styles.primaryButtonText}>Sign In</Text>
-            </Pressable>
-
-            <Pressable style={styles.ghostButton} onPress={() => router.push('/')}>
-              <Text style={styles.ghostButtonText}>Return to landing page</Text>
+            <Pressable
+              style={[styles.primaryButton, isLoading && styles.primaryButtonLoading]}
+              onPress={handleSignIn}
+              disabled={isLoading}>
+              {isLoading ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Sign In</Text>
+              )}
             </Pressable>
           </View>
         </View>
@@ -233,13 +233,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 12,
   },
-  demoHint: {
-    color: '#64748B',
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 4,
-    marginBottom: 14,
-  },
   rowBetween: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -263,6 +256,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  primaryButtonLoading: {
+    backgroundColor: '#0D9488',
+    opacity: 0.85,
+  },
   primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
@@ -277,9 +274,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  ghostButtonDisabled: {
+    opacity: 0.4,
+  },
   ghostButtonText: {
     color: '#0F172A',
     fontSize: 15,
     fontWeight: '700',
+  },
+  ghostButtonTextDisabled: {
+    color: '#64748B',
   },
 });
