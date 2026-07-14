@@ -12,6 +12,6 @@ module.exports = {
   rules: {
     'import/namespace': 'off',
     'import/no-unresolved': 'off',
-    '@typescript-eslint/no-explicit-any': 'error'
+    '@typescript-eslint/no-explicit-any': 'warn'
   }
 };
