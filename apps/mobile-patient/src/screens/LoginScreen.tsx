@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { 
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator, Image 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context'; 
 import { useRouter } from 'expo-router';
+import { useAppSettings } from '../context/AppSettingsContext';
 
 // Import libraries for Google Login Web Overlays
 import * as WebBrowser from 'expo-web-browser';
@@ -20,9 +22,30 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const router = useRouter();
+  const { authenticateWithBiometrics, biometricsEnabled, setBiometricsEnabled } = useAppSettings();
 
   // Dynamically decoupled environment config package reference
   const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
+  // Trigger biometric auto-login if the user has successfully logged in once
+  useEffect(() => {
+    async function checkAutoLogin() {
+      try {
+        const hasLoggedInOnce = await AsyncStorage.getItem('hasLoggedInOnce');
+        const token = await SecureStore.getItemAsync('userToken');
+        
+        if (hasLoggedInOnce === 'true' && token && biometricsEnabled) {
+          const success = await authenticateWithBiometrics();
+          if (success) {
+            router.replace('/dashboard' as any);
+          }
+        }
+      } catch (e) {
+        console.error("Biometric auto-login error:", e);
+      }
+    }
+    checkAutoLogin();
+  }, [biometricsEnabled]);
 
   // --- Function to handle standard Email/Password Login Navigation Flow ---
   // --- Function to handle standard Email/Password Login Navigation Flow ---
@@ -50,6 +73,7 @@ export default function LoginScreen() {
         const activeToken = data.data?.token;
         
         if (activeUserId) {
+           await SecureStore.setItemAsync('userId', String(activeUserId));
            await AsyncStorage.setItem('userId', String(activeUserId));
         } else {
            console.warn("⚠️ Warning: User ID not found in data.data.user.id");
@@ -57,7 +81,17 @@ export default function LoginScreen() {
 
         // ✅ නිවැරදි කිරීම: Token එක Save කිරීම
         if (activeToken) {
+           await SecureStore.setItemAsync('userToken', String(activeToken));
            await AsyncStorage.setItem('userToken', String(activeToken));
+        }
+
+        if (activeUserId && activeToken) {
+           await AsyncStorage.setItem('hasLoggedInOnce', 'true');
+           // Enable biometrics by default on first successful login if not configured
+           const savedBio = await AsyncStorage.getItem('biometricsEnabled');
+           if (savedBio === null) {
+             await setBiometricsEnabled(true);
+           }
         }
         
         router.push('/dashboard' as any); 

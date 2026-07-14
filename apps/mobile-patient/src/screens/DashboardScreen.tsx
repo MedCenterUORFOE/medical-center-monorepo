@@ -9,13 +9,17 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
-  Animated
+  Animated,
+  Modal,
+  Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context'; 
 import { Ionicons, MaterialIcons, FontAwesome5, Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
+import * as SecureStore from 'expo-secure-store';
+import { useQuery } from '@tanstack/react-query';
 
 // ── TypeScript Data Interfaces ──
 interface ProfileSchema {
@@ -57,16 +61,12 @@ interface MedicalRecordSchema {
 export default function PatientDashboard() {
   const router = useRouter();
   
-  const [profile, setProfile] = useState<ProfileSchema | null>(null);
-  const [hasVerifiedProfile, setHasVerifiedProfile] = useState<boolean>(true);
-  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
-  const [appointmentsList, setAppointmentsList] = useState<AppointmentSchema[]>([]);
-  const [nextAppointment, setNextAppointment] = useState<AppointmentSchema | null>(null);
-  const [medicalRecordsList, setMedicalRecordsList] = useState<MedicalRecordSchema[]>([]);
-  
+  const [patientId, setPatientId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'CONSULTATIONS' | 'TIMELINE'>('CONSULTATIONS');
-  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [greeting, setGreeting] = useState<string>('');
+  const [isMutating, setIsMutating] = useState<boolean>(false);
+  const unreadNotifCount = 0;
+  const [isConfirmEmergencyModalVisible, setIsConfirmEmergencyModalVisible] = useState<boolean>(false);
 
   const progressAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -74,7 +74,11 @@ export default function PatientDashboard() {
 
   useEffect(() => {
     configureClockGreeting();
-    fetchDashboardDataFromBackend();
+    async function loadAuth() {
+      const id = await SecureStore.getItemAsync('userId');
+      setPatientId(id);
+    }
+    loadAuth();
   }, []);
 
   const configureClockGreeting = () => {
@@ -84,76 +88,91 @@ export default function PatientDashboard() {
     else setGreeting('Good evening');
   };
 
-  // ── FETCH DATA FROM NEXT.JS BACKEND API ──
-  const fetchDashboardDataFromBackend = async () => {
-    setIsLoading(true);
-    try {
+  // ── REACT QUERY HOOKS FOR CACHING & OFFLINE CAPABILITY ──
+
+  // 1. Profile Query
+  const { data: profile = null, isLoading: isProfileLoading, refetch: refetchProfile } = useQuery<ProfileSchema | null>({
+    queryKey: ['profile', patientId],
+    queryFn: async () => {
       const API_URL = process.env.EXPO_PUBLIC_API_URL;
-      const patientId = await AsyncStorage.getItem('userId');
-      const token = await AsyncStorage.getItem('userToken'); 
-      
-      if (!patientId || !token) {
-        setIsLoading(false);
-        return;
-      }
-
-      const headers = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}` 
-      };
-
-      // 1. Fetch Profile Data
-      const profileRes = await fetch(`${API_URL}/api/profiles/${patientId}`, { headers });
-      if (profileRes.ok) {
-        const rawResponse = await profileRes.json();
-        const patientData = rawResponse.data?.patient;
-
-        if (patientData) {
-          setProfile({
-            full_name: patientData.student?.full_name || patientData.student?.name || patientData.name || 'Student',
-            student_id: patientData.student?.university_reg_number || '',
-            faculty: patientData.student?.faculty || '',
-            is_profile_complete: !!patientData.student 
-          });
-          setHasVerifiedProfile(!!patientData.student);
-        } else {
-           setHasVerifiedProfile(false);
+      const token = await SecureStore.getItemAsync('userToken');
+      const response = await fetch(`${API_URL}/api/profiles/${patientId}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         }
+      });
+      if (!response.ok) throw new Error('Failed to fetch profile');
+      const raw = await response.json();
+      const patientData = raw.data?.patient;
+      if (patientData) {
+        return {
+          full_name: patientData.student?.full_name || patientData.student?.name || patientData.name || 'Student',
+          student_id: patientData.student?.university_reg_number || '',
+          faculty: patientData.student?.faculty || '',
+          is_profile_complete: !!patientData.student
+        };
       }
+      return null;
+    },
+    enabled: !!patientId,
+  });
 
-      // 2. Fetch Appointments (✅ හරියටම දත්ත කියවන විදිහ හැදුවා)
-      // සෘජුවම /api/appointments එකෙන් අරගෙන ඒකෙන් Scheduled ඒවා විතරක් පෙරාගමු
-      const aptRes = await fetch(`${API_URL}/api/appointments`, { headers });
-      if (aptRes.ok) {
-        const rawAptData = await aptRes.json();
-        const aptList = rawAptData.data || rawAptData.appointments || rawAptData || [];
-        
-        if (Array.isArray(aptList)) {
-          // 'SCHEDULED' තත්ත්වයේ තියෙන ඒවා විතරක් ගන්නවා
-          const upcoming = aptList.filter(apt => apt.status === 'SCHEDULED' || apt.status === 'confirmed');
-          
-          // ළඟම තියෙන දිනයට අනුව පිළිවෙළට හදනවා (Sort by date)
-          upcoming.sort((a, b) => new Date(a.scheduled_time).getTime() - new Date(b.scheduled_time).getTime());
-          
-          setAppointmentsList(upcoming);
-          if (upcoming.length > 0) {
-            setNextAppointment(upcoming[0]);
-          }
+  // 2. Appointments Query
+  const { data: appointmentsList = [], isLoading: isAppointmentsLoading, refetch: refetchAppointments } = useQuery<AppointmentSchema[]>({
+    queryKey: ['appointments', patientId],
+    queryFn: async () => {
+      const API_URL = process.env.EXPO_PUBLIC_API_URL;
+      const token = await SecureStore.getItemAsync('userToken');
+      const response = await fetch(`${API_URL}/api/appointments`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         }
+      });
+      if (!response.ok) throw new Error('Failed to fetch appointments');
+      const raw = await response.json();
+      const aptList = raw.data || raw.appointments || raw || [];
+      if (Array.isArray(aptList)) {
+        const upcoming = aptList.filter(apt => apt.status === 'SCHEDULED' || apt.status === 'confirmed');
+        upcoming.sort((a, b) => new Date(a.scheduled_time).getTime() - new Date(b.scheduled_time).getTime());
+        return upcoming;
       }
+      return [];
+    },
+    enabled: !!patientId,
+  });
 
-      // 3. Fetch Medical History
-      const historyRes = await fetch(`${API_URL}/api/records/history?userId=${patientId}`, { headers });
-      if (historyRes.ok) {
-        const historyData = await historyRes.json();
-        setMedicalRecordsList(historyData.data || historyData || []);
-      }
+  // 3. Medical History Query
+  const { data: medicalRecordsList = [], isLoading: isHistoryLoading, refetch: refetchHistory } = useQuery<MedicalRecordSchema[]>({
+    queryKey: ['medicalHistory', patientId],
+    queryFn: async () => {
+      const API_URL = process.env.EXPO_PUBLIC_API_URL;
+      const token = await SecureStore.getItemAsync('userToken');
+      const response = await fetch(`${API_URL}/api/records/history?userId=${patientId}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch history');
+      const historyData = await response.json();
+      return historyData.data || historyData || [];
+    },
+    enabled: !!patientId,
+  });
 
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    } finally {
-      setIsLoading(false);
-    }
+  // Derived state mappings for template compatibility
+  const hasVerifiedProfile = profile ? profile.is_profile_complete : true;
+  const nextAppointment = appointmentsList.length > 0 ? appointmentsList[0] : null;
+  const isLoading = isProfileLoading || isAppointmentsLoading || isHistoryLoading || isMutating;
+
+  const fetchDashboardDataFromBackend = async () => {
+    await Promise.all([
+      refetchProfile(),
+      refetchAppointments(),
+      refetchHistory()
+    ]);
   };
 
   
@@ -166,10 +185,10 @@ export default function PatientDashboard() {
         text: 'Yes, Cancel', 
         style: 'destructive',
         onPress: async () => {
-          setIsLoading(true);
+          setIsMutating(true);
           try {
             const API_URL = process.env.EXPO_PUBLIC_API_URL;
-            const token = await AsyncStorage.getItem('userToken');
+            const token = await SecureStore.getItemAsync('userToken');
             
             // ✅ Status එක Update කරන ඔයාගේ Route එකට කතා කරනවා
             const res = await fetch(`${API_URL}/api/appointments/${appointmentId}/status`, {
@@ -190,7 +209,7 @@ export default function PatientDashboard() {
           } catch (e) {
             Alert.alert('Error', 'Network connection failed.');
           } finally {
-            setIsLoading(false);
+            setIsMutating(false);
           }
         }
       }
@@ -222,8 +241,73 @@ export default function PatientDashboard() {
     ]).start();
   };
 
+  const callHotline = async () => {
+    try {
+      const canOpen = await Linking.canOpenURL('tel:1990');
+      if (canOpen) {
+        await Linking.openURL('tel:1990');
+      } else {
+        Alert.alert('Unavailable', 'This device cannot place phone calls.');
+      }
+    } catch (e) {
+      console.error('Failed to open dialer:', e);
+    }
+  };
+
+  const sendEmergencyRequest = async () => {
+    try {
+      setIsMutating(true);
+
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== 'granted') {
+        Alert.alert('Location Required', 'Location permission is required to dispatch the ambulance.');
+        return;
+      }
+
+      const currentPosition = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = currentPosition.coords;
+
+      const API_URL = process.env.EXPO_PUBLIC_API_URL;
+      const token = await SecureStore.getItemAsync('userToken');
+
+      const response = await fetch(`${API_URL}/api/ambulance/requests`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          pickup_lat: latitude,
+          pickup_lng: longitude,
+        }),
+      });
+
+      const responseBody = await response.json();
+
+      if (response.status === 201 || responseBody?.success === true) {
+        Alert.alert('Success', 'SOS Sent Successfully! We are finding the nearest ambulance.');
+      } else {
+        const errorMessage = responseBody?.message || 'Unable to dispatch ambulance.';
+        Alert.alert(
+          'Request Failed',
+          `${errorMessage}\n\nCalling emergency hotline fallback...`,
+          [{ text: 'Call', onPress: () => callHotline() }, { text: 'Cancel', style: 'cancel' }]
+        );
+      }
+    } catch (error) {
+      console.error("Emergency SOS Request Error:", error);
+      Alert.alert(
+        'Request Failed',
+        'Network request failed. Calling emergency hotline fallback...',
+        [{ text: 'Call', onPress: () => callHotline() }, { text: 'Cancel', style: 'cancel' }]
+      );
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
   const executePanicBackendRequest = async () => {
-    // ... [Emergency logic remains exactly the same]
+    await sendEmergencyRequest();
   };
 
   // ✅ Date and Time Formatting Helpers
@@ -349,19 +433,34 @@ export default function PatientDashboard() {
               </View>
 
               <View style={styles.gridMatrixRowWrapper}>
-                <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/medical-records' as any)}>
+                <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/records' as any)}>
                   <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: '#DCFCE7' }]}>
                     <Ionicons name="document-text-outline" size={22} color="#16A34A" />
                   </View>
                   <Text style={styles.actionCardLabelContentString}>Medical Records</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/emergency' as any)}>
-                  <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: '#FEE2E2' }]}>
-                    <MaterialIcons name="add-alert" size={24} color="#EF4444" />
+                <TouchableOpacity 
+                  style={styles.prominentEmergencyCard} 
+                  onPress={() => setIsConfirmEmergencyModalVisible(true)}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: 'rgba(255, 255, 255, 0.25)' }]}>
+                    <Ionicons name="alert-circle" size={24} color="#FFFFFF" />
                   </View>
-                  <Text style={styles.actionCardLabelContentString}>Emergency SOS</Text>
+                  <Text style={[styles.actionCardLabelContentString, { color: '#FFFFFF', fontWeight: 'bold' }]}>Emergency SOS</Text>
                 </TouchableOpacity>
+              </View>
+
+              <View style={styles.gridMatrixRowWrapper}>
+                <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/academic-submission' as any)}>
+                  <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: '#F0F9FF' }]}>
+                    <Feather name="book-open" size={20} color="#0284C7" />
+                  </View>
+                  <Text style={styles.actionCardLabelContentString}>Submit to Lecturer</Text>
+                </TouchableOpacity>
+
+                <View style={{ width: '48%' }} />
               </View>
             </View>
 
@@ -487,6 +586,45 @@ export default function PatientDashboard() {
           </View>
         </View>
       )}
+
+      {/* ── EMERGENCY SOS CONFIRMATION MODAL ── */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isConfirmEmergencyModalVisible}
+        onRequestClose={() => setIsConfirmEmergencyModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Ionicons name="alert-circle" size={56} color="#EF4444" />
+              <Text style={styles.modalTitle}>Confirm Emergency SOS</Text>
+            </View>
+            <Text style={styles.modalBody}>
+              Are you sure you want to trigger an Emergency SOS? This will request an ambulance immediately to your current location.
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelModalButton}
+                onPress={() => setIsConfirmEmergencyModalVisible(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.cancelModalButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmModalButton}
+                onPress={() => {
+                  setIsConfirmEmergencyModalVisible(false);
+                  sendEmergencyRequest();
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.confirmModalButtonText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -557,4 +695,85 @@ const styles = StyleSheet.create({
   timelineClinicalLogCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, marginBottom: 14, borderLeftWidth: 4, borderLeftColor: '#1B5E55', elevation: 2 },
   timelineDateTextHeadingLabel: { fontSize: 12, fontWeight: 'bold', color: '#1B5E55', textTransform: 'uppercase' },
   clinicalDiagnosisValueTextString: { fontSize: 17, fontWeight: 'bold', color: '#111111', marginTop: 4, marginBottom: 8 },
+
+  prominentEmergencyCard: {
+    backgroundColor: '#DC2626',
+    width: '48%',
+    borderRadius: 18,
+    padding: 18,
+    alignItems: 'flex-start',
+    elevation: 5,
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#111827',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  modalBody: {
+    fontSize: 14,
+    color: '#4B5563',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 12,
+  },
+  cancelModalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  cancelModalButtonText: {
+    color: '#4B5563',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  confirmModalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    backgroundColor: '#DC2626',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  confirmModalButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
 });
