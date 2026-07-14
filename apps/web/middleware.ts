@@ -29,7 +29,8 @@ const roleAccessMap: Record<string, string[]> = {
   '/admin': ['ADMIN'],
   '/dashboard/doctor': ['DOCTOR'],
   '/dashboard/nurse': ['NURSE'],
-  '/dashboard/pharmacist': ['PHARMACIST'],
+  '/dashboard/pharmacist': ['PHARMACIST', 'NURSE', 'ADMIN'],
+  '/dashboard/emergency': ['ADMIN', 'DOCTOR', 'NURSE', 'AMBULANCE_DRIVER'],
   '/inventory': ['PHARMACIST', 'NURSE', 'ADMIN'],
   
   // API Routes

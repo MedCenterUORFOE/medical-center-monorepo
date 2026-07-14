@@ -53,7 +53,7 @@ export async function PATCH(
     }
 
     // --- THE SECURE TRANSACTION ---
-    const updatedUser = await prisma.$transaction(async (tx) => {
+    const updatedUser = await prisma.$transaction(async (tx: any) => {
       
       const user = await tx.user.update({
         where: { id: userId },

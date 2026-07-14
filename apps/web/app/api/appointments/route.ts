@@ -51,28 +51,63 @@ export async function GET(_request: Request) {
       return NextResponse.json({ success: false, message: "Unauthorized." }, { status: 401 });
     }
 
-    // ලොග් වෙලා ඉන්න කෙනාගේ (Student ගේ) Appointments ටික විතරක් Database එකෙන් හොයනවා
-    const userAppointments = await prisma.appointment.findMany({
-      where: {
-        patient_id: session.id
-      },
-      include: {
-        doctor: {
-          include: {
-            staff: {
-              include: {
-                user: true // ඩොක්ටර්ගේ නම Dashboard එකට පෙන්වන්න ගන්නවා
+    let appointments;
+
+    if (session.role === 'DOCTOR') {
+      // Return scheduled appointments for this doctor, including patient user profile details
+      appointments = await prisma.appointment.findMany({
+        where: {
+          doctor_id: session.id,
+          status: 'SCHEDULED'
+        },
+        include: {
+          patient: {
+            include: {
+              user: {
+                select: {
+                  name: true,
+                  email: true,
+                  nic: true,
+                  role: true,
+                  student: {
+                    select: { university_reg_number: true }
+                  },
+                  academicStaff: {
+                    select: { university_staff_id: true }
+                  }
+                }
               }
             }
           }
+        },
+        orderBy: {
+          scheduled_time: 'asc'
         }
-      },
-      orderBy: {
-        scheduled_time: 'asc' // ළඟම තියෙන දවස උඩින්ම එන්න පිළිවෙළට හදනවා
-      }
-    });
+      });
+    } else {
+      // Normal patient appointments query
+      appointments = await prisma.appointment.findMany({
+        where: {
+          patient_id: session.id
+        },
+        include: {
+          doctor: {
+            include: {
+              staff: {
+                include: {
+                  user: true
+                }
+              }
+            }
+          }
+        },
+        orderBy: {
+          scheduled_time: 'asc'
+        }
+      });
+    }
 
-    return NextResponse.json({ success: true, data: userAppointments }, { status: 200 });
+    return NextResponse.json({ success: true, data: appointments }, { status: 200 });
 
   } catch (error) {
     console.error("❌ Fetching Appointments Error:", error);
