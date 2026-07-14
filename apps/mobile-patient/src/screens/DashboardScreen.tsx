@@ -451,6 +451,17 @@ export default function PatientDashboard() {
                   <Text style={[styles.actionCardLabelContentString, { color: '#FFFFFF', fontWeight: 'bold' }]}>Emergency SOS</Text>
                 </TouchableOpacity>
               </View>
+
+              <View style={styles.gridMatrixRowWrapper}>
+                <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/academic-submission' as any)}>
+                  <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: '#F0F9FF' }]}>
+                    <Feather name="book-open" size={20} color="#0284C7" />
+                  </View>
+                  <Text style={styles.actionCardLabelContentString}>Submit to Lecturer</Text>
+                </TouchableOpacity>
+
+                <View style={{ width: '48%' }} />
+              </View>
             </View>
 
             {/* ── 4. SPLIT TAB MANAGER VIEW ── */}
