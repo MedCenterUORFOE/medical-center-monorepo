@@ -12,7 +12,10 @@ export function Dashboard({ store }: { store: DataStore }) {
   const today = new Date().toISOString().slice(0, 10);
   const todayAppts = appointments.filter((appointment) => appointment.date === today);
   const lowStock = drugs.filter((drug) => drug.stock <= drug.reorderLevel);
-  const expiring = drugs.filter((drug) => (new Date(drug.expiryDate).getTime() - Date.now()) / 86400000 <= 30);
+  const expiring = drugs.filter((drug) => {
+    const days = (new Date(drug.expiryDate).getTime() - Date.now()) / 86400000;
+    return Number.isFinite(days) && days <= 30 && days >= 0;
+  });
 
   const stats = [
     { label: "Total Students", value: students.length, icon: Users, color: "text-blue-600 bg-blue-100" },
