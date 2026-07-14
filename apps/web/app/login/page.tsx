@@ -46,11 +46,8 @@ function LoginContent() {
       if (data && data.data) {
         const { token, user } = data.data;
 
-        // Save token to client-side localStorage
+        // Save token to client-side localStorage for API client authorization header
         localStorage.setItem('session_token', token);
-        
-        // Also set token in cookie to make sure middleware reads it
-        document.cookie = `session_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax; Secure=${process.env.NODE_ENV === 'production' ? 'true' : 'false'}`;
 
         setSuccess('Authentication successful! Redirecting...');
         
