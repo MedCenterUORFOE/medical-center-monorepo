@@ -29,8 +29,8 @@ export default function App() {
   const store = useDataStore();
 
   const lowStock = store.drugs.filter((drug) => drug.stock <= drug.reorderLevel).length;
-  const expiring = store.drugs.filter((drug) => (new Date(drug.expiryDate).getTime() - Date.now()) / 86400000 <= 30).length;
-  const alerts = lowStock + expiring;
+  const expiringOrExpired = store.drugs.filter((drug) => (new Date(drug.expiryDate).getTime() - Date.now()) / 86400000 <= 30).length;
+  const alerts = lowStock + expiringOrExpired;
 
   return (
     <div className="flex size-full bg-slate-50">
