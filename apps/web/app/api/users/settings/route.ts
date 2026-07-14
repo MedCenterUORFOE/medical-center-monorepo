@@ -1,3 +1,4 @@
+//apps/web/app/api/users/settings/route.ts
 /**
  * PROFILE SETTINGS ENDPOINT (PATCH /api/users/settings)
  * * --- AUTHENTICATION TESTING STRATEGY ---
@@ -7,12 +8,21 @@
  * * PRODUCTION MODE:
  * Uncomment `getUserSession()` and extract `session.id`.
  * ---------------------------------------
+ *
+ * --- STAFF CREDENTIAL GUARDRAIL ---
+ * For DOCTOR / NURSE / PHARMACIST / AMBULANCE_DRIVER, nic, university_staff_id,
+ * license_number, specialization, and vehicle_registration are admin-owned
+ * (set at provisioning, editable only via PATCH /api/admin/users/[userId]).
+ * These roles can only edit username, phone, and profile picture (picture is
+ * handled by a separate endpoint) via this route.
  */
 
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
-import { getUserSession } from '@/lib/auth';
+import { getUserSessionFromRequest } from '@/lib/auth';
+
+const STAFF_PROVISIONED_ROLES = ["DOCTOR", "NURSE", "PHARMACIST", "AMBULANCE_DRIVER"] as const;
 
 const settingsSchema = z.object({
   username: z.string().min(3).max(20).regex(/^[a-z0-9_]+$/).optional(),
@@ -32,12 +42,19 @@ const settingsSchema = z.object({
 
   university_staff_id: z.string().optional(),
   position: z.string().optional(),
+
+  // Admin-owned fields for medical staff / drivers. Kept in the schema
+  // (rather than silently stripped) so we can return a clear rejection
+  // error below if a staff user tries to send them.
+  license_number: z.string().optional(),
+  specialization: z.string().optional(),
+  vehicle_registration: z.string().optional(),
 });
 
 export async function PATCH(request: Request) {
   try {
     // === PRODUCTION AUTH BLOCK ===
-    const session = await getUserSession();
+    const session = await getUserSessionFromRequest(request);
     if (!session?.id) return apiErrors.unauthorized();
     const userId = session.id;
     
@@ -61,6 +78,28 @@ export async function PATCH(request: Request) {
 
     if (!currentUser) {
       return apiErrors.notFound("User not found");
+    }
+
+    // --- Block admin-owned fields for staff-provisioned roles ---
+    if ((STAFF_PROVISIONED_ROLES as readonly string[]).includes(currentUser.role)) {
+      const blockedFields = [
+        "nic",
+        "university_staff_id",
+        "license_number",
+        "specialization",
+        "vehicle_registration",
+      ] as const;
+
+      const attempted = blockedFields.filter(
+        (field) => validatedData[field as keyof typeof validatedData] !== undefined
+      );
+
+      if (attempted.length > 0) {
+        return errorResponse(
+          `The following fields are managed by an administrator and cannot be edited here: ${attempted.join(", ")}.`,
+          403
+        );
+      }
     }
 
     await prisma.$transaction(async (tx) => {

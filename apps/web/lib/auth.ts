@@ -1,3 +1,5 @@
+//apps/web/lib/auth.ts
+
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 
@@ -9,7 +11,26 @@ export interface SessionPayload {
 }
 
 export async function getUserSession(): Promise<SessionPayload | null> {
+  return getUserSessionFromRequest();
+}
+
+export async function getUserSessionFromRequest(request?: Request): Promise<SessionPayload | null> {
   try {
+    const bearerToken = request?.headers.get('authorization')?.startsWith('Bearer ')
+      ? request.headers.get('authorization')?.slice(7)
+      : null;
+
+    if (bearerToken) {
+      const secretKey = new TextEncoder().encode(process.env.JWT_SECRET!);
+      const { payload } = await jwtVerify(bearerToken, secretKey);
+
+      return {
+        id: payload.id as string,
+        email: payload.email as string,
+        role: payload.role as string,
+      };
+    }
+
     // 1. Grab the cookie store
     const cookieStore = await cookies();
     
