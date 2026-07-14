@@ -81,7 +81,7 @@ export default function App() {
       <main className="flex-1 overflow-auto">
         <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-8 py-4">
           <p className="capitalize text-muted-foreground">{view.replace(/([A-Z])/g, " $1")}</p>
-          <Button variant="ghost" size="icon" className="relative">
+          <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
             <Bell className="size-5" />
             {alerts > 0 && <span className="absolute right-1 top-1 size-2 rounded-full bg-red-500" />}
           </Button>
