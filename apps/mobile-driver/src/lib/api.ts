@@ -1,13 +1,24 @@
 import * as SecureStore from 'expo-secure-store';
 import axios, { AxiosInstance } from 'axios';
 import { router } from 'expo-router';
+import Constants from 'expo-constants';
 
 // ---------------------------------------------------------------------------
 // Base URL resolution — tries candidates in order, first working one wins.
 // Priority: env var → LAN IP → localhost → loopback → Android emulator
 // ---------------------------------------------------------------------------
+const getDevUrl = (): string | null => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hostUri = Constants.expoConfig?.hostUri || (Constants as any).manifest?.debuggerHost;
+  if (!hostUri) return null;
+  const ip = hostUri.split(':')[0];
+  return `http://${ip}:3000`;
+};
+
 const API_BASE_URL_CANDIDATES = [
   process.env.EXPO_PUBLIC_API_URL,
+  getDevUrl(),
+  'http://10.28.219.242:3000', // Current LAN IP
   'http://10.238.170.242:3000',
   'http://192.168.8.147:3000',
   'http://localhost:3000',
@@ -85,7 +96,7 @@ async function getWorkingAxiosInstance(): Promise<AxiosInstance> {
   for (const baseUrl of API_BASE_URL_CANDIDATES) {
     try {
       const probe = buildAxiosInstance(baseUrl);
-      await probe.get('/api/health', { timeout: 2000 });
+      await probe.get('/api/health', { timeout: 8000 });
       _axiosInstance = probe;
       _activeBaseUrl = baseUrl;
       console.log(`[api] Connected to ${baseUrl}`);
