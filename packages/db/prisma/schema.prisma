@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+
 }
 
 // -----------------------------------------------------------------------------
@@ -35,6 +36,7 @@ enum AppointmentStatus {
 
 enum EmergencyStatus {
   PENDING
+  ASSIGNED
   DISPATCHED
   ARRIVED
   COMPLETED

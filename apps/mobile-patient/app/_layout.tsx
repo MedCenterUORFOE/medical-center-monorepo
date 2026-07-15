@@ -1,24 +1,47 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import React from 'react';
 import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AppSettingsProvider, useAppSettings } from '../src/context/AppSettingsContext';
+import PinLockOverlay from '../components/PinLockOverlay';
+import OfflineBanner from '../components/OfflineBanner';
+import { ThemeProvider as NavigationThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+      staleTime: 1000 * 60 * 5, // 5 minutes default stale time
+    },
+  },
+});
 
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
+function AppContent() {
+  const { isDark } = useAppSettings();
 
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  const navTheme = isDark ? DarkTheme : DefaultTheme;
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+    <NavigationThemeProvider value={navTheme}>
+      <OfflineBanner />
+      
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="login" />
+        <Stack.Screen name="create-account" />
       </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+
+      <PinLockOverlay />
+    </NavigationThemeProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppSettingsProvider>
+        <AppContent />
+      </AppSettingsProvider>
+    </QueryClientProvider>
   );
 }
