@@ -29,6 +29,7 @@ function AppContent() {
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
         <Stack.Screen name="create-account" />
+        <Stack.Screen name="(tabs)" />
       </Stack>
 
       <PinLockOverlay />

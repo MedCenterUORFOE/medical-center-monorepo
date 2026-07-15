@@ -129,9 +129,9 @@ export default function EmergencySOSScreen() {
   };
 
   const callHotline = async () => {
-    const canOpen = await Linking.canOpenURL('tel:1990');
+    const canOpen = await Linking.canOpenURL('tel:0123456789');
     if (canOpen) {
-      await Linking.openURL('tel:1990');
+      await Linking.openURL('tel:0123456789');
     } else {
       Alert.alert('Unavailable', 'This device cannot place phone calls.');
     }
@@ -170,7 +170,7 @@ export default function EmergencySOSScreen() {
               <Text style={styles.footerTitle}>UMC Emergency Contacts</Text>
               <View style={styles.contactRow}>
                 <Ionicons name="call-outline" size={18} color="#991B1B" />
-                <Text style={styles.contactText}>Hotline: 1990</Text>
+                <Text style={styles.contactText}>Hotline: 0123456789</Text>
               </View>
               <View style={styles.contactRow}>
                 <Ionicons name="business-outline" size={18} color="#991B1B" />

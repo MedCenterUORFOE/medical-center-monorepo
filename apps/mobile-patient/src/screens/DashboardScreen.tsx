@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,6 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
-  Animated,
   Modal,
   Linking
 } from 'react-native';
@@ -20,6 +19,7 @@ import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
 import * as SecureStore from 'expo-secure-store';
 import { useQuery } from '@tanstack/react-query';
+import { useFocusEffect } from '@react-navigation/native';
 
 // ── TypeScript Data Interfaces ──
 interface ProfileSchema {
@@ -34,9 +34,10 @@ interface ProfileSchema {
 interface AppointmentSchema {
 
   id?: string;
- appointment_id?: string; 
+  appointment_id?: string; 
   //appointment_id: string; 
   scheduled_time: string; 
+  date?: string;
   status: string;
   doctor?: {
     staff?: {
@@ -67,10 +68,6 @@ export default function PatientDashboard() {
   const [isMutating, setIsMutating] = useState<boolean>(false);
   const unreadNotifCount = 0;
   const [isConfirmEmergencyModalVisible, setIsConfirmEmergencyModalVisible] = useState<boolean>(false);
-
-  const progressAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     configureClockGreeting();
@@ -106,11 +103,27 @@ export default function PatientDashboard() {
       const raw = await response.json();
       const patientData = raw.data?.patient;
       if (patientData) {
+        const isStudent = patientData.role === 'STUDENT';
+        const isStaff = patientData.role === 'ACADEMIC_STAFF';
+        let isComplete = false;
+        if (isStudent) {
+          isComplete = !!patientData.student;
+        } else if (isStaff) {
+          isComplete = !!patientData.academicStaff;
+        } else {
+          isComplete = true;
+        }
         return {
-          full_name: patientData.student?.full_name || patientData.student?.name || patientData.name || 'Student',
-          student_id: patientData.student?.university_reg_number || '',
-          faculty: patientData.student?.faculty || '',
-          is_profile_complete: !!patientData.student
+          full_name: isStudent 
+            ? (patientData.student?.full_name || patientData.student?.name || patientData.name || 'Student')
+            : (patientData.name || 'Staff Member'),
+          student_id: isStudent
+            ? (patientData.student?.university_reg_number || '')
+            : (patientData.academicStaff?.university_staff_id || ''),
+          faculty: isStudent
+            ? (patientData.student?.faculty || '')
+            : (patientData.academicStaff?.department || ''),
+          is_profile_complete: isComplete
         };
       }
       return null;
@@ -134,9 +147,11 @@ export default function PatientDashboard() {
       const raw = await response.json();
       const aptList = raw.data || raw.appointments || raw || [];
       if (Array.isArray(aptList)) {
-        const upcoming = aptList.filter(apt => apt.status === 'SCHEDULED' || apt.status === 'confirmed');
-        upcoming.sort((a, b) => new Date(a.scheduled_time).getTime() - new Date(b.scheduled_time).getTime());
-        return upcoming;
+        return aptList.map(apt => ({
+          ...apt,
+          date: apt.scheduled_time,
+          status: (apt.status === 'SCHEDULED' || apt.status === 'confirmed' || apt.status === 'CONFIRMED') ? 'CONFIRMED' : apt.status
+        }));
       }
       return [];
     },
@@ -163,17 +178,40 @@ export default function PatientDashboard() {
   });
 
   // Derived state mappings for template compatibility
-  const hasVerifiedProfile = profile ? profile.is_profile_complete : true;
-  const nextAppointment = appointmentsList.length > 0 ? appointmentsList[0] : null;
+  const isProfileComplete = profile ? profile.is_profile_complete : false;
+  const hasVerifiedProfile = isProfileComplete;
+  
+  // Filter and sort active appointments: only show future CONFIRMED appointments, chronologically sorted
+  const now = new Date();
+  const activeAppointments = appointmentsList
+    .filter(appointment => {
+      const apptDate = appointment.date ? new Date(appointment.date) : new Date(appointment.scheduled_time);
+      return apptDate >= now && appointment.status === 'CONFIRMED';
+    })
+    .sort((a, b) => {
+      const timeA = new Date(a.date || a.scheduled_time).getTime();
+      const timeB = new Date(b.date || b.scheduled_time).getTime();
+      return timeA - timeB;
+    });
+
+  const nextAppointment = activeAppointments.length > 0 ? activeAppointments[0] : null;
   const isLoading = isProfileLoading || isAppointmentsLoading || isHistoryLoading || isMutating;
 
-  const fetchDashboardDataFromBackend = async () => {
+  const fetchDashboardDataFromBackend = React.useCallback(async () => {
     await Promise.all([
       refetchProfile(),
       refetchAppointments(),
       refetchHistory()
     ]);
-  };
+  }, [refetchProfile, refetchAppointments, refetchHistory]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (patientId) {
+        void fetchDashboardDataFromBackend();
+      }
+    }, [patientId, fetchDashboardDataFromBackend])
+  );
 
   
 
@@ -218,34 +256,13 @@ export default function PatientDashboard() {
 
   
 
-  // --- Panic Button Logic --- (නොවෙනස්ව)
-  const handleEmergencyPressIn = () => {
-    Animated.parallel([
-      Animated.timing(progressAnim, { toValue: 1, duration: 3000, useNativeDriver: false }),
-      Animated.timing(scaleAnim, { toValue: 1.04, duration: 3000, useNativeDriver: true })
-    ]).start();
 
-    timerRef.current = setTimeout(() => {
-      executePanicBackendRequest();
-    }, 3000);
-  };
-
-  const handleEmergencyPressOut = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    Animated.parallel([
-      Animated.timing(progressAnim, { toValue: 0, duration: 250, useNativeDriver: false }),
-      Animated.timing(scaleAnim, { toValue: 1, duration: 250, useNativeDriver: true })
-    ]).start();
-  };
 
   const callHotline = async () => {
     try {
-      const canOpen = await Linking.canOpenURL('tel:1990');
+      const canOpen = await Linking.canOpenURL('tel:0123456789');
       if (canOpen) {
-        await Linking.openURL('tel:1990');
+        await Linking.openURL('tel:0123456789');
       } else {
         Alert.alert('Unavailable', 'This device cannot place phone calls.');
       }
@@ -306,9 +323,7 @@ export default function PatientDashboard() {
     }
   };
 
-  const executePanicBackendRequest = async () => {
-    await sendEmergencyRequest();
-  };
+
 
   // ✅ Date and Time Formatting Helpers
   const formatDisplayDate = (dateStr?: string | null): string => {
@@ -329,10 +344,7 @@ export default function PatientDashboard() {
     return !isNaN(d.getTime()) && d < new Date();
   };
 
-  const progressWidth = progressAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0%', '100%']
-  });
+
 
   const latestVisit = medicalRecordsList.length > 0 ? medicalRecordsList[0] : null;
   const currentHealthStatus = latestVisit ? latestVisit.diagnosis : 'Healthy';
@@ -401,7 +413,7 @@ export default function PatientDashboard() {
             )}
 
             {/* ── UNVERIFIED PROFILE BANNER ── */}
-            {!hasVerifiedProfile && (
+            {!isProfileComplete && (
               <TouchableOpacity style={styles.amberWarningCallout} onPress={() => router.push('/complete-profile' as any)}>
                 <View style={styles.warningHeaderRow}>
                   <MaterialIcons name="warning" size={24} color="#D97706" />
@@ -417,7 +429,7 @@ export default function PatientDashboard() {
             <View style={styles.gridSectionSection}>
               <Text style={styles.sectionHeadingTitleMainLabel}>Quick Actions</Text>
               <View style={styles.gridMatrixRowWrapper}>
-                <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/book-appointment' as any)}>
+                <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/appointment' as any)}>
                   <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: '#E0F2FE' }]}>
                     <Feather name="calendar" size={22} color="#0284C7" />
                   </View>
@@ -440,27 +452,12 @@ export default function PatientDashboard() {
                   <Text style={styles.actionCardLabelContentString}>Medical Records</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
-                  style={styles.prominentEmergencyCard} 
-                  onPress={() => setIsConfirmEmergencyModalVisible(true)}
-                  activeOpacity={0.8}
-                >
-                  <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: 'rgba(255, 255, 255, 0.25)' }]}>
-                    <Ionicons name="alert-circle" size={24} color="#FFFFFF" />
-                  </View>
-                  <Text style={[styles.actionCardLabelContentString, { color: '#FFFFFF', fontWeight: 'bold' }]}>Emergency SOS</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.gridMatrixRowWrapper}>
                 <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/academic-submission' as any)}>
                   <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: '#F0F9FF' }]}>
                     <Feather name="book-open" size={20} color="#0284C7" />
                   </View>
                   <Text style={styles.actionCardLabelContentString}>Submit to Lecturer</Text>
                 </TouchableOpacity>
-
-                <View style={{ width: '48%' }} />
               </View>
             </View>
 
@@ -473,7 +470,7 @@ export default function PatientDashboard() {
                     onPress={() => setActiveTab('CONSULTATIONS')}
                   >
                     <Text style={[styles.tabLabelStringText, activeTab === 'CONSULTATIONS' && styles.activeTabLabelStringText]}>
-                      Consultations ({appointmentsList.length})
+                      Consultations ({activeAppointments.length})
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
@@ -485,20 +482,20 @@ export default function PatientDashboard() {
                     </Text>
                   </TouchableOpacity>
                 </View>
-
+ 
                 <View style={styles.tabPanelBodyWrapper}>
                   {activeTab === 'CONSULTATIONS' ? (
-                    appointmentsList.length === 0 ? (
+                    activeAppointments.length === 0 ? (
                       <View style={styles.emptyStateCardView}>
-                        <Text style={styles.emptyStateDescriptionLabelText}>No upcoming consultations booked.</Text>
-                        <TouchableOpacity style={styles.emptyStateActionButtonCtaPill} onPress={() => router.push('/book-appointment' as any)}>
+                        <Text style={styles.emptyStateDescriptionLabelText}>No upcoming appointments scheduled for today.</Text>
+                        <TouchableOpacity style={styles.emptyStateActionButtonCtaPill} onPress={() => router.push('/appointment' as any)}>
                           <Text style={styles.ctaButtonLabelText}>Book one now</Text>
                         </TouchableOpacity>
                       </View>
                     ) : (
-                      appointmentsList.map((item) => {
-                      // 🚀 මෙන්න සුපිරිම වැඩේ: Backend එකෙන් එන නම මොකක් වුණත් අපි ඒක හරියටම ගන්නවා!
-                      const validId = item.id || item.appointment_id;
+                      activeAppointments.map((item) => {
+                        // 🚀 මෙන්න සුපිරිම වැඩේ: Backend එකෙන් එන නම මොකක් වුණත් අපි ඒක හරියටම ගන්නවා!
+                        const validId = item.id || item.appointment_id;
 
                       return (
                         <View key={validId} style={styles.upcomingAppointmentCardWrapper}>
@@ -568,21 +565,14 @@ export default function PatientDashboard() {
 
           {/* ── 5. GLOBAL PANIC EMERGENCY FOOTER ── */}
           <View style={styles.emergencyBottomNavigationFixedLayerContainerBar}>
-            <View style={styles.progressRingOuterContainerBackgroundBox}>
-              <Animated.View style={[styles.progressRingInflationLiquidBar, { width: progressWidth }]} />
-            </View>
-            <Animated.View style={{ transform: [{ scale: scaleAnim }], width: '100%' }}>
-              <TouchableOpacity
-                style={styles.massivePanicRedButtonCircleElement}
-                onPressIn={handleEmergencyPressIn}
-                onPressOut={handleEmergencyPressOut}
-                activeOpacity={0.9}
-              >
-                <FontAwesome5 name="ambulance" size={18} color="#FFFFFF" style={{ marginBottom: 4 }} />
-                <Text style={styles.panicButtonLabelTextContent}>TRIGGER EMERGENCY</Text>
-                <Text style={styles.panicButtonHoldLabelInstructionsSubText}>Hold for 3 seconds to confirm</Text>
-              </TouchableOpacity>
-            </Animated.View>
+            <TouchableOpacity
+              style={styles.massivePanicRedButtonCircleElement}
+              onPress={() => setIsConfirmEmergencyModalVisible(true)}
+              activeOpacity={0.9}
+            >
+              <Ionicons name="alert-circle" size={22} color="#FFFFFF" style={{ marginRight: 8 }} />
+              <Text style={styles.panicButtonLabelTextContent}>Trigger Emergency</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -685,29 +675,13 @@ const styles = StyleSheet.create({
   outlinedButtonLabelTextContentString: { color: '#1B5E55', fontSize: 14, fontWeight: 'bold' },
   filledLightRedCancelActionButtonElement: { width: '48%', height: 45, backgroundColor: '#FEE2E2', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   filledCancelButtonLabelTextContentString: { color: '#DC2626', fontSize: 14, fontWeight: 'bold' },
-  emergencyBottomNavigationFixedLayerContainerBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFFFFF', paddingHorizontal: 24, paddingTop: 12, paddingBottom: Platform.OS === 'ios' ? 34 : 20, borderTopLeftRadius: 24, borderTopRightRadius: 24, elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.15, shadowRadius: 10, alignItems: 'center' },
-  progressRingOuterContainerBackgroundBox: { width: '100%', height: 4, backgroundColor: '#E5E7EB', borderRadius: 2, marginBottom: 12, overflow: 'hidden' },
-  progressRingInflationLiquidBar: { height: '100%', backgroundColor: '#EF4444' },
-  massivePanicRedButtonCircleElement: { width: '100%', backgroundColor: '#DC2626', borderRadius: 16, paddingVertical: 14, justifyContent: 'center', alignItems: 'center', elevation: 2 },
-  panicButtonLabelTextContent: { color: '#FFFFFF', fontSize: 15, fontWeight: '900', letterSpacing: 0.5 },
-  panicButtonHoldLabelInstructionsSubText: { color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '500', marginTop: 2 },
+  emergencyBottomNavigationFixedLayerContainerBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFFFFF', paddingHorizontal: 24, paddingTop: 12, paddingBottom: Platform.OS === 'ios' ? 34 : 20, borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: '#E5E7EB', elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.08, shadowRadius: 10 },
+  massivePanicRedButtonCircleElement: { width: '100%', backgroundColor: '#DC2626', borderRadius: 16, paddingVertical: 14, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', elevation: 2 },
+  panicButtonLabelTextContent: { color: '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
   
   timelineClinicalLogCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, marginBottom: 14, borderLeftWidth: 4, borderLeftColor: '#1B5E55', elevation: 2 },
   timelineDateTextHeadingLabel: { fontSize: 12, fontWeight: 'bold', color: '#1B5E55', textTransform: 'uppercase' },
   clinicalDiagnosisValueTextString: { fontSize: 17, fontWeight: 'bold', color: '#111111', marginTop: 4, marginBottom: 8 },
-
-  prominentEmergencyCard: {
-    backgroundColor: '#DC2626',
-    width: '48%',
-    borderRadius: 18,
-    padding: 18,
-    alignItems: 'flex-start',
-    elevation: 5,
-    shadowColor: '#DC2626',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
