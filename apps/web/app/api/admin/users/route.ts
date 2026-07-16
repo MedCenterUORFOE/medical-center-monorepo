@@ -1,3 +1,5 @@
+//apps/web/app/api/admin/users/route.ts
+
 /**
  * STAFF PROVISIONING ENDPOINT (POST /api/admin/users)
  * * --- ARCHITECTURAL NOTE: TWO PROVISIONING FLOWS ---
@@ -15,6 +17,14 @@
  * 4. Restore `status: 'UNVERIFIED'`, `reset_token`, and `reset_expires`.
  * 5. Uncomment the `resend.emails.send` block at the bottom.
  * ---------------------------------------
+ *
+ * --- CREDENTIAL OWNERSHIP NOTE (Admin-provisioned staff) ---
+ * For DOCTOR / NURSE / PHARMACIST / AMBULANCE_DRIVER, the Admin now supplies
+ * university_staff_id, license_number, specialization, and vehicle_registration
+ * at creation time. These are admin-owned fields going forward:
+ *   - The staff member can never set or edit them via complete-profile/settings.
+ *   - The Admin can edit them later via PATCH /api/admin/users/[userId].
+ * ---------------------------------------
  */
 
 import { NextRequest } from 'next/server';
@@ -27,6 +37,8 @@ import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { getUserSession } from '@/lib/auth';
 
+const MEDICAL_ROLES = ["DOCTOR", "NURSE", "PHARMACIST"] as const;
+
 // Validating the Admin's input
 const provisionSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -34,6 +46,47 @@ const provisionSchema = z.object({
   role: z.enum(["DOCTOR", "NURSE", "PHARMACIST", "ADMIN", "AMBULANCE_DRIVER"]),
   nic: z.string().min(10, "NIC is required"),
   password: z.string().min(8, "Password must be at least 8 characters"), // ADDED: Admin provides initial password
+
+  // --- Admin-owned staff credential fields (role-conditional, see superRefine) ---
+  university_staff_id: z.string().min(1, "University staff ID is required").optional(),
+  license_number: z.string().min(4, "Valid license number is required").optional(),
+  specialization: z.string().min(2, "Specialization is required").optional(),
+  vehicle_registration: z.string().min(4, "Vehicle registration is required").optional(),
+}).superRefine((data, ctx) => {
+  const isMedical = (MEDICAL_ROLES as readonly string[]).includes(data.role);
+  const isDriver = data.role === "AMBULANCE_DRIVER";
+
+  if ((isMedical || isDriver) && !data.university_staff_id) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "university_staff_id is required for this role",
+      path: ["university_staff_id"],
+    });
+  }
+
+  if (isMedical && !data.license_number) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "license_number is required for this role",
+      path: ["license_number"],
+    });
+  }
+
+  if (data.role === "DOCTOR" && !data.specialization) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "specialization is required for doctors",
+      path: ["specialization"],
+    });
+  }
+
+  if (isDriver && !data.vehicle_registration) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "vehicle_registration is required for ambulance drivers",
+      path: ["vehicle_registration"],
+    });
+  }
 });
 
 export async function POST(request: Request) {
@@ -53,7 +106,17 @@ export async function POST(request: Request) {
     const adminId = session.id;
 
     const body = await request.json();
-    const { email, name, role, nic, password } = provisionSchema.parse(body);
+    const {
+      email,
+      name,
+      role,
+      nic,
+      password,
+      university_staff_id,
+      license_number,
+      specialization,
+      vehicle_registration,
+    } = provisionSchema.parse(body);
 
     // --- GRACEFUL CONSTRAINT CHECKING ---
     // Looks for a match on either Email or NIC to prevent a 500 DB Crash
@@ -72,6 +135,24 @@ export async function POST(request: Request) {
       }
       if (existingUser.nic === nic) {
         return errorResponse("An account with this NIC already exists", 409);
+      }
+    }
+
+    // --- Credential uniqueness pre-checks (staff ID must be globally consistent) ---
+    if (university_staff_id) {
+      const [existingMedicalStaffId, existingDriverStaffId] = await Promise.all([
+        prisma.medicalCenterStaff.findUnique({ where: { university_staff_id } }),
+        prisma.ambulanceDriver.findUnique({ where: { university_staff_id } }),
+      ]);
+      if (existingMedicalStaffId || existingDriverStaffId) {
+        return errorResponse("An account with this university staff ID already exists", 409);
+      }
+    }
+
+    if (license_number) {
+      const existingLicense = await prisma.medicalCenterStaff.findUnique({ where: { license_number } });
+      if (existingLicense) {
+        return errorResponse("An account with this license number already exists", 409);
       }
     }
 
@@ -109,12 +190,13 @@ export async function POST(request: Request) {
         const staff = await tx.medicalCenterStaff.create({
           data: {
             staff_id: user.id,
-            license_number: `PENDING-${user.id.substring(0, 8)}`,
+            license_number: license_number!,
+            university_staff_id: university_staff_id!,
           }
         });
 
         if (role === "DOCTOR") {
-          await tx.doctor.create({ data: { doctor_id: staff.staff_id, specialization: "PENDING" } });
+          await tx.doctor.create({ data: { doctor_id: staff.staff_id, specialization: specialization! } });
         } else if (role === "NURSE") {
           await tx.nurse.create({ data: { nurse_id: staff.staff_id } });
         } else if (role === "PHARMACIST") {
@@ -124,7 +206,8 @@ export async function POST(request: Request) {
         await tx.ambulanceDriver.create({
           data: {
             driver_id: user.id,
-            vehicle_registration: "PENDING",
+            vehicle_registration: vehicle_registration!,
+            university_staff_id: university_staff_id!,
           }
         });
       }
