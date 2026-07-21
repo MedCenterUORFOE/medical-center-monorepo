@@ -134,12 +134,7 @@ export default function LoginScreen() {
               editable={!isLoading}
             />
 
-            <View style={styles.rowBetween}>
-              <Pressable
-                onPress={() => Alert.alert('Recovery', 'Add password recovery when ready.')}
-                disabled={isLoading}>
-                <Text style={styles.secondaryAction}>Forgot password?</Text>
-              </Pressable>
+            <View style={styles.rowEnd}>
               <Text style={styles.helperText}>Secure access only</Text>
             </View>
 
@@ -237,6 +232,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginTop: 4,
+    marginBottom: 18,
+  },
+  rowEnd: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
     marginTop: 4,
     marginBottom: 18,
   },
