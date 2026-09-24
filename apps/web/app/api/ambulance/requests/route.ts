@@ -68,7 +68,7 @@ export async function POST(request: Request) {
 
     // 3. Extract Firebase FCM Tokens
     const tokens: string[] = [];
-    availableDrivers.forEach((availability: any) => {
+    availableDrivers.forEach(availability => {
       const token = availability.driver.user.fcm_token;
       if (token) tokens.push(token);
     });

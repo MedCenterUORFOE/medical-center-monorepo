@@ -31,8 +31,6 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
-import { resend } from '@/lib/resend';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { getUserSession } from '@/lib/auth';
@@ -45,6 +43,7 @@ const provisionSchema = z.object({
   name: z.string().min(2, "Name is required"),
   role: z.enum(["DOCTOR", "NURSE", "PHARMACIST", "ADMIN", "AMBULANCE_DRIVER"]),
   nic: z.string().min(10, "NIC is required"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
 
   // --- Admin-owned staff credential fields (role-conditional, see superRefine) ---
   university_staff_id: z.string().min(1, "University staff ID is required").optional(),
@@ -110,6 +109,7 @@ export async function POST(request: Request) {
       name,
       role,
       nic,
+      password,
       university_staff_id,
       license_number,
       specialization,
@@ -154,12 +154,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // --- Setup Token Logic (FLOW B) ---
-    const setupToken = crypto.randomBytes(32).toString('hex');
-    const tokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); 
+    // --- Hash the Admin-Provided Password (FLOW A) ---
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(password, salt);
 
     // THE SECURE TRANSACTION
-    const newUser = await prisma.$transaction(async (tx: any) => {
+    const newUser = await prisma.$transaction(async (tx) => {
       
       // 1. Create Base Identity
       const user = await tx.user.create({
@@ -168,10 +168,9 @@ export async function POST(request: Request) {
           name,
           role,
           nic,
-          status: 'UNVERIFIED',
+          status: 'VERIFIED',
+          password_hash,
           is_profile_complete: false,
-          reset_token: setupToken, 
-          reset_expires: tokenExpiry
         }
       });
 
@@ -210,7 +209,7 @@ export async function POST(request: Request) {
           entity_id: user.id,
           ip_address: ip,
           details: JSON.stringify({ 
-            message: `Admin provisioned a new ${role} account (Token Onboarding Flow).`,
+            message: `Admin provisioned a new ${role} account (Direct Credential Flow).`,
             provisioned_email: email
           }),
         }
@@ -219,43 +218,12 @@ export async function POST(request: Request) {
       return user;
     });
 
-    // ==========================================
-    // --- EMAIL DISPATCH (FLOW B) ---
-    // ==========================================
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const setupLink = `${appUrl}/setup-account?token=${setupToken}`;
-
-    // Development Helper: Log setup link to console for easy local onboarding without configuring Resend
-    console.log(`\n🔑 [DEVELOPER] Setup Link for ${email} (${role}): ${setupLink}\n`);
-
-    try {
-      const { error: emailError } = await resend.emails.send({
-        from: 'Medical Center <admin@resend.dev>', 
-        to: email, 
-        subject: `Welcome to the Medical Center - ${role} Account Setup`,
-        html: `
-          <div style="font-family: Arial, sans-serif; padding: 20px;">
-            <h2>Hello ${name},</h2>
-            <p>An administrator has provisioned a <strong>${role}</strong> account for you at the Medical Center.</p>
-            <p>Please click the link below to set your secure password and activate your account:</p>
-            <a href="${setupLink}" style="background-color: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 10px;">Setup My Account</a>
-            <p style="margin-top: 20px; font-size: 12px; color: #666;">This secure link will expire in 7 days.</p>
-          </div>
-        `
-      });
-      if (emailError) {
-        console.error('Resend failed to send email:', emailError);
-      }
-    } catch (err) {
-      console.error('Failed to trigger email send via Resend:', err);
-    }
-
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password_hash: _ph, ...safeUser } = newUser;
 
     return successResponse(
       { user: safeUser }, 
-      `${role} account successfully provisioned. Onboarding email dispatched.`,
+      `${role} account successfully created and verified. Staff can now log in.`,
       201
     );
 

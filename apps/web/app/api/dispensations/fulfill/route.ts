@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     // --- THE FULFILLMENT TRANSACTION ---
     const result = await prisma.$transaction(async (tx) => {
       
-      const createdDispensations: any[] = [];
+      const createdDispensations = [];
 
       // Loop through the "7+3" split lot payload
       for (const subLot of validatedData.dispensations) {
