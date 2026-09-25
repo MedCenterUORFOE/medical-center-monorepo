@@ -121,3 +121,48 @@ export async function POST(request: Request) {
     return apiErrors.internal();
   }
 }
+
+// ============================================================================
+// GET: Fetch Pending Medical Certificate Requests for Doctor
+// ============================================================================
+export async function GET(request: Request) {
+  try {
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+    if (session.role !== "DOCTOR") {
+      return apiErrors.forbidden("Unauthorized. Doctor access only.");
+    }
+
+    const pendingRequests = await prisma.medicalCertificateRequest.findMany({
+      where: {
+        doctor_id: session.id,
+        status: "PENDING"
+      },
+      include: {
+        patient: {
+          include: {
+            user: {
+              select: { name: true, nic: true }
+            }
+          }
+        },
+        record: {
+          select: {
+            visit_date_time: true,
+            diagnosis: true,
+            symptoms: true
+          }
+        }
+      },
+      orderBy: {
+        created_at: 'desc'
+      }
+    });
+
+    return successResponse({ requests: pendingRequests }, "Pending certificate requests retrieved successfully.");
+
+  } catch (error) {
+    console.error("Fetch Pending Certificates Error:", error);
+    return apiErrors.internal();
+  }
+}

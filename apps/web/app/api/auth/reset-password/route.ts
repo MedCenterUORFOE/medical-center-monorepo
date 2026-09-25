@@ -38,6 +38,7 @@ export async function PATCH(request: Request) {
         where: { id: user.id },
         data: {
           password_hash: hashedPassword,
+          status: 'VERIFIED', // Activate the account upon password establishment
           reset_token: null, 
           reset_expires: null,
         },

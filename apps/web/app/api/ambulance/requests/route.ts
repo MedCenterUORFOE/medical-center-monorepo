@@ -110,3 +110,47 @@ export async function POST(request: Request) {
     return apiErrors.internal();
   }
 }
+
+// ============================================================================
+// GET: Fetch Active Emergency Requests (PENDING, DISPATCHED, ASSIGNED, ARRIVED)
+// ============================================================================
+export async function GET(request: Request) {
+  try {
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+
+    const isAuthorized = ["ADMIN", "DOCTOR", "NURSE", "AMBULANCE_DRIVER"].includes(session.role);
+    if (!isAuthorized) {
+      return apiErrors.forbidden("Unauthorized. Fleet staff and Admins only.");
+    }
+
+    const activeRequests = await prisma.emergencyRequest.findMany({
+      where: {
+        status: {
+          in: ['PENDING', 'DISPATCHED', 'ASSIGNED', 'ARRIVED']
+        }
+      },
+      include: {
+        requester: {
+          select: { name: true, phone: true }
+        },
+        driver: {
+          include: {
+            user: {
+              select: { name: true, phone: true }
+            }
+          }
+        }
+      },
+      orderBy: {
+        created_at: 'desc'
+      }
+    });
+
+    return successResponse({ requests: activeRequests }, "Active emergency requests retrieved successfully.");
+
+  } catch (error) {
+    console.error("Emergency Fetch Error:", error);
+    return apiErrors.internal();
+  }
+}

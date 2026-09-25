@@ -30,9 +30,7 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@medical-center/db';
 import { z } from 'zod';
-import bcrypt from 'bcryptjs'; // ADDED: Required for Flow A
-//import crypto from 'crypto';
-//import { resend } from '@/lib/resend';
+import bcrypt from 'bcryptjs';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { getUserSession } from '@/lib/auth';
@@ -45,7 +43,7 @@ const provisionSchema = z.object({
   name: z.string().min(2, "Name is required"),
   role: z.enum(["DOCTOR", "NURSE", "PHARMACIST", "ADMIN", "AMBULANCE_DRIVER"]),
   nic: z.string().min(10, "NIC is required"),
-  password: z.string().min(8, "Password must be at least 8 characters"), // ADDED: Admin provides initial password
+  password: z.string().min(8, "Password must be at least 8 characters"),
 
   // --- Admin-owned staff credential fields (role-conditional, see superRefine) ---
   university_staff_id: z.string().min(1, "University staff ID is required").optional(),
@@ -160,10 +158,6 @@ export async function POST(request: Request) {
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
 
-    // --- Legacy Token Logic (FLOW B) ---
-    // const setupToken = crypto.randomBytes(32).toString('hex');
-    // const tokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); 
-
     // THE SECURE TRANSACTION
     const newUser = await prisma.$transaction(async (tx) => {
       
@@ -174,14 +168,9 @@ export async function POST(request: Request) {
           name,
           role,
           nic,
-          status: 'VERIFIED',         // FLOW A: Instantly verified
-          password_hash,              // FLOW A: Password injected
+          status: 'VERIFIED',
+          password_hash,
           is_profile_complete: false,
-          
-          // FLOW B: Uncomment these if switching back to Email Setup
-          // status: 'UNVERIFIED',
-          // reset_token: setupToken, 
-          // reset_expires: tokenExpiry
         }
       });
 
@@ -228,29 +217,6 @@ export async function POST(request: Request) {
 
       return user;
     });
-
-    // ==========================================
-    // --- EMAIL DISPATCH (FLOW B - DISABLED) ---
-    // ==========================================
-    /*
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const setupLink = `${appUrl}/setup-account?token=${setupToken}`;
-
-    await resend.emails.send({
-      from: 'Medical Center <admin@resend.dev>', 
-      to: email, 
-      subject: `Welcome to the Medical Center - ${role} Account Setup`,
-      html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px;">
-          <h2>Hello ${name},</h2>
-          <p>An administrator has provisioned a <strong>${role}</strong> account for you at the Medical Center.</p>
-          <p>Please click the link below to set your secure password and activate your account:</p>
-          <a href="${setupLink}" style="background-color: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 10px;">Setup My Account</a>
-          <p style="margin-top: 20px; font-size: 12px; color: #666;">This secure link will expire in 7 days.</p>
-        </div>
-      `
-    });
-    */
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password_hash: _ph, ...safeUser } = newUser;
