@@ -32,6 +32,13 @@ interface EmergencyRequest {
   driver: Driver | null;
 }
 
+declare global {
+  interface Window {
+    google: any;
+    webkitAudioContext?: typeof AudioContext;
+  }
+}
+
 // Client-safe Supabase Realtime initializer
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';

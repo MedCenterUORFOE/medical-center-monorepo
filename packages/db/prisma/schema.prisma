@@ -41,7 +41,6 @@ enum EmergencyStatus {
   ARRIVED
   COMPLETED
   CANCELLED
-  ASSIGNED
 }
 
 enum CertificateStatus {
