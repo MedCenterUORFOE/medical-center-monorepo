@@ -9,7 +9,6 @@ const publicRoutes = [
   '/register',
   '/forgot-password',
   '/reset-password',
-  '/setup-account',
 
   // API Routes
   '/api/health',
