@@ -53,7 +53,7 @@ export async function PATCH(
       }
     });
 
-    if (!certRequest) return apiErrors.notFound("Certificate request not found.");
+    if (!certRequest || certRequest.doctor_id !== doctorId) return apiErrors.notFound("Certificate request not found.");
     if (certRequest.status !== "PENDING") return errorResponse("This request has already been processed.", 400);
 
     const patientStatusError = await verifyPatientStatus(certRequest.patient_id);
