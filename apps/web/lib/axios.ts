@@ -32,8 +32,10 @@ api.interceptors.response.use(
   (error) => {
     if (error.response) {
       const { status } = error.response;
-      if (status === 401 || status === 403) {
-        if (typeof window !== 'undefined') {
+      if (status === 401) {
+        const url: string = error.config?.url ?? '';
+        const isAuthCall = url.includes('auth/');
+        if (!isAuthCall && typeof window !== 'undefined' && window.location.pathname !== '/login') {
           // Clear credentials
           localStorage.removeItem('session_token');
           // Redirect to login page
