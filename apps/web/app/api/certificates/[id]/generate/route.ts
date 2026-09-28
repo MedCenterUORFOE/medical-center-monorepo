@@ -20,6 +20,12 @@ export async function POST(
 
     const { id } = params; // Certificate Request ID
 
+    const owned = await prisma.medicalCertificateRequest.findUnique({
+      where: { id },
+      select: { doctor_id: true },
+    });
+    if (!owned || owned.doctor_id !== session.id) return apiErrors.notFound();
+
     // ====================================================================
     // DUPLICATION GUARDRAIL: Check if a certificate was already generated
     // ====================================================================

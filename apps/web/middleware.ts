@@ -9,7 +9,6 @@ const publicRoutes = [
   '/register',
   '/forgot-password',
   '/reset-password',
-  '/setup-account',
 
   // API Routes
   '/api/health',
@@ -29,7 +28,8 @@ const roleAccessMap: Record<string, string[]> = {
   '/admin': ['ADMIN'],
   '/dashboard/doctor': ['DOCTOR'],
   '/dashboard/nurse': ['NURSE'],
-  '/dashboard/pharmacist': ['PHARMACIST'],
+  '/dashboard/pharmacist': ['PHARMACIST', 'NURSE'],
+  '/dashboard/emergency': ['ADMIN', 'DOCTOR', 'NURSE', 'AMBULANCE_DRIVER'],
   '/inventory': ['PHARMACIST', 'NURSE', 'ADMIN'],
 
   // API Routes

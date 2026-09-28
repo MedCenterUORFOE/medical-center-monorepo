@@ -22,6 +22,10 @@ export async function POST(request: Request) {
 
     if (!user) return successResponse(null, 'If an account exists, a new link has been sent.');
 
+    if (user.status === 'SUSPENDED') {
+      return successResponse(null, 'If an account exists, a new link has been sent.');
+    }
+
     if (user.status === 'VERIFIED') {
       return errorResponse('This account is already verified. Please log in.', 400);
     }
