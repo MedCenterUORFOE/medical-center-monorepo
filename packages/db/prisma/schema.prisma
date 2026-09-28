@@ -293,10 +293,13 @@ model Prescription {
   record_id        String   @unique
   doctor_id        String // Maps to Doctor.doctor_id
   issued_timestamp DateTime @default(now())
+  is_fulfilled     Boolean  @default(false)
 
   medical_record MedicalRecord      @relation(fields: [record_id], references: [id])
   doctor         Doctor             @relation(fields: [doctor_id], references: [doctor_id])
   items          PrescriptionItem[]
+
+  @@index([is_fulfilled, issued_timestamp])
 }
 
 // 4. THE PRESCRIPTION ITEM (e.g., "Take 10 Paracetamol")
