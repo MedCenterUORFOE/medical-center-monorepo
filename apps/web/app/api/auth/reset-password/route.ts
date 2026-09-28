@@ -25,7 +25,7 @@ export async function PATCH(request: Request) {
 
     const user = await prisma.user.findUnique({ where: { reset_token: token } });
 
-    if (!user || !user.reset_expires || user.reset_expires < new Date()) {
+    if (!user || !user.reset_expires || user.reset_expires < new Date() || user.status === 'SUSPENDED') {
       return apiErrors.badRequest('Invalid or expired reset token');
     }
 
@@ -38,7 +38,7 @@ export async function PATCH(request: Request) {
         where: { id: user.id },
         data: {
           password_hash: hashedPassword,
-          status: 'VERIFIED', // Activate the account upon password establishment
+          status: user.status === 'UNVERIFIED' ? 'VERIFIED' : user.status, // Activate only unverified accounts
           reset_token: null, 
           reset_expires: null,
         },

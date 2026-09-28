@@ -29,9 +29,13 @@ export async function POST(request: Request) {
       return successResponse(null, 'If an account exists, a reset link has been sent.');
     }
 
+    if (user.status === 'SUSPENDED') {
+      return successResponse(null, 'If an account exists, a reset link has been sent.');
+    }
+
     // Google OAuth users don't have local passwords to reset
     if (!user.password_hash && user.googleId) {
-      return apiErrors.badRequest('This account uses Google Sign-In.');
+      return successResponse(null, 'If an account exists, a reset link has been sent.');
     }
 
     const resetToken = crypto.randomBytes(32).toString('hex');
