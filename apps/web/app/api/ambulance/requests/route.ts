@@ -125,11 +125,14 @@ export async function GET(request: Request) {
     }
 
     const activeRequests = await prisma.emergencyRequest.findMany({
-      where: {
-        status: {
-          in: ['PENDING', 'DISPATCHED', 'ASSIGNED', 'ARRIVED']
-        }
-      },
+      where: session.role === "AMBULANCE_DRIVER"
+        ? {
+            OR: [
+              { status: 'PENDING' },
+              { driver_id: session.id, status: { in: ['DISPATCHED', 'ASSIGNED', 'ARRIVED'] } },
+            ],
+          }
+        : { status: { in: ['PENDING', 'DISPATCHED', 'ASSIGNED', 'ARRIVED'] } },
       include: {
         requester: {
           select: { name: true, phone: true }

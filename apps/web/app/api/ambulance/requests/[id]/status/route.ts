@@ -45,7 +45,7 @@ export async function PATCH(
     
     // Security check: Only the assigned driver can update this request
     if (emergencyRequest.driver_id !== userId) {
-      return apiErrors.unauthorized("You are not assigned to this emergency.");
+      return apiErrors.forbidden("You are not assigned to this emergency.");
     }
 
     if (status === 'COMPLETED') {
