@@ -18,51 +18,43 @@ export async function GET() {
 
     // Fetch prescriptions, medical records, patient details, and medicine inventory batches
     const prescriptions = await prisma.prescription.findMany({
-      include: {
+      where: { is_fulfilled: false },
+      select: {
+        id: true,
+        issued_timestamp: true,
         medical_record: {
-          include: {
-            patient: {
-              include: {
-                user: {
-                  select: { name: true, nic: true }
-                }
-              }
-            },
-            doctor: {
-              include: {
-                staff: {
-                  include: {
-                    user: {
-                      select: { name: true }
-                    }
-                  }
-                }
-              }
-            }
-          }
+          select: {
+            patient: { select: { user: { select: { name: true, nic: true } } } },
+            doctor: { select: { staff: { select: { user: { select: { name: true } } } } } },
+          },
         },
         items: {
-          include: {
+          select: {
+            id: true,
+            prescription_id: true,
+            medicine_id: true,
+            external_medicine_name: true,
+            dosage: true,
+            quantity: true,
+            instructions: true,
+            source: true,
+            dispensations: { select: { quantity: true } },
             medicine: {
-              include: {
+              select: {
+                id: true,
+                name: true,
+                unit: true,
                 inventory_batches: {
-                  where: {
-                    stock_quantity: { gt: 0 },
-                    expiry_date: { gt: currentDate }
-                  },
-                  orderBy: {
-                    expiry_date: 'asc' // FIFO / FEFO: Nearest expiry first
-                  }
-                }
-              }
+                  where: { stock_quantity: { gt: 0 }, expiry_date: { gt: currentDate } },
+                  orderBy: { expiry_date: 'asc' },
+                  select: { id: true, batch_number: true, stock_quantity: true, expiry_date: true },
+                },
+              },
             },
-            dispensations: true
-          }
-        }
+          },
+        },
       },
-      orderBy: {
-        issued_timestamp: 'desc'
-      }
+      orderBy: { issued_timestamp: 'desc' },
     });
 
     // Process and filter active prescriptions on the server layer
