@@ -59,14 +59,14 @@ export async function POST(
     // 5. Fire Push Notification to the Patient
     const emergencyRequest = await prisma.emergencyRequest.findUnique({
       where: { id: requestId },
-      include: { requester: true }
+      include: { requester: { include: { deviceTokens: true } } }
     });
 
-    const patientToken = emergencyRequest?.requester?.fcm_token;
+    const patientTokens = emergencyRequest?.requester?.deviceTokens.map(dt => dt.token) ?? [];
 
-    if (patientToken) {
+    if (patientTokens.length > 0) {
       await sendPushNotification({
-        tokens: patientToken,
+        tokens: patientTokens,
         title: "🚑 Ambulance Dispatched!",
         body: "A driver has accepted your emergency request and is en route.",
         data: {

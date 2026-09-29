@@ -103,7 +103,14 @@ export async function DELETE(request: Request) {
         },
       });
 
-      // ── STEP 3: ANONYMIZE THE USER ROW ──────────────────────────────────────
+      // ── STEP 3: REMOVE DEVICE TOKENS ─────────────────────────────────────────
+      //
+      // FCM tokens live in DeviceToken now, not on User. Delete all of this
+      // user's registered devices so a deleted/anonymized account stops
+      // receiving pushes.
+      await tx.deviceToken.deleteMany({ where: { user_id: userId } });
+
+      // ── STEP 4: ANONYMIZE THE USER ROW ──────────────────────────────────────
       //
       // Keep the row with status SUSPENDED so the audit trail and any remaining
       // clinical FK references stay valid. Clear every PII and credential field,
@@ -124,12 +131,11 @@ export async function DELETE(request: Request) {
           verification_expires: null,
           reset_token: null,
           reset_expires: null,
-          fcm_token: null,
           status: 'SUSPENDED',
         },
       });
 
-      // ── STEP 4: AUDIT LOG ────────────────────────────────────────────────────
+      // ── STEP 5: AUDIT LOG ────────────────────────────────────────────────────
       const ip =
         request.headers.get('x-forwarded-for')?.split(',')[0] ?? 'unknown-ip';
 
