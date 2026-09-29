@@ -94,7 +94,7 @@ export default function LoginScreen() {
            }
         }
         
-        router.push('/dashboard' as any); 
+        router.push('/(tabs)' as any);
 
       } else {
         Alert.alert('Login Failed', data.message || 'Incorrect Email or Password combination!');
@@ -116,7 +116,7 @@ export default function LoginScreen() {
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
 
       if (result.type === 'success') {
-         router.push('/dashboard' as any);
+         router.push('/(tabs)' as any);
       } else if (result.type === 'cancel') {
          console.log("Google Login sequence intentionally aborted by the user constraint.");
       }

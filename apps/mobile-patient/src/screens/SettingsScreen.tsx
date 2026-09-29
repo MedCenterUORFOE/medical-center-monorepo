@@ -18,10 +18,7 @@ import * as SecureStore from 'expo-secure-store';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 import { useAppSettings } from '../context/AppSettingsContext';
-
-const DEFAULT_AVATAR = 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -34,22 +31,7 @@ export default function SettingsScreen() {
     logout,
   } = useAppSettings();
 
-  // Basic Info States (Read-Only from API/Auth)
-  const [fullName, setFullName] = useState('Loading...');
-  const [studentId, setStudentId] = useState('');
-  const [isLoadingInfo, setIsLoadingInfo] = useState(true);
-
-  // Editable Profile States (Saved to AsyncStorage)
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [emergencyContactName, setEmergencyContactName] = useState('');
-  const [emergencyContactPhone, setEmergencyContactPhone] = useState('');
-
-  // Toggles and Custom App Configurations
   const [notifsEnabled, setNotifsEnabled] = useState(true);
-
-  // Modal UI States
-  const [isPhotoSheetVisible, setIsPhotoSheetVisible] = useState(false);
   const [isPinModalVisible, setIsPinModalVisible] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
@@ -59,106 +41,17 @@ export default function SettingsScreen() {
   }, []);
 
   const loadProfileData = async () => {
-    setIsLoadingInfo(true);
     try {
-      // 1. Load details from local storage cache
-      const storedPhone = await AsyncStorage.getItem('phone_number');
-      const storedContactName = await AsyncStorage.getItem('emergency_contact_name');
-      const storedContactPhone = await AsyncStorage.getItem('emergency_contact_phone');
-      const storedAvatar = await AsyncStorage.getItem('avatar_uri');
       const storedNotifs = await AsyncStorage.getItem('absence_notifs_enabled');
-
-      if (storedPhone) setPhoneNumber(storedPhone);
-      if (storedContactName) setEmergencyContactName(storedContactName);
-      if (storedContactPhone) setEmergencyContactPhone(storedContactPhone);
-      if (storedAvatar) setAvatarUri(storedAvatar);
       if (storedNotifs !== null) setNotifsEnabled(storedNotifs === 'true');
-
-      // 2. Load Student Name & ID from patient profile API endpoint
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL;
-      const token = await SecureStore.getItemAsync('userToken');
-      const userId = await SecureStore.getItemAsync('userId');
-
-      if (apiUrl && token && userId) {
-        const response = await fetch(`${apiUrl}/api/profiles/${userId}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (response.ok) {
-          const payload = await response.json();
-          const patientData = payload?.data?.patient;
-          if (patientData) {
-            setFullName(patientData.student?.full_name || patientData.student?.name || patientData.name || 'Student Patient');
-            setStudentId(patientData.student?.university_reg_number || 'N/A');
-          }
-        }
-      }
     } catch (error) {
-      console.warn('Failed to load profile details from API:', error);
-    } finally {
-      setIsLoadingInfo(false);
-    }
-  };
-
-  const handleSaveDetails = async () => {
-    try {
-      await AsyncStorage.setItem('phone_number', phoneNumber.trim());
-      await AsyncStorage.setItem('emergency_contact_name', emergencyContactName.trim());
-      await AsyncStorage.setItem('emergency_contact_phone', emergencyContactPhone.trim());
-      Alert.alert('Details Saved', 'Your personal details have been updated successfully.');
-    } catch (e) {
-      Alert.alert('Save Error', 'Failed to store your profile updates locally.');
+      console.warn('Failed to load settings from API:', error);
     }
   };
 
   const handleNotifsToggle = async (val: boolean) => {
     setNotifsEnabled(val);
     await AsyncStorage.setItem('absence_notifs_enabled', String(val));
-  };
-
-  const handleImagePick = async (useCamera: boolean) => {
-    // 1. Close modal first
-    setIsPhotoSheetVisible(false);
-    
-    // 2. Wait for modal animation to fully close to prevent navigation/rendering clash
-    await new Promise((resolve) => setTimeout(resolve, 350));
-    
-    try {
-      let permissionResult;
-      if (useCamera) {
-        permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      } else {
-        permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      }
-
-      if (!permissionResult.granted) {
-        Alert.alert('Permission Denied', 'Camera and gallery access is required to update your profile photo.');
-        return;
-      }
-
-      const pickerOptions: ImagePicker.ImagePickerOptions = {
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 1,
-      };
-
-      const result = useCamera
-        ? await ImagePicker.launchCameraAsync(pickerOptions)
-        : await ImagePicker.launchImageLibraryAsync(pickerOptions);
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const selectedUri = result.assets[0].uri;
-        setAvatarUri(selectedUri);
-        await AsyncStorage.setItem('avatar_uri', selectedUri);
-      }
-    } catch (e) {
-      Alert.alert('Picker Error', 'An error occurred while launching image selection.');
-    }
   };
 
   const handlePinSetup = async () => {
@@ -219,75 +112,11 @@ export default function SettingsScreen() {
 
       {/* HEADER */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={24} color="#0F172A" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Account & Settings</Text>
-        <View style={{ width: 40 }} />
+        <Text style={styles.headerTitle}>App Settings</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* SECTION 1: PROFILE PICTURE & BASIC INFO */}
-        <View style={styles.avatarCard}>
-          <View style={styles.avatarRing}>
-            <Image source={{ uri: avatarUri || DEFAULT_AVATAR }} style={styles.avatarImage} />
-            <TouchableOpacity
-              style={styles.cameraIconPill}
-              onPress={() => setIsPhotoSheetVisible(true)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="camera" size={18} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
 
-          <Text style={styles.userNameText}>{fullName}</Text>
-          <Text style={styles.userIdText}>{studentId ? `Student ID: ${studentId}` : 'Faculty Student Profile'}</Text>
-        </View>
-
-        {/* SECTION 2: PERSONAL DETAILS */}
-        <View style={styles.settingsSection}>
-          <Text style={styles.sectionTitle}>Personal Details</Text>
-
-          <View style={styles.inputContainer}>
-            <Ionicons name="call-outline" size={20} color="#64748B" style={styles.inputIcon} />
-            <TextInput
-              style={styles.textInput}
-              value={phoneNumber}
-              onChangeText={setPhoneNumber}
-              placeholder="Your Phone Number"
-              placeholderTextColor="#94A3B8"
-              keyboardType="phone-pad"
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Ionicons name="person-outline" size={20} color="#64748B" style={styles.inputIcon} />
-            <TextInput
-              style={styles.textInput}
-              value={emergencyContactName}
-              onChangeText={setEmergencyContactName}
-              placeholder="Emergency Contact Name"
-              placeholderTextColor="#94A3B8"
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Ionicons name="alert-circle-outline" size={20} color="#64748B" style={styles.inputIcon} />
-            <TextInput
-              style={styles.textInput}
-              value={emergencyContactPhone}
-              onChangeText={setEmergencyContactPhone}
-              placeholder="Emergency Contact Number"
-              placeholderTextColor="#94A3B8"
-              keyboardType="phone-pad"
-            />
-          </View>
-
-          <TouchableOpacity style={styles.saveButton} onPress={handleSaveDetails} activeOpacity={0.8}>
-            <Ionicons name="save-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-            <Text style={styles.saveButtonText}>Save Personal Details</Text>
-          </TouchableOpacity>
-        </View>
 
         {/* SECTION 3: SECURITY & APP SETTINGS */}
         <View style={styles.settingsSection}>
@@ -422,37 +251,6 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* ACTION SHEET MODAL: PHOTO OPTIONS */}
-      <Modal
-        visible={isPhotoSheetVisible}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setIsPhotoSheetVisible(false)}
-      >
-        <View style={styles.photoSheetOverlay}>
-          <View style={styles.photoSheetContent}>
-            <Text style={styles.photoSheetTitle}>Update Profile Photo</Text>
-
-            <TouchableOpacity style={styles.photoSheetOption} onPress={() => handleImagePick(true)} activeOpacity={0.7}>
-              <Ionicons name="camera-outline" size={22} color="#0284C7" />
-              <Text style={styles.photoSheetOptionText}>Take Photo</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.photoSheetOption} onPress={() => handleImagePick(false)} activeOpacity={0.7}>
-              <Ionicons name="image-outline" size={22} color="#0284C7" />
-              <Text style={styles.photoSheetOptionText}>Choose from Gallery</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.photoSheetOption, styles.photoSheetCancel]}
-              onPress={() => setIsPhotoSheetVisible(false)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.photoSheetCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }

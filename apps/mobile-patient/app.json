@@ -41,6 +41,23 @@
       ],
       "expo-font",
       "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "colors": {
+            "cropToolbarColor": "#000000",
+            "cropToolbarWidgetColor": "#FFFFFF",
+            "cropImageActiveWidgetColor": "#1B5E55"
+          },
+          "dark": {
+            "colors": {
+              "cropToolbarColor": "#000000",
+              "cropToolbarWidgetColor": "#FFFFFF",
+              "cropImageActiveWidgetColor": "#1B5E55"
+            }
+          }
+        }
+      ],
       "@react-native-community/datetimepicker",
       [
         "expo-location",
