@@ -32,8 +32,8 @@ export async function PATCH(
     const emergencyRequest = await prisma.emergencyRequest.findUnique({
       where: { id: requestId },
       include: { 
-        driver: { include: { user: true } },
-        requester: true
+        driver: { include: { user: { include: { deviceTokens: true } } } },
+        requester: { include: { deviceTokens: true } }
       }
     });
 
@@ -69,10 +69,10 @@ export async function PATCH(
       });
 
       // 4a. Fire Push Notification to the Driver to stand down
-      const driverToken = emergencyRequest.driver?.user?.fcm_token;
-      if (driverToken) {
+      const driverTokens = emergencyRequest.driver?.user?.deviceTokens.map(dt => dt.token) ?? [];
+      if (driverTokens.length > 0) {
         await sendPushNotification({
-          tokens: driverToken,
+          tokens: driverTokens,
           title: "❌ Request Cancelled",
           body: "The emergency request has been cancelled. You are back online.",
           data: {
@@ -84,10 +84,10 @@ export async function PATCH(
     }
 
     // 4b. Fire Push Notification to the Patient to confirm cancellation
-    const patientToken = emergencyRequest.requester?.fcm_token;
-    if (patientToken) {
+    const patientTokens = emergencyRequest.requester?.deviceTokens.map(dt => dt.token) ?? [];
+    if (patientTokens.length > 0) {
       await sendPushNotification({
-        tokens: patientToken,
+        tokens: patientTokens,
         title: "❌ Emergency Cancelled",
         body: reason ? `Cancellation reason: ${reason}` : "Your emergency request has been safely cancelled.",
         data: {

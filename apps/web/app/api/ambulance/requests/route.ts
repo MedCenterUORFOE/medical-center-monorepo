@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       where: { is_available: true },
       include: {
         driver: {
-          include: { user: true }
+          include: { user: { include: { deviceTokens: true } } }
         }
       }
     });
@@ -66,11 +66,10 @@ export async function POST(request: Request) {
       return successResponse(newRequest, "Emergency logged, but no drivers are currently online.", 201);
     }
 
-    // 3. Extract Firebase FCM Tokens
+    // 3. Extract Firebase FCM Tokens (each driver may have multiple devices)
     const tokens: string[] = [];
     availableDrivers.forEach(availability => {
-      const token = availability.driver.user.fcm_token;
-      if (token) tokens.push(token);
+      availability.driver.user.deviceTokens.forEach(dt => tokens.push(dt.token));
     });
 
     // 4. Broadcast via Firebase Cloud Messaging
