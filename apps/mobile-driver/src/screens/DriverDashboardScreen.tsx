@@ -198,8 +198,8 @@ export default function DriverDashboardScreen() {
 
     (async () => {
       try {
-        await ensureNotificationChannelAsync();
-        await syncPushToken();
+        ensureNotificationChannelAsync().catch((err) => console.warn('Channel error:', err));
+        syncPushToken().catch((err) => console.warn('Push sync error:', err));
 
         if (!mounted) {
           return;
@@ -212,7 +212,7 @@ export default function DriverDashboardScreen() {
           refreshNotifications().catch((error) => console.error(error));
         }, 15000);
       } catch (error) {
-        console.error(error);
+        console.error('Driver dashboard initialization error:', error);
         Alert.alert('Unable to load home screen', 'Please sign in again.');
         await clearSessionToken();
         router.replace('/login');

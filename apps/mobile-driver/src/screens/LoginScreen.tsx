@@ -21,6 +21,11 @@ type LoginResponse = {
   message?: string;
   data?: {
     token: string;
+    user?: {
+      id?: string;
+      name?: string;
+      role?: string;
+    };
   };
 };
 
@@ -31,23 +36,25 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSignIn = async () => {
-    const trimmedEmail = email.trim();
+    const trimmedInput = email.trim();
 
-    if (!trimmedEmail || !password.trim()) {
-      Alert.alert('Missing details', 'Enter your email and password to continue.');
+    if (!trimmedInput || !password.trim()) {
+      Alert.alert('Missing details', 'Enter your email or driver ID and password to continue.');
       return;
     }
 
     setIsLoading(true);
 
     try {
+      const isEmail = trimmedInput.includes('@');
+      const loginPayload = isEmail
+        ? { email: trimmedInput, password }
+        : { driver_id: trimmedInput, password };
+
       const response = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: trimmedEmail,
-          password,
-        }),
+        body: JSON.stringify(loginPayload),
       });
 
       const rawBody = await response.text();
@@ -65,6 +72,12 @@ export default function LoginScreen() {
 
       if (!body?.data?.token) {
         Alert.alert('Sign in failed', 'The server did not return a session token.');
+        return;
+      }
+
+      // Check role if backend returned user details
+      if (body.data.user?.role && body.data.user.role !== 'AMBULANCE_DRIVER') {
+        Alert.alert('Access Denied', 'Only registered ambulance drivers can sign in to this app.');
         return;
       }
 
