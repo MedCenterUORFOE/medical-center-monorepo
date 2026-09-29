@@ -104,15 +104,26 @@ export async function PATCH(request: Request) {
 
     await prisma.$transaction(async (tx) => {
       
-      if (validatedData.username || validatedData.phone || validatedData.nic || validatedData.fcm_token) {
+      if (validatedData.username || validatedData.phone || validatedData.nic) {
         await tx.user.update({
           where: { id: userId },
           data: {
             ...(validatedData.username && { username: validatedData.username }), 
             ...(validatedData.phone && { phone: validatedData.phone }),
             ...(validatedData.nic && { nic: validatedData.nic }),
-            ...(validatedData.fcm_token && { fcm_token: validatedData.fcm_token }),
           },
+        });
+      }
+
+      // FCM token now lives on DeviceToken, not User. Upsert by token: the
+      // same device may re-register on every app open, and if a device
+      // switches accounts (logout/login as someone else) the token should
+      // move to the new user rather than error or duplicate.
+      if (validatedData.fcm_token) {
+        await tx.deviceToken.upsert({
+          where: { token: validatedData.fcm_token },
+          update: { user_id: userId },
+          create: { user_id: userId, token: validatedData.fcm_token },
         });
       }
 

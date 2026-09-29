@@ -4,6 +4,7 @@ import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { getUserSession } from '@/lib/auth';
 import { verifyPatientStatus } from '@/lib/patient-verification';
+import { recomputePrescriptionFulfillment } from '@/lib/prescription-fulfillment';
 
 // -----------------------------------------------------------------------------
 // ZOD VALIDATION SCHEMA
@@ -70,6 +71,9 @@ export async function POST(request: Request) {
     if (prescriptionItem.source === "EXTERNAL") {
       return errorResponse("External prescriptions cannot be fulfilled from internal inventory.", 400);
     }
+    if (!prescriptionItem.medicine_id) {
+      return errorResponse("This item has no catalog medicine linked.", 400);
+    }
 
     // 2. Check if it's already fulfilled to prevent double-dispensing
     const alreadyDispensed = prescriptionItem.dispensations.reduce((sum, item) => sum + item.quantity, 0);
@@ -87,25 +91,30 @@ export async function POST(request: Request) {
       
       const createdDispensations = [];
 
+      await tx.$queryRaw`SELECT "id" FROM "PrescriptionItem" WHERE "id" = ${validatedData.prescription_item_id} FOR UPDATE`;
+      const fresh = await tx.dispensedItem.aggregate({
+        where: { prescription_item_id: validatedData.prescription_item_id },
+        _sum: { quantity: true },
+      });
+      if ((fresh._sum.quantity ?? 0) + incomingDispensationTotal > prescriptionItem.quantity) {
+        throw new Error('over-dispense');
+      }
+
       // Loop through the "7+3" split lot payload
       for (const subLot of validatedData.dispensations) {
         
-        // A. Verify the batch exists and has enough stock
-        const batch = await tx.inventoryBatch.findUnique({
-          where: { id: subLot.inventory_batch_id }
+        const drawn = await tx.inventoryBatch.updateMany({
+          where: {
+            id: subLot.inventory_batch_id,
+            medicine_id: prescriptionItem.medicine_id!,
+            expiry_date: { gt: new Date() },
+            stock_quantity: { gte: subLot.quantity },
+          },
+          data: { stock_quantity: { decrement: subLot.quantity } },
         });
-
-        if (!batch || batch.stock_quantity < subLot.quantity) {
-          throw new Error(`Batch ${subLot.inventory_batch_id} has insufficient stock (Available: ${batch?.stock_quantity || 0}, Requested: ${subLot.quantity}).`);
+        if (drawn.count === 0) {
+          throw new Error(`Batch ${subLot.inventory_batch_id} has insufficient stock, is expired, or belongs to a different medicine.`);
         }
-
-        // B. Decrement the physical stock atomically
-        await tx.inventoryBatch.update({
-          where: { id: subLot.inventory_batch_id },
-          data: {
-            stock_quantity: { decrement: subLot.quantity }
-          }
-        });
 
         // C. Log the specific physical item given to the patient
         const dispensedItem = await tx.dispensedItem.create({
@@ -118,6 +127,8 @@ export async function POST(request: Request) {
 
         createdDispensations.push(dispensedItem);
       }
+
+      await recomputePrescriptionFulfillment(tx, prescriptionItem.prescription_id);
 
       // D. Write the Immutable Audit Ledger
       await tx.auditLog.create({
@@ -147,6 +158,10 @@ export async function POST(request: Request) {
     // Catch our custom thrown error from inside the transaction (Insufficient stock)
     if (error instanceof Error && error.message.includes('insufficient stock')) {
       return errorResponse(error.message, 409);
+    }
+
+    if (error instanceof Error && error.message === 'over-dispense') {
+      return errorResponse("Cannot over-dispense this item.", 409);
     }
 
     console.error("Dispensation Fulfillment Error:", error);

@@ -9,8 +9,7 @@ const publicRoutes = [
   '/register',
   '/forgot-password',
   '/reset-password',
-  '/setup-account', 
-  
+
   // API Routes
   '/api/health',
   '/api/auth/login',
@@ -20,7 +19,8 @@ const publicRoutes = [
   '/api/auth/reset-password',
   '/api/auth/verify',
   '/api/auth/resend-verification',
-  '/api/webhooks' // <-- Protected by exact match or sub-directory logic now
+  '/api/webhooks', // <-- Protected by exact match or sub-directory logic now
+  '/api/cron'      // <-- Internal cron endpoints use their own secret checks
 ];
 
 // 2. The VIP List: Specific roles required for specific folders
@@ -29,16 +29,17 @@ const roleAccessMap: Record<string, string[]> = {
   '/admin': ['ADMIN'],
   '/dashboard/doctor': ['DOCTOR'],
   '/dashboard/nurse': ['NURSE'],
-  '/dashboard/pharmacist': ['PHARMACIST'],
+  '/dashboard/pharmacist': ['PHARMACIST', 'NURSE'],
+  '/dashboard/emergency': ['ADMIN', 'DOCTOR', 'NURSE', 'AMBULANCE_DRIVER'],
   '/inventory': ['PHARMACIST', 'NURSE', 'ADMIN'],
-  
+
   // API Routes
   '/api/admin': ['ADMIN'],
-  '/api/doctor': ['DOCTOR'], 
+  '/api/doctor': ['DOCTOR'],
   '/api/nurse': ['NURSE'],
   '/api/inventory': ['PHARMACIST', 'NURSE', 'ADMIN'],
-  '/api/medicines': ['ADMIN', 'DOCTOR', 'NURSE', 'PHARMACIST'], 
-  '/api/dispensations': ['ADMIN', 'NURSE', 'PHARMACIST'],       
+  '/api/medicines': ['ADMIN', 'DOCTOR', 'NURSE', 'PHARMACIST'],
+  '/api/dispensations': ['ADMIN', 'NURSE', 'PHARMACIST'],
 };
 
 export async function middleware(request: NextRequest) {
@@ -52,9 +53,9 @@ export async function middleware(request: NextRequest) {
 
   // --- B. THE BULLETPROOF CHECK ---
   const isApiRoute = pathname.startsWith('/api/');
-  
+
   // FIX: Applies the same exact match OR sub-directory match logic to VIP routes
-  const requiredRoles = Object.entries(roleAccessMap).find(([route]) => 
+  const requiredRoles = Object.entries(roleAccessMap).find(([route]) =>
     pathname === route || pathname.startsWith(route + '/')
   )?.[1];
 
@@ -69,7 +70,7 @@ export async function middleware(request: NextRequest) {
   // --- C. EXTRACT THE TOKEN ---
   let token: string | undefined;
   const authHeader = request.headers.get('authorization');
-  
+
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.substring(7);
   } else {
@@ -102,7 +103,7 @@ export async function middleware(request: NextRequest) {
 
     // --- G. PASS THE USER ID TO THE BACKEND ---
     const requestHeaders = new Headers(request.headers);
-    
+
     requestHeaders.set('x-user-id', payload.id as string);
     requestHeaders.set('x-user-role', payload.role as string);
 
