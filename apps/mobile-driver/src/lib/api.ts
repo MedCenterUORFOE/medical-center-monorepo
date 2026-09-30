@@ -18,7 +18,8 @@ const getDevUrl = (): string | null => {
 const API_BASE_URL_CANDIDATES = [
   process.env.EXPO_PUBLIC_API_URL,
   getDevUrl(),
-  'http://10.28.219.242:3000', // Current LAN IP
+  'http://10.239.65.242:3000', // Current LAN IP
+  'http://10.28.219.242:3000',
   'http://10.238.170.242:3000',
   'http://192.168.8.147:3000',
   'http://localhost:3000',
@@ -96,7 +97,7 @@ async function getWorkingAxiosInstance(): Promise<AxiosInstance> {
   for (const baseUrl of API_BASE_URL_CANDIDATES) {
     try {
       const probe = buildAxiosInstance(baseUrl);
-      await probe.get('/api/health', { timeout: 8000 });
+      await probe.get('/api/health', { timeout: 2000 });
       _axiosInstance = probe;
       _activeBaseUrl = baseUrl;
       console.log(`[api] Connected to ${baseUrl}`);
