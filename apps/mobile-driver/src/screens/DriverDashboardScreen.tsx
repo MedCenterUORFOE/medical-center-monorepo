@@ -269,11 +269,11 @@ export default function DriverDashboardScreen() {
       setPayload((current) =>
         current
           ? {
-              ...current,
-              availability: {
-                is_available: body?.data?.is_available ?? nextAvailability,
-              },
-            }
+            ...current,
+            availability: {
+              is_available: body?.data?.is_available ?? nextAvailability,
+            },
+          }
           : current
       );
       setNotificationText(body?.message || (nextAvailability ? 'You are now online.' : 'You are now offline.'));
@@ -301,15 +301,15 @@ export default function DriverDashboardScreen() {
             ? { method: 'POST' }
             : action === 'cancel'
               ? {
-                  method: 'PATCH',
-                  body: JSON.stringify({ reason: 'Cancelled from the driver app.' }),
-                }
+                method: 'PATCH',
+                body: JSON.stringify({ reason: 'Cancelled from the driver app.' }),
+              }
               : {
-                  method: 'PATCH',
-                  body: JSON.stringify({
-                    status: action === 'status-arrived' ? 'ARRIVED' : 'COMPLETED',
-                  }),
-                };
+                method: 'PATCH',
+                body: JSON.stringify({
+                  status: action === 'status-arrived' ? 'ARRIVED' : 'COMPLETED',
+                }),
+              };
 
         const response = await apiFetch(endpoint, init);
         const body = await parseApiResponse<unknown>(response);
@@ -423,16 +423,16 @@ export default function DriverDashboardScreen() {
       setPayload((current) =>
         current
           ? {
-              ...current,
-              driver: {
-                ...current.driver,
-                user: {
-                  ...current.driver.user,
-                  name: trimmedName || current.driver.user.name,
-                  phone: trimmedPhone || null,
-                },
+            ...current,
+            driver: {
+              ...current.driver,
+              user: {
+                ...current.driver.user,
+                name: trimmedName || current.driver.user.name,
+                phone: trimmedPhone || null,
               },
-            }
+            },
+          }
           : current
       );
       setNotificationText(body?.message || 'Profile details saved.');
@@ -515,7 +515,7 @@ export default function DriverDashboardScreen() {
           <Pressable
             style={[styles.tabButton, isTabNotifications && styles.tabButtonActive]}
             onPress={() => setActiveTab('notifications')}>
-            <Text style={[styles.tabButtonText, isTabNotifications && styles.tabButtonTextActive]}>Notifications</Text>
+            <Text style={[styles.tabButtonText, isTabNotifications && styles.tabButtonTextActive]}>Notification history</Text>
           </Pressable>
           <Pressable style={[styles.tabButton, isTabProfile && styles.tabButtonActive]} onPress={() => setActiveTab('profile')}>
             <Text style={[styles.tabButtonText, isTabProfile && styles.tabButtonTextActive]}>Profile</Text>
@@ -642,7 +642,7 @@ export default function DriverDashboardScreen() {
         {isTabNotifications ? (
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Notifications</Text>
+              <Text style={styles.sectionTitle}>Notification history</Text>
               <Text style={styles.badgeText}>{unreadCount} unread</Text>
             </View>
             {notifications.length ? (
