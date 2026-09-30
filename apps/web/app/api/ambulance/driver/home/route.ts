@@ -19,7 +19,7 @@ export async function GET(request: Request) {
             name: true,
             email: true,
             phone: true,
-            fcm_token: true,
+            deviceTokens: { select: { token: true } },
           },
         },
       },

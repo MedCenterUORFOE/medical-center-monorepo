@@ -13,7 +13,7 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#0056B3', // Professional medical blue active state
+        tabBarActiveTintColor: '#1B5E55', // Professional medical primary
         tabBarInactiveTintColor: '#8E8E93', // Muted neutral gray inactive state
         tabBarStyle: {
           backgroundColor: '#FFFFFF',
@@ -37,7 +37,7 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="dashboard"
+        name="index"
         options={{
           title: 'Home',
           tabBarIcon: ({ color, focused }) => (
@@ -45,7 +45,7 @@ export default function TabLayout() {
           ),
           tabBarButton: (props) => (
             <Pressable
-              {...props}
+              {...(props as any)}
               onPress={(e) => {
                 triggerHaptic();
                 props.onPress?.(e);
@@ -55,15 +55,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="appointment"
+        name="messages"
         options={{
-          title: 'Appointment',
+          title: 'Messages',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={22} color={color} />
+            <Ionicons name={focused ? 'chatbubbles' : 'chatbubbles-outline'} size={22} color={color} />
           ),
           tabBarButton: (props) => (
             <Pressable
-              {...props}
+              {...(props as any)}
               onPress={(e) => {
                 triggerHaptic();
                 props.onPress?.(e);
@@ -73,15 +73,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="sos"
+        name="profile"
         options={{
-          title: 'SOS',
+          title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'alert-circle' : 'alert-circle-outline'} size={22} color={color} />
+            <Ionicons name={focused ? 'person-circle' : 'person-circle-outline'} size={24} color={color} />
           ),
           tabBarButton: (props) => (
             <Pressable
-              {...props}
+              {...(props as any)}
               onPress={(e) => {
                 triggerHaptic();
                 props.onPress?.(e);
@@ -93,13 +93,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Account',
+          title: 'App Settings',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={22} color={color} />
+            <Ionicons name={focused ? 'settings' : 'settings-outline'} size={22} color={color} />
           ),
           tabBarButton: (props) => (
             <Pressable
-              {...props}
+              {...(props as any)}
               onPress={(e) => {
                 triggerHaptic();
                 props.onPress?.(e);
@@ -108,6 +108,13 @@ export default function TabLayout() {
           ),
         }}
       />
+
+      {/* Hide the old unused tabs from the bottom navigation bar */}
+      <Tabs.Screen name="dashboard" options={{ href: null }} />
+      <Tabs.Screen name="appointment" options={{ href: null }} />
+      <Tabs.Screen name="sos" options={{ href: null }} />
+      <Tabs.Screen name="prescriptions" options={{ href: null }} />
+      <Tabs.Screen name="records" options={{ href: null }} />
     </Tabs>
   );
 }

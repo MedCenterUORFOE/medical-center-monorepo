@@ -243,11 +243,11 @@ export default function PatientDashboard() {
 
   const callHotline = async () => {
     try {
-      const canOpen = await Linking.canOpenURL('tel:1990');
+      const canOpen = await Linking.canOpenURL('tel:0123456789');
       if (canOpen) {
-        await Linking.openURL('tel:1990');
+        await Linking.openURL('tel:0123456789');
       } else {
-        Alert.alert('Unavailable', 'This device cannot place phone calls.');
+        Alert.alert('Emergency Hotline', 'Please dial 0123456789 directly. (This device cannot auto-dial.)');
       }
     } catch (e) {
       console.error('Failed to open dialer:', e);
@@ -285,7 +285,21 @@ export default function PatientDashboard() {
       const responseBody = await response.json();
 
       if (response.status === 201 || responseBody?.success === true) {
+        const reqId = responseBody?.data?.id;
+        const serverMsg = responseBody?.message || "";
+        
+        if (serverMsg.toLowerCase().includes("no driver")) {
+          callHotline();
+          return;
+        }
+        
+        if (reqId) {
+          await AsyncStorage.setItem('activeEmergencyRequestId', reqId);
+          await AsyncStorage.setItem('activeEmergencyStatus', 'PENDING');
+        }
+        
         Alert.alert('Success', 'SOS Sent Successfully! We are finding the nearest ambulance.');
+        router.push('/emergency' as any);
       } else {
         const errorMessage = responseBody?.message || 'Unable to dispatch ambulance.';
         Alert.alert(
@@ -417,14 +431,14 @@ export default function PatientDashboard() {
             <View style={styles.gridSectionSection}>
               <Text style={styles.sectionHeadingTitleMainLabel}>Quick Actions</Text>
               <View style={styles.gridMatrixRowWrapper}>
-                <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/book-appointment' as any)}>
+                <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/(tabs)/appointment' as any)}>
                   <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: '#E0F2FE' }]}>
                     <Feather name="calendar" size={22} color="#0284C7" />
                   </View>
                   <Text style={styles.actionCardLabelContentString}>Book Appointment</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/prescriptions' as any)}>
+                <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/(tabs)/prescriptions' as any)}>
                   <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: '#FDE8E8' }]}>
                     <FontAwesome5 name="pills" size={20} color="#DC2626" />
                   </View>
@@ -433,34 +447,19 @@ export default function PatientDashboard() {
               </View>
 
               <View style={styles.gridMatrixRowWrapper}>
-                <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/records' as any)}>
+                <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/(tabs)/records' as any)}>
                   <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: '#DCFCE7' }]}>
                     <Ionicons name="document-text-outline" size={22} color="#16A34A" />
                   </View>
                   <Text style={styles.actionCardLabelContentString}>Medical Records</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
-                  style={styles.prominentEmergencyCard} 
-                  onPress={() => setIsConfirmEmergencyModalVisible(true)}
-                  activeOpacity={0.8}
-                >
-                  <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: 'rgba(255, 255, 255, 0.25)' }]}>
-                    <Ionicons name="alert-circle" size={24} color="#FFFFFF" />
-                  </View>
-                  <Text style={[styles.actionCardLabelContentString, { color: '#FFFFFF', fontWeight: 'bold' }]}>Emergency SOS</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.gridMatrixRowWrapper}>
                 <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/academic-submission' as any)}>
                   <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: '#F0F9FF' }]}>
                     <Feather name="book-open" size={20} color="#0284C7" />
                   </View>
                   <Text style={styles.actionCardLabelContentString}>Submit to Lecturer</Text>
                 </TouchableOpacity>
-
-                <View style={{ width: '48%' }} />
               </View>
             </View>
 
@@ -566,23 +565,18 @@ export default function PatientDashboard() {
             <View style={{ height: 120 }} />
           </ScrollView>
 
-          {/* ── 5. GLOBAL PANIC EMERGENCY FOOTER ── */}
-          <View style={styles.emergencyBottomNavigationFixedLayerContainerBar}>
-            <View style={styles.progressRingOuterContainerBackgroundBox}>
-              <Animated.View style={[styles.progressRingInflationLiquidBar, { width: progressWidth }]} />
-            </View>
-            <Animated.View style={{ transform: [{ scale: scaleAnim }], width: '100%' }}>
-              <TouchableOpacity
-                style={styles.massivePanicRedButtonCircleElement}
-                onPressIn={handleEmergencyPressIn}
-                onPressOut={handleEmergencyPressOut}
-                activeOpacity={0.9}
-              >
-                <FontAwesome5 name="ambulance" size={18} color="#FFFFFF" style={{ marginBottom: 4 }} />
-                <Text style={styles.panicButtonLabelTextContent}>TRIGGER EMERGENCY</Text>
-                <Text style={styles.panicButtonHoldLabelInstructionsSubText}>Hold for 3 seconds to confirm</Text>
-              </TouchableOpacity>
-            </Animated.View>
+          {/* ── 5. NEW GLOBAL TRIGGER EMERGENCY FOOTER ── */}
+          <View style={styles.newEmergencyFooter}>
+            <TouchableOpacity
+              style={styles.newEmergencyButton}
+              onPress={() => setIsConfirmEmergencyModalVisible(true)}
+              activeOpacity={0.85}
+            >
+              <View style={styles.newEmergencyIconWrap}>
+                <Ionicons name="alert" size={24} color="#DC2626" />
+              </View>
+              <Text style={styles.newEmergencyButtonText}>TRIGGER EMERGENCY</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -685,29 +679,14 @@ const styles = StyleSheet.create({
   outlinedButtonLabelTextContentString: { color: '#1B5E55', fontSize: 14, fontWeight: 'bold' },
   filledLightRedCancelActionButtonElement: { width: '48%', height: 45, backgroundColor: '#FEE2E2', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   filledCancelButtonLabelTextContentString: { color: '#DC2626', fontSize: 14, fontWeight: 'bold' },
-  emergencyBottomNavigationFixedLayerContainerBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFFFFF', paddingHorizontal: 24, paddingTop: 12, paddingBottom: Platform.OS === 'ios' ? 34 : 20, borderTopLeftRadius: 24, borderTopRightRadius: 24, elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.15, shadowRadius: 10, alignItems: 'center' },
-  progressRingOuterContainerBackgroundBox: { width: '100%', height: 4, backgroundColor: '#E5E7EB', borderRadius: 2, marginBottom: 12, overflow: 'hidden' },
-  progressRingInflationLiquidBar: { height: '100%', backgroundColor: '#EF4444' },
-  massivePanicRedButtonCircleElement: { width: '100%', backgroundColor: '#DC2626', borderRadius: 16, paddingVertical: 14, justifyContent: 'center', alignItems: 'center', elevation: 2 },
-  panicButtonLabelTextContent: { color: '#FFFFFF', fontSize: 15, fontWeight: '900', letterSpacing: 0.5 },
-  panicButtonHoldLabelInstructionsSubText: { color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '500', marginTop: 2 },
+  newEmergencyFooter: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFFFFF', paddingHorizontal: 24, paddingTop: 16, paddingBottom: Platform.OS === 'ios' ? 34 : 24, borderTopLeftRadius: 30, borderTopRightRadius: 30, elevation: 25, shadowColor: '#DC2626', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.15, shadowRadius: 15, alignItems: 'center', borderTopWidth: 1, borderColor: '#FEE2E2' },
+  newEmergencyButton: { flexDirection: 'row', width: '100%', backgroundColor: '#DC2626', borderRadius: 20, paddingVertical: 16, paddingHorizontal: 20, justifyContent: 'center', alignItems: 'center', elevation: 8, shadowColor: '#991B1B', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 10 },
+  newEmergencyIconWrap: { backgroundColor: '#FFFFFF', borderRadius: 12, width: 36, height: 36, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  newEmergencyButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: '900', letterSpacing: 1 },
   
   timelineClinicalLogCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, marginBottom: 14, borderLeftWidth: 4, borderLeftColor: '#1B5E55', elevation: 2 },
   timelineDateTextHeadingLabel: { fontSize: 12, fontWeight: 'bold', color: '#1B5E55', textTransform: 'uppercase' },
   clinicalDiagnosisValueTextString: { fontSize: 17, fontWeight: 'bold', color: '#111111', marginTop: 4, marginBottom: 8 },
-
-  prominentEmergencyCard: {
-    backgroundColor: '#DC2626',
-    width: '48%',
-    borderRadius: 18,
-    padding: 18,
-    alignItems: 'flex-start',
-    elevation: 5,
-    shadowColor: '#DC2626',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',

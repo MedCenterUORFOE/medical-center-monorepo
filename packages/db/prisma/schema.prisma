@@ -77,7 +77,6 @@ model User {
   profile_picture      String?
   reset_token          String?    @unique // For password recovery
   reset_expires        DateTime? // For password recovery
-  fcm_token           String?
 
   // --- FIXED RELATION NAMES (CamelCase to match API queries) ---
   // ISA Subtypes
@@ -91,10 +90,29 @@ model User {
   emergencyRequests EmergencyRequest[]
   notifications     Notification[]
   auditLogs         AuditLog[] // Added for Compliance & Security
+
   
   // --- NEW: SYSTEM CONFIG RELATIONS ---
   created_notices   SystemNotice[]
   updated_settings  SystemSetting[]
+  deviceTokens       DeviceToken[]
+}
+
+// -----------------------------------------------------------------------------
+// PUSH NOTIFICATION DEVICE TOKENS
+// -----------------------------------------------------------------------------
+
+model DeviceToken {
+  id         String   @id @default(uuid())
+  user_id    String
+  token      String   @unique // FCM tokens are globally unique per device install
+  platform   String?  // e.g. "ios", "android", "web" — optional, handy for debugging
+  created_at DateTime @default(now())
+  last_seen  DateTime @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
 }
 
 // -----------------------------------------------------------------------------
@@ -467,6 +485,20 @@ model Notification {
   sent_at    DateTime @default(now())
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model FailedNotification {
+  id            String   @id @default(uuid())
+  user_id       String
+  title         String
+  body          String
+  data          Json?
+  attempt_count Int      @default(1)
+  last_error    String?
+  created_at    DateTime @default(now())
+  last_attempt  DateTime @updatedAt
+
+  @@index([attempt_count])
 }
 
 // -----------------------------------------------------------------------------

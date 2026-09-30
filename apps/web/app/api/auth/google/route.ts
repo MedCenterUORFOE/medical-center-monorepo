@@ -6,9 +6,7 @@ import { checkRateLimit } from '@/lib/rate-limiter';
 import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 
 const googleClient = new OAuth2Client(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  'postmessage' 
+  process.env.GOOGLE_CLIENT_ID
 );
 
 export async function POST(request: NextRequest) {
@@ -22,24 +20,29 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { code } = body;
+    const { idToken } = body;
 
-    if (!code) {
-      return apiErrors.badRequest('OAuth authorization code is required');
+    if (!idToken || typeof idToken !== 'string') {
+      return apiErrors.badRequest('Google ID token is required');
     }
 
-    // 1. Exchange the authorization code for Google Tokens
-    const { tokens } = await googleClient.getToken(code);
-    
-    // 2. Verify the ID token to extract the user's Google profile
-    const ticket = await googleClient.verifyIdToken({
-      idToken: tokens.id_token!,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
+    let ticket;
+    try {
+      // 1. Verify the ID token provided by the client's SDK
+      ticket = await googleClient.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+    } catch (e) {
+      return apiErrors.unauthorized('Invalid Google ID token');
+    }
     
     const payload = ticket.getPayload();
     if (!payload || !payload.email) {
       return apiErrors.unauthorized('Invalid Google token payload');
+    }
+    if (payload.email_verified !== true) {
+      return apiErrors.unauthorized('Google email not verified');
     }
 
     const { email, name, picture, sub: googleId } = payload;
@@ -102,6 +105,7 @@ export async function POST(request: NextRequest) {
 
     // 5. Set the token as a secure HttpOnly cookie & return safe user data
     const response = successResponse({
+      token: sessionToken,
       user: {
         id: user.id,
         email: user.email,

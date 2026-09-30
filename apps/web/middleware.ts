@@ -19,7 +19,8 @@ const publicRoutes = [
   '/api/auth/reset-password',
   '/api/auth/verify',
   '/api/auth/resend-verification',
-  '/api/webhooks' // <-- Protected by exact match or sub-directory logic now
+  '/api/webhooks', // <-- Protected by exact match or sub-directory logic now
+  '/api/cron'      // <-- Internal cron endpoints use their own secret checks
 ];
 
 // 2. The VIP List: Specific roles required for specific folders
