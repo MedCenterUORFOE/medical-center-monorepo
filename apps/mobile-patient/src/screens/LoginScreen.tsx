@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { 
+import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator, Image 
+  KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator, Image
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context'; 
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAppSettings } from '../context/AppSettingsContext';
 
 // Import libraries for Google Login Web Overlays
 import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
+// NOTE: 'expo-linking' is only needed by the disabled redirect-based Google login
+// (see handleGoogleLogin below). Re-enable this import together with that code.
+// import * as Linking from 'expo-linking';
 
 // Completes the auth session context if the app was closed during login redirect flows
 WebBrowser.maybeCompleteAuthSession();
@@ -33,7 +35,7 @@ export default function LoginScreen() {
       try {
         const hasLoggedInOnce = await AsyncStorage.getItem('hasLoggedInOnce');
         const token = await SecureStore.getItemAsync('userToken');
-        
+
         if (hasLoggedInOnce === 'true' && token && biometricsEnabled) {
           const success = await authenticateWithBiometrics();
           if (success) {
@@ -47,7 +49,6 @@ export default function LoginScreen() {
     checkAutoLogin();
   }, [biometricsEnabled]);
 
-  // --- Function to handle standard Email/Password Login Navigation Flow ---
   // --- Function to handle standard Email/Password Login Navigation Flow ---
   const handleLogin = async () => {
     if (!email || !password) {
@@ -67,33 +68,33 @@ export default function LoginScreen() {
       console.log("🟢 BACKEND LOGIN RESPONSE:", JSON.stringify(data, null, 2));
 
       if (response.ok || response.status === 200 || response.status === 201) {
-        
+
         // ✅ නිවැරදි කිරීම: 'data.data' ඇතුළෙන් අදාළ තොරතුරු ඇදගැනීම
         const activeUserId = data.data?.user?.id;
         const activeToken = data.data?.token;
-        
+
         if (activeUserId) {
-           await SecureStore.setItemAsync('userId', String(activeUserId));
-           await AsyncStorage.setItem('userId', String(activeUserId));
+          await SecureStore.setItemAsync('userId', String(activeUserId));
+          await AsyncStorage.setItem('userId', String(activeUserId));
         } else {
-           console.warn("⚠️ Warning: User ID not found in data.data.user.id");
+          console.warn("⚠️ Warning: User ID not found in data.data.user.id");
         }
 
         // ✅ නිවැරදි කිරීම: Token එක Save කිරීම
         if (activeToken) {
-           await SecureStore.setItemAsync('userToken', String(activeToken));
-           await AsyncStorage.setItem('userToken', String(activeToken));
+          await SecureStore.setItemAsync('userToken', String(activeToken));
+          await AsyncStorage.setItem('userToken', String(activeToken));
         }
 
         if (activeUserId && activeToken) {
-           await AsyncStorage.setItem('hasLoggedInOnce', 'true');
-           // Enable biometrics by default on first successful login if not configured
-           const savedBio = await AsyncStorage.getItem('biometricsEnabled');
-           if (savedBio === null) {
-             await setBiometricsEnabled(true);
-           }
+          await AsyncStorage.setItem('hasLoggedInOnce', 'true');
+          // Enable biometrics by default on first successful login if not configured
+          const savedBio = await AsyncStorage.getItem('biometricsEnabled');
+          if (savedBio === null) {
+            await setBiometricsEnabled(true);
+          }
         }
-        
+
         router.push('/(tabs)' as any);
 
       } else {
@@ -109,7 +110,17 @@ export default function LoginScreen() {
 
   // --- Function to handle Google SSO Login Cloud Handshake ---
   const handleGoogleLogin = async () => {
-<<<<<<< Updated upstream
+    // TODO: Google sign-in is temporarily disabled on the app side.
+    // The backend has moved from the browser-redirect (code) flow to the
+    // ID-token flow, so the redirect-based implementation below no longer
+    // matches the API. Re-implement using the ID-token flow (see the
+    // frontend implementation guide) before re-enabling.
+    Alert.alert(
+      'Coming soon',
+      'Google sign-in will be available in an upcoming update. Please sign in with your email and password.'
+    );
+
+    /* Previous redirect-based implementation (kept for reference):
     try {
       const redirectUrl = Linking.createURL('/dashboard');
       const authUrl = `${API_URL}/api/auth/google?redirect=${encodeURIComponent(redirectUrl)}`;
@@ -125,18 +136,13 @@ export default function LoginScreen() {
       console.log("Google Login Compilation Error: ", error);
       Alert.alert("Authentication Error", "Something went critically wrong attempting to link your Google Workspace identity.");
     }
-=======
-    Alert.alert(
-      'Coming soon', 
-      'Google sign-in will be available in an upcoming update. Please sign in with your email and password.'
-    );
->>>>>>> Stashed changes
+    */
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        
+
         {/* --- Top Header Section --- */}
         <View style={styles.headerSection}>
           <Text style={styles.headerTitle}>Welcome back</Text>
@@ -146,24 +152,24 @@ export default function LoginScreen() {
         {/* --- Bottom White Card Layout Section --- */}
         <View style={styles.bottomCard}>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-            
+
             <View style={styles.innerWhiteBox}>
-              
+
               <Text style={styles.label}>Email</Text>
-              <TextInput 
-                style={styles.input} 
-                value={email} 
-                onChangeText={setEmail} 
-                keyboardType="email-address" 
-                autoCapitalize="none" 
+              <TextInput
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
               />
-              
+
               <Text style={styles.label}>Password</Text>
-              <TextInput 
-                style={styles.input} 
-                value={password} 
-                onChangeText={setPassword} 
-                secureTextEntry 
+              <TextInput
+                style={styles.input}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
               />
 
               <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={isLoading}>
@@ -185,9 +191,9 @@ export default function LoginScreen() {
 
             {/* --- Standard Guideline Google Login Button Elements --- */}
             <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin}>
-              <Image 
-                source={{ uri: 'https://img.icons8.com/color/48/000000/google-logo.png' }} 
-                style={styles.googleIconImage} 
+              <Image
+                source={{ uri: 'https://img.icons8.com/color/48/000000/google-logo.png' }}
+                style={styles.googleIconImage}
               />
               <Text style={styles.googleButtonText}>Continue with Google</Text>
             </TouchableOpacity>
@@ -226,31 +232,31 @@ const styles = StyleSheet.create({
   dividerContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 30 },
   dividerLine: { flex: 1, height: 1, backgroundColor: 'rgba(0, 0, 0, 0.54)' },
   dividerText: { marginHorizontal: 10, color: 'rgba(0, 0, 0, 0.54)', fontSize: 14 },
-  googleButton: { 
-    flexDirection: 'row', 
-    backgroundColor: '#FFFFFF', 
-    borderRadius: 15, 
-    height: 55, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginBottom: 30, 
+  googleButton: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    height: 55,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 30,
     borderWidth: 1,
-    borderColor: '#E0E0E0', 
-    elevation: 2, 
-    shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 1 }, 
-    shadowOpacity: 0.1, 
-    shadowRadius: 3 
+    borderColor: '#E0E0E0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3
   },
-  googleIconImage: { 
-    width: 24, 
+  googleIconImage: {
+    width: 24,
     height: 24,
-    marginRight: 12 
+    marginRight: 12
   },
-  googleButtonText: { 
-    color: '#757575', 
-    fontSize: 16, 
-    fontWeight: '600' 
+  googleButtonText: {
+    color: '#757575',
+    fontSize: 16,
+    fontWeight: '600'
   },
   footerContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   footerText: { color: 'rgba(0, 0, 0, 0.87)', fontSize: 15 },
