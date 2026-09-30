@@ -109,6 +109,7 @@ export default function LoginScreen() {
 
   // --- Function to handle Google SSO Login Cloud Handshake ---
   const handleGoogleLogin = async () => {
+<<<<<<< Updated upstream
     try {
       const redirectUrl = Linking.createURL('/dashboard');
       const authUrl = `${API_URL}/api/auth/google?redirect=${encodeURIComponent(redirectUrl)}`;
@@ -124,6 +125,12 @@ export default function LoginScreen() {
       console.log("Google Login Compilation Error: ", error);
       Alert.alert("Authentication Error", "Something went critically wrong attempting to link your Google Workspace identity.");
     }
+=======
+    Alert.alert(
+      'Coming soon', 
+      'Google sign-in will be available in an upcoming update. Please sign in with your email and password.'
+    );
+>>>>>>> Stashed changes
   };
 
   return (
