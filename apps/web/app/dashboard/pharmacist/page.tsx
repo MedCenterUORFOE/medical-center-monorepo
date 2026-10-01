@@ -256,9 +256,9 @@ export default function PharmacistDashboard() {
   const isSatisfied = selectedItem ? totalAllocated === selectedItem.remaining_qty : false;
 
   return (
-    <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#07131a] text-slate-100 flex flex-col font-sans">
       {/* Header Bar */}
-      <header className="bg-[#111827] border-b border-slate-800 px-6 py-4 flex items-center justify-between shrink-0">
+      <header className="bg-[#0d1726]/85 border-b border-slate-700/80 px-6 py-4 flex items-center justify-between shrink-0 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-emerald-500 rounded-lg text-white">
             <Pill className="w-6 h-6" />
@@ -297,7 +297,7 @@ export default function PharmacistDashboard() {
       {/* Main Workspace Layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Side Column: Awaiting Fulfillment Feed */}
-        <aside className="w-80 border-r border-slate-800 bg-[#0f1422] p-5 flex flex-col gap-4 shrink-0 overflow-y-auto">
+        <aside className="w-80 border-r border-slate-700/80 bg-[#0b1520]/80 p-5 flex flex-col gap-4 shrink-0 overflow-y-auto backdrop-blur-sm">
           <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Awaiting Fulfillment</h3>
             <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
@@ -356,7 +356,7 @@ export default function PharmacistDashboard() {
         </aside>
 
         {/* Right Work Area: Detailed prescription view + Lot-by-lot deduction split */}
-        <main className="flex-1 bg-[#0b0f19] p-6 overflow-hidden flex gap-6">
+        <main className="flex-1 bg-[#08131c] p-6 overflow-hidden flex gap-6">
           {/* Floating Toast */}
           {toast && (
             <div
