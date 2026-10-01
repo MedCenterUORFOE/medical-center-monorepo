@@ -205,9 +205,9 @@ export default function NurseDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#07131a] text-slate-100 flex flex-col font-sans">
       {/* Header Bar */}
-      <header className="bg-[#111827] border-b border-slate-800 px-6 py-4 flex items-center justify-between shrink-0">
+      <header className="bg-[#0d1726]/85 border-b border-slate-700/80 px-6 py-4 flex items-center justify-between shrink-0 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-emerald-500 rounded-lg text-white">
             <Activity className="w-6 h-6" />
@@ -244,7 +244,7 @@ export default function NurseDashboard() {
       {/* Main Workspace Layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Side Pane: Patient Search */}
-        <aside className="w-80 border-r border-slate-800 bg-[#0f1422] p-5 flex flex-col gap-5 shrink-0 overflow-y-auto">
+        <aside className="w-80 border-r border-slate-700/80 bg-[#0b1520]/80 p-5 flex flex-col gap-5 shrink-0 overflow-y-auto backdrop-blur-sm">
           <div>
             <h3 className="text-sm font-semibold text-slate-300 mb-2">Search Patient</h3>
             <div className="relative">
@@ -316,7 +316,7 @@ export default function NurseDashboard() {
         </aside>
 
         {/* Right Side Pane: Detailed View / Form Editor */}
-        <main className="flex-1 bg-[#0b0f19] p-6 md:p-8 flex flex-col overflow-y-auto relative">
+        <main className="flex-1 bg-[#08131c] p-6 md:p-8 flex flex-col overflow-y-auto relative">
           {/* Floating Toast */}
           {toast && (
             <div

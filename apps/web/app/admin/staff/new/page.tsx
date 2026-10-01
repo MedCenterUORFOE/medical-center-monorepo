@@ -464,9 +464,9 @@ export default function AdminDashboardPage() {
   const isDriverRole = role === 'AMBULANCE_DRIVER';
 
   return (
-    <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex font-sans">
+    <div className="min-h-screen bg-[#07131a] text-slate-100 flex font-sans">
       {/* Admin Sidebar Navigation */}
-      <aside className="w-64 bg-[#111827] border-r border-slate-800 hidden md:flex flex-col p-6 shrink-0">
+      <aside className="w-64 bg-[#0d1726]/85 border-r border-slate-700/80 hidden md:flex flex-col p-6 shrink-0 backdrop-blur-sm">
         <div className="flex items-center gap-3 mb-8">
           <div className="p-2 bg-emerald-500 rounded-lg text-white">
             <Shield className="w-6 h-6" />
