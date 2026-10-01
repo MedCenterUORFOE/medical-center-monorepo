@@ -1,0 +1,27 @@
+{
+  "cli": {
+    "version": ">= 24.8.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "DATABASE_URL": "postgresql://dummy:dummy@localhost/dummy"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "DATABASE_URL": "postgresql://dummy:dummy@localhost/dummy"
+      }
+    },
+    "production": {
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
