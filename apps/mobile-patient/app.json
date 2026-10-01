@@ -72,7 +72,13 @@
           "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to send ambulances."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": { "usesCleartextTraffic": true }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
