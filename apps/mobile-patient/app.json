@@ -19,7 +19,13 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "package": "com.risitha.mobilepatientv2"
     },
     "web": {
       "output": "static",
@@ -41,6 +47,23 @@
       ],
       "expo-font",
       "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "colors": {
+            "cropToolbarColor": "#000000",
+            "cropToolbarWidgetColor": "#FFFFFF",
+            "cropImageActiveWidgetColor": "#1B5E55"
+          },
+          "dark": {
+            "colors": {
+              "cropToolbarColor": "#000000",
+              "cropToolbarWidgetColor": "#FFFFFF",
+              "cropImageActiveWidgetColor": "#1B5E55"
+            }
+          }
+        }
+      ],
       "@react-native-community/datetimepicker",
       [
         "expo-location",
@@ -54,6 +77,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e504073e-949c-424e-a9d6-204779e7ce01"
+      }
     }
   }
 }

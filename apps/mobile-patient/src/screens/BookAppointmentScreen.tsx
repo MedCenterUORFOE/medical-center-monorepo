@@ -175,7 +175,7 @@ export default function BookAppointmentScreen() {
 
       if (response.ok || response.status === 201) {
         Alert.alert("Success", "Appointment booked successfully!", [
-          { text: "OK", onPress: () => router.push('/dashboard' as any) }
+          { text: "OK", onPress: () => router.push('/(tabs)' as any) }
         ]);
       } else {
         Alert.alert("Booking Failed", responseData.message || "Failed to book appointment.");
