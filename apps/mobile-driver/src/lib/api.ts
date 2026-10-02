@@ -18,36 +18,18 @@ const getDevUrl = (): string | null => {
   return `http://${ip}:3000`;
 };
 
-<<<<<<< HEAD
 const API_BASE_URL_CANDIDATES = [
   process.env.EXPO_PUBLIC_API_URL,
   getDevUrl(),
   'http://10.239.65.242:3000', // Current LAN IP
-  'http://10.28.219.242:3000',
-  'http://10.238.170.242:3000',
-  'http://192.168.8.147:3000',
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'http://10.0.2.2:3000',
+  'http://192.168.1.140:3000',
+  'http://10.28.219.242:3000',
+  'http://10.238.170.242:3000',
+  'http://192.168.8.147:3000',
 ].filter((c): c is string => Boolean(c?.trim()));
-=======
-const API_BASE_URL_CANDIDATES = Array.from(
-  new Set(
-    [
-      process.env.EXPO_PUBLIC_API_URL,
-      getDevUrl(),
-      'http://10.239.65.242:3000', // Current Wi-Fi IP
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-      'http://10.0.2.2:3000',
-      'http://192.168.1.140:3000',
-      'http://10.28.219.242:3000',
-      'http://10.238.170.242:3000',
-      'http://192.168.8.147:3000',
-    ].filter((c): c is string => Boolean(c?.trim()))
-  )
-);
->>>>>>> dev
 
 export const API_BASE_URL = API_BASE_URL_CANDIDATES[0] ?? '';
 const SESSION_TOKEN_KEY = 'driver_session_token';
@@ -156,31 +138,21 @@ async function getWorkingAxiosInstance(): Promise<AxiosInstance> {
 
   // Probe candidates in order and return the first one that responds
   for (const baseUrl of API_BASE_URL_CANDIDATES) {
-    try {
-      const probe = buildAxiosInstance(baseUrl);
-      const res = await probe.get('/api/health', {
-<<<<<<< HEAD
-        timeout: 2000,
-        validateStatus: () => true,
-      });
-      if (res.status >= 200 && res.status < 600) {
-        _axiosInstance = probe;
-        _activeBaseUrl = baseUrl;
-        console.log(`[api] Connected to ${baseUrl}`);
-=======
-        timeout: 2500,
-        validateStatus: () => true,
-      });
-      if (res.status) {
-        _axiosInstance = probe;
-        _activeBaseUrl = baseUrl;
-        console.log(`[api] Connected to ${baseUrl} (status ${res.status})`);
->>>>>>> dev
-        return probe;
+      try {
+        const probe = buildAxiosInstance(baseUrl);
+        const res = await probe.get('/api/health', {
+          timeout: 2500,
+          validateStatus: () => true,
+        });
+        if (res.status >= 200 && res.status < 600) {
+          _axiosInstance = probe;
+          _activeBaseUrl = baseUrl;
+          console.log(`[api] Connected to ${baseUrl} (status ${res.status})`);
+          return probe;
+        }
+      } catch {
+        // This candidate is unreachable — try the next one
       }
-    } catch {
-      // This candidate is unreachable — try the next one
-    }
   }
 
   // All candidates failed — return an instance for the first candidate anyway
