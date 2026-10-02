@@ -410,9 +410,9 @@ export default function DoctorDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#07131a] text-slate-100 flex flex-col font-sans">
       {/* Header Bar */}
-      <header className="bg-[#111827] border-b border-slate-800 px-6 py-4 flex items-center justify-between shrink-0">
+      <header className="bg-[#0d1726]/85 border-b border-slate-700/80 px-6 py-4 flex items-center justify-between shrink-0 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-emerald-500 rounded-lg text-white">
             <Activity className="w-6 h-6" />
@@ -449,7 +449,7 @@ export default function DoctorDashboard() {
       {/* Main Workspace Layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar: Walk-in lookup + Scheduled Appointments */}
-        <aside className="w-80 border-r border-slate-800 bg-[#0f1422] p-5 flex flex-col gap-6 shrink-0 overflow-y-auto">
+        <aside className="w-80 border-r border-slate-700/80 bg-[#0b1520]/80 p-5 flex flex-col gap-6 shrink-0 overflow-y-auto backdrop-blur-sm">
           {/* Walk-in Lookup */}
           <div>
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Walk-in Patient Lookup</h3>
@@ -539,7 +539,7 @@ export default function DoctorDashboard() {
         </aside>
 
         {/* Main Work Area: History timeline (left) + Clinical Interaction form (right) */}
-        <main className="flex-1 bg-[#0b0f19] p-6 overflow-hidden flex gap-6">
+        <main className="flex-1 bg-[#08131c] p-6 overflow-hidden flex gap-6">
           {loadingPatient ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-400">
               <Loader2 className="w-10 h-10 animate-spin text-emerald-500" />
