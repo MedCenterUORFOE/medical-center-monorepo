@@ -97,11 +97,16 @@ async function getWorkingAxiosInstance(): Promise<AxiosInstance> {
   for (const baseUrl of API_BASE_URL_CANDIDATES) {
     try {
       const probe = buildAxiosInstance(baseUrl);
-      await probe.get('/api/health', { timeout: 2000 });
-      _axiosInstance = probe;
-      _activeBaseUrl = baseUrl;
-      console.log(`[api] Connected to ${baseUrl}`);
-      return probe;
+      const res = await probe.get('/api/health', {
+        timeout: 2000,
+        validateStatus: () => true,
+      });
+      if (res.status >= 200 && res.status < 600) {
+        _axiosInstance = probe;
+        _activeBaseUrl = baseUrl;
+        console.log(`[api] Connected to ${baseUrl}`);
+        return probe;
+      }
     } catch {
       // This candidate is unreachable — try the next one
     }

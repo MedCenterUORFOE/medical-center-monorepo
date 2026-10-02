@@ -223,11 +223,28 @@ export default function DriverDashboardScreen() {
       }
     })();
 
+    // Push Notification Listeners for foreground receipt and notification interaction
+    const notificationListener = Notifications.addNotificationReceivedListener((notification) => {
+      console.log('Push notification received in foreground:', notification);
+      refreshDashboard().catch((err) => console.error('Error refreshing on push received:', err));
+    });
+
+    const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
+      console.log('Notification response received (driver tapped notification):', response);
+      const data = response.notification.request.content.data;
+      if (data?.type === 'NEW_EMERGENCY' || data?.request_id) {
+        setActiveTab('requests');
+      }
+      refreshDashboard().catch((err) => console.error('Error refreshing on push response:', err));
+    });
+
     return () => {
       mounted = false;
       if (intervalId) {
         clearInterval(intervalId);
       }
+      notificationListener.remove();
+      responseListener.remove();
     };
   }, [refreshDashboard, refreshHome, refreshNotifications, router, syncPushToken]);
 
@@ -395,12 +412,28 @@ export default function DriverDashboardScreen() {
     [handleRequestError]
   );
 
+  const handleCallRequester = useCallback((phone: string | null | undefined, name?: string) => {
+    if (!phone?.trim()) {
+      Alert.alert('No phone number', `${name || 'The requester'} has not provided a contact number.`);
+      return;
+    }
+    Linking.openURL(`tel:${phone.trim()}`);
+  }, []);
+
   const handleSaveProfile = useCallback(async () => {
-    const trimmedName = profileName.trim();
+    const trimmedUsername = profileName.trim().toLowerCase();
     const trimmedPhone = profilePhone.trim();
 
-    if (!trimmedName && !trimmedPhone) {
+    if (!trimmedUsername && !trimmedPhone) {
       Alert.alert('Missing details', 'Enter a username or phone number to save your profile.');
+      return;
+    }
+
+    if (trimmedUsername && !/^[a-z0-9_]{3,20}$/.test(trimmedUsername)) {
+      Alert.alert(
+        'Invalid Username',
+        'Username must be 3-20 characters long and contain only lowercase letters, numbers, and underscores (e.g. driver_sam).'
+      );
       return;
     }
 
@@ -410,7 +443,7 @@ export default function DriverDashboardScreen() {
       const response = await apiFetch('/api/users/settings', {
         method: 'PATCH',
         body: JSON.stringify({
-          ...(trimmedName ? { username: trimmedName } : {}),
+          ...(trimmedUsername ? { username: trimmedUsername } : {}),
           ...(trimmedPhone ? { phone: trimmedPhone } : {}),
         }),
       });
@@ -428,14 +461,13 @@ export default function DriverDashboardScreen() {
               ...current.driver,
               user: {
                 ...current.driver.user,
-                name: trimmedName || current.driver.user.name,
-                phone: trimmedPhone || null,
+                phone: trimmedPhone || current.driver.user.phone,
               },
             },
           }
           : current
       );
-      setNotificationText(body?.message || 'Profile details saved.');
+      setNotificationText(body?.message || 'Profile details saved successfully.');
     } catch (error) {
       handleRequestError(error, 'Could not save driver profile details.');
     } finally {
@@ -565,14 +597,26 @@ export default function DriverDashboardScreen() {
                 <View style={styles.tripCard}>
                   <Text style={styles.tripName}>{activeRequest.requester.name}</Text>
                   <Text style={styles.tripMeta}>Status: {activeRequest.status}</Text>
+                  {activeRequest.requester.phone ? (
+                    <Text style={styles.tripMeta}>Contact: {activeRequest.requester.phone}</Text>
+                  ) : null}
                   <Text style={styles.tripMeta}>
                     Lat {activeRequest.patient_location_lat.toFixed(5)}, Lng {activeRequest.patient_location_lng.toFixed(5)}
                   </Text>
-                  <Pressable
-                    style={styles.mapButton}
-                    onPress={() => openRequestLocation(activeRequest.patient_location_lat, activeRequest.patient_location_lng)}>
-                    <Text style={styles.mapButtonText}>View on maps</Text>
-                  </Pressable>
+                  <View style={styles.buttonRow}>
+                    <Pressable
+                      style={styles.mapButton}
+                      onPress={() => openRequestLocation(activeRequest.patient_location_lat, activeRequest.patient_location_lng)}>
+                      <Text style={styles.mapButtonText}>View on maps</Text>
+                    </Pressable>
+                    {activeRequest.requester.phone ? (
+                      <Pressable
+                        style={styles.callButton}
+                        onPress={() => handleCallRequester(activeRequest.requester.phone, activeRequest.requester.name)}>
+                        <Text style={styles.callButtonText}>Call Requester</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
                   <View style={styles.actionStack}>
                     {!isCurrentTripArrived ? (
                       <Pressable
@@ -611,6 +655,9 @@ export default function DriverDashboardScreen() {
                 <View key={request.id} style={styles.requestCard}>
                   <View style={styles.requestInfo}>
                     <Text style={styles.requestTitle}>{request.requester.name}</Text>
+                    {request.requester.phone ? (
+                      <Text style={styles.requestMeta}>Phone: {request.requester.phone}</Text>
+                    ) : null}
                     <Text style={styles.requestMeta}>
                       {new Date(request.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </Text>
@@ -622,8 +669,15 @@ export default function DriverDashboardScreen() {
                     <Pressable
                       style={styles.mapButton}
                       onPress={() => openRequestLocation(request.patient_location_lat, request.patient_location_lng)}>
-                      <Text style={styles.mapButtonText}>View on maps</Text>
+                      <Text style={styles.mapButtonText}>Maps</Text>
                     </Pressable>
+                    {request.requester.phone ? (
+                      <Pressable
+                        style={styles.callButton}
+                        onPress={() => handleCallRequester(request.requester.phone, request.requester.name)}>
+                        <Text style={styles.callButtonText}>Call</Text>
+                      </Pressable>
+                    ) : null}
                     <Pressable
                       style={[styles.inlineActionButton, busyAction === `accept:${request.id}` && styles.buttonDisabled]}
                       onPress={() => handleAcceptRequest(request.id)}
@@ -694,17 +748,33 @@ export default function DriverDashboardScreen() {
         {isTabProfile ? (
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Driver profile</Text>
-            <Text style={styles.sectionCopy}>Update your username and phone number from the app.</Text>
-            <Text style={styles.label}>Username</Text>
+            <Text style={styles.sectionCopy}>
+              Official vehicle and account credentials are managed by the administrator.
+            </Text>
+
+            <View style={styles.readOnlyCard}>
+              <Text style={styles.readOnlyLabel}>Full Name (Admin Provisioned)</Text>
+              <Text style={styles.readOnlyValue}>{payload?.driver.user.name ?? 'Not set'}</Text>
+
+              <Text style={[styles.readOnlyLabel, { marginTop: 10 }]}>Email Address</Text>
+              <Text style={styles.readOnlyValue}>{payload?.driver.user.email ?? 'Not set'}</Text>
+
+              <Text style={[styles.readOnlyLabel, { marginTop: 10 }]}>Vehicle Registration</Text>
+              <Text style={styles.readOnlyValue}>{payload?.driver.vehicle_registration ?? 'Not set'}</Text>
+            </View>
+
+            <Text style={[styles.label, { marginTop: 14 }]}>Username (Handle)</Text>
             <TextInput
               value={profileName}
               onChangeText={setProfileName}
-              placeholder="Enter your username"
+              placeholder="3-20 lowercase alphanumeric characters"
               placeholderTextColor="#94A3B8"
               autoCapitalize="none"
               style={styles.input}
             />
-            <Text style={styles.label}>Phone</Text>
+            <Text style={styles.hintText}>Only lowercase letters, numbers, and underscores.</Text>
+
+            <Text style={styles.label}>Phone Number</Text>
             <TextInput
               value={profilePhone}
               onChangeText={setProfilePhone}
@@ -1068,5 +1138,47 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.55,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  callButton: {
+    backgroundColor: '#0D9488',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignSelf: 'flex-start',
+  },
+  callButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  readOnlyCard: {
+    backgroundColor: '#E2E8F0',
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 6,
+  },
+  readOnlyLabel: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  readOnlyValue: {
+    color: '#0F172A',
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  hintText: {
+    color: '#64748B',
+    fontSize: 12,
+    marginTop: -6,
+    marginBottom: 10,
   },
 });

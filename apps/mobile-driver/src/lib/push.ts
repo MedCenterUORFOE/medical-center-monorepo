@@ -1,6 +1,16 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
 export async function registerForPushNotificationsAsync() {
   if (Platform.OS === 'web') {
     return null;
