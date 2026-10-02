@@ -23,12 +23,12 @@ const API_BASE_URL_CANDIDATES = [
   getDevUrl(),
   'http://10.239.65.242:3000', // Current LAN IP
   'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'http://10.0.2.2:3000',
-  'http://192.168.1.140:3000',
-  'http://10.28.219.242:3000',
-  'http://10.238.170.242:3000',
-  'http://192.168.8.147:3000',
+  'http://127.0.0.1:3001',
+  'http://10.0.2.2:3001',
+  'http://192.168.1.140:3001',
+  'http://10.28.219.242:3001',
+  'http://10.238.170.242:3001',
+  'http://192.168.8.147:3001',
 ].filter((c): c is string => Boolean(c?.trim()));
 
 export const API_BASE_URL = API_BASE_URL_CANDIDATES[0] ?? '';
@@ -47,7 +47,7 @@ export async function setSessionToken(token: string) {
     }
   } catch (err) {
     console.warn('Failed to save session token:', err);
-    await AsyncStorage.setItem(SESSION_TOKEN_KEY, token).catch(() => {});
+    await AsyncStorage.setItem(SESSION_TOKEN_KEY, token).catch(() => { });
   }
 }
 
@@ -71,12 +71,12 @@ export async function clearSessionToken() {
     if (Platform.OS === 'web') {
       await AsyncStorage.removeItem(SESSION_TOKEN_KEY);
     } else {
-      await SecureStore.deleteItemAsync(SESSION_TOKEN_KEY).catch(() => {});
-      await AsyncStorage.removeItem(SESSION_TOKEN_KEY).catch(() => {});
+      await SecureStore.deleteItemAsync(SESSION_TOKEN_KEY).catch(() => { });
+      await AsyncStorage.removeItem(SESSION_TOKEN_KEY).catch(() => { });
     }
   } catch (err) {
     console.warn('Failed to clear session token:', err);
-    await AsyncStorage.removeItem(SESSION_TOKEN_KEY).catch(() => {});
+    await AsyncStorage.removeItem(SESSION_TOKEN_KEY).catch(() => { });
   }
 }
 
@@ -138,21 +138,21 @@ async function getWorkingAxiosInstance(): Promise<AxiosInstance> {
 
   // Probe candidates in order and return the first one that responds
   for (const baseUrl of API_BASE_URL_CANDIDATES) {
-      try {
-        const probe = buildAxiosInstance(baseUrl);
-        const res = await probe.get('/api/health', {
-          timeout: 2500,
-          validateStatus: () => true,
-        });
-        if (res.status >= 200 && res.status < 600) {
-          _axiosInstance = probe;
-          _activeBaseUrl = baseUrl;
-          console.log(`[api] Connected to ${baseUrl} (status ${res.status})`);
-          return probe;
-        }
-      } catch {
-        // This candidate is unreachable — try the next one
+    try {
+      const probe = buildAxiosInstance(baseUrl);
+      const res = await probe.get('/api/health', {
+        timeout: 2500,
+        validateStatus: () => true,
+      });
+      if (res.status >= 200 && res.status < 600) {
+        _axiosInstance = probe;
+        _activeBaseUrl = baseUrl;
+        console.log(`[api] Connected to ${baseUrl} (status ${res.status})`);
+        return probe;
       }
+    } catch {
+      // This candidate is unreachable — try the next one
+    }
   }
 
   // All candidates failed — return an instance for the first candidate anyway

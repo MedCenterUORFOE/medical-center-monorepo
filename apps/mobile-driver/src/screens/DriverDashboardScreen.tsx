@@ -1,5 +1,7 @@
 import { useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
+import { Ionicons } from '@expo/vector-icons';
+
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -55,6 +57,7 @@ type HomePayload = {
   } | null;
   active_request: RequestInfo | null;
   pending_requests: RequestInfo[];
+  completed_requests: RequestInfo[];
   pending_count: number;
 };
 
@@ -87,7 +90,7 @@ const parseApiResponse = async <T,>(response: Response): Promise<ApiResponse<T> 
 export default function DriverDashboardScreen() {
   const router = useRouter();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'notifications' | 'profile'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'pastRides' | 'profile'>('overview');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [payload, setPayload] = useState<HomePayload | null>(null);
@@ -97,6 +100,7 @@ export default function DriverDashboardScreen() {
   const [profilePhone, setProfilePhone] = useState('');
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [notificationText, setNotificationText] = useState<string | null>(null);
+  const [showNotifications, setShowNotifications] = useState(false);
   const seenRequestIds = React.useRef(new Set<string>());
 
   const loadHome = useCallback(async () => {
@@ -511,24 +515,98 @@ export default function DriverDashboardScreen() {
   const isCurrentTripArrived = activeRequestStatus === 'ARRIVED';
   const isTabOverview = activeTab === 'overview';
   const isTabRequests = activeTab === 'requests';
-  const isTabNotifications = activeTab === 'notifications';
+  const isTabPastRides = activeTab === 'pastRides';
   const isTabProfile = activeTab === 'profile';
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" />
+
+      {/* Notification panel modal */}
+      {showNotifications ? (
+        <View style={styles.notifOverlay}>
+          <View style={styles.notifPanel}>
+            <View style={styles.notifPanelHeader}>
+              <Text style={styles.notifPanelTitle}>Notifications</Text>
+              <Pressable onPress={() => setShowNotifications(false)} style={{ padding: 4 }}>
+                <Ionicons name="close" size={22} color="#0F172A" />
+              </Pressable>
+            </View>
+            <View style={styles.notifBadgeRow}>
+              <Text style={styles.badgeText}>{unreadCount} unread</Text>
+            </View>
+            <ScrollView style={{ maxHeight: 420 }}>
+              {notifications.length ? (
+                notifications.map((notification) => (
+                  <View key={notification.id} style={[styles.notificationCard, notification.is_read && styles.notificationRead]}>
+                    <View style={styles.notificationInfo}>
+                      <Text style={styles.notificationType}>{notification.type}</Text>
+                      <Text style={styles.notificationMessage}>{notification.message}</Text>
+                      <Text style={styles.notificationMeta}>
+                        {new Date(notification.sent_at).toLocaleString([], {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </Text>
+                    </View>
+                    <View style={styles.requestActions}>
+                      {!notification.is_read ? (
+                        <Pressable
+                          style={[styles.inlineActionButton, busyAction === `notification:${notification.id}` && styles.buttonDisabled]}
+                          onPress={() => void handleMarkNotificationRead(notification.id)}
+                          disabled={busyAction === `notification:${notification.id}`}>
+                          <Text style={styles.inlineActionButtonText}>Mark read</Text>
+                        </Pressable>
+                      ) : null}
+                      {notification.action_url ? (
+                        <Pressable
+                          style={styles.mapButton}
+                          onPress={async () => {
+                            try {
+                              await Linking.openURL(notification.action_url ?? '');
+                            } catch (error) {
+                              handleRequestError(error, 'Could not open the notification link.');
+                            }
+                          }}>
+                          <Text style={styles.mapButtonText}>Open</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.emptyText}>No notifications yet.</Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      ) : null}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
       >
         <View style={styles.headerCard}>
-          <View>
-            <Text style={styles.kicker}>Driver dashboard</Text>
-            <Text style={styles.title}>Ready for ambulance dispatch</Text>
-            <Text style={styles.subtitle}>
-              {payload?.driver.user.name} · {payload?.driver.vehicle_registration}
-            </Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.kicker}>Driver dashboard</Text>
+              <Text style={styles.title}>Ready for ambulance dispatch</Text>
+              <Text style={styles.subtitle}>
+                {payload?.driver.user.name} · {payload?.driver.vehicle_registration}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => setShowNotifications(true)}
+              style={{ padding: 4, position: 'relative' }}>
+              <Ionicons name="notifications-outline" size={26} color="#ffffff" />
+              {unreadCount > 0 ? (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>{unreadCount}</Text>
+                </View>
+              ) : null}
+            </Pressable>
           </View>
 
           <View style={styles.statusPill}>
@@ -544,10 +622,8 @@ export default function DriverDashboardScreen() {
           <Pressable style={[styles.tabButton, isTabRequests && styles.tabButtonActive]} onPress={() => setActiveTab('requests')}>
             <Text style={[styles.tabButtonText, isTabRequests && styles.tabButtonTextActive]}>Requests</Text>
           </Pressable>
-          <Pressable
-            style={[styles.tabButton, isTabNotifications && styles.tabButtonActive]}
-            onPress={() => setActiveTab('notifications')}>
-            <Text style={[styles.tabButtonText, isTabNotifications && styles.tabButtonTextActive]}>Notification history</Text>
+          <Pressable style={[styles.tabButton, isTabPastRides && styles.tabButtonActive]} onPress={() => setActiveTab('pastRides')}>
+            <Text style={[styles.tabButtonText, isTabPastRides && styles.tabButtonTextActive]}>Past rides</Text>
           </Pressable>
           <Pressable style={[styles.tabButton, isTabProfile && styles.tabButtonActive]} onPress={() => setActiveTab('profile')}>
             <Text style={[styles.tabButtonText, isTabProfile && styles.tabButtonTextActive]}>Profile</Text>
@@ -693,20 +769,24 @@ export default function DriverDashboardScreen() {
           </View>
         ) : null}
 
-        {isTabNotifications ? (
+        {isTabPastRides ? (
           <View style={styles.sectionCard}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Notification history</Text>
-              <Text style={styles.badgeText}>{unreadCount} unread</Text>
-            </View>
-            {notifications.length ? (
-              notifications.map((notification) => (
-                <View key={notification.id} style={[styles.notificationCard, notification.is_read && styles.notificationRead]}>
+            <Text style={styles.sectionTitle}>Past rides</Text>
+            <Text style={styles.sectionCopy}>A history of all ambulance runs you have accepted and completed.</Text>
+            {payload?.completed_requests && payload.completed_requests.length > 0 ? (
+              payload.completed_requests.map((ride) => (
+                <View key={ride.id} style={styles.notificationCard}>
                   <View style={styles.notificationInfo}>
-                    <Text style={styles.notificationType}>{notification.type}</Text>
-                    <Text style={styles.notificationMessage}>{notification.message}</Text>
+                    <Text style={styles.notificationType}>{ride.requester.name}</Text>
+                    {ride.requester.phone ? (
+                      <Text style={styles.notificationMessage}>Phone: {ride.requester.phone}</Text>
+                    ) : null}
+                    <Text style={styles.notificationMessage}>Status: {ride.status}</Text>
                     <Text style={styles.notificationMeta}>
-                      {new Date(notification.sent_at).toLocaleString([], {
+                      Lat {ride.patient_location_lat.toFixed(5)}, Lng {ride.patient_location_lng.toFixed(5)}
+                    </Text>
+                    <Text style={styles.notificationMeta}>
+                      {new Date(ride.created_at).toLocaleString([], {
                         month: 'short',
                         day: 'numeric',
                         hour: '2-digit',
@@ -714,33 +794,15 @@ export default function DriverDashboardScreen() {
                       })}
                     </Text>
                   </View>
-                  <View style={styles.requestActions}>
-                    {!notification.is_read ? (
-                      <Pressable
-                        style={[styles.inlineActionButton, busyAction === `notification:${notification.id}` && styles.buttonDisabled]}
-                        onPress={() => void handleMarkNotificationRead(notification.id)}
-                        disabled={busyAction === `notification:${notification.id}`}>
-                        <Text style={styles.inlineActionButtonText}>Mark read</Text>
-                      </Pressable>
-                    ) : null}
-                    {notification.action_url ? (
-                      <Pressable
-                        style={styles.mapButton}
-                        onPress={async () => {
-                          try {
-                            await Linking.openURL(notification.action_url ?? '');
-                          } catch (error) {
-                            handleRequestError(error, 'Could not open the notification link.');
-                          }
-                        }}>
-                        <Text style={styles.mapButtonText}>Open</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
+                  <Pressable
+                    style={styles.mapButton}
+                    onPress={() => openRequestLocation(ride.patient_location_lat, ride.patient_location_lng)}>
+                    <Text style={styles.mapButtonText}>Maps</Text>
+                  </Pressable>
                 </View>
               ))
             ) : (
-              <Text style={styles.emptyText}>No notifications yet.</Text>
+              <Text style={styles.emptyText}>No past rides yet.</Text>
             )}
           </View>
         ) : null}
@@ -1179,6 +1241,60 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 12,
     marginTop: -6,
+    marginBottom: 10,
+  },
+  notifBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#EF4444',
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  notifBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  notifOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    zIndex: 100,
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 60,
+    paddingRight: 12,
+  },
+  notifPanel: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    width: 320,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  notifPanelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  notifPanelTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  notifBadgeRow: {
     marginBottom: 10,
   },
 });
