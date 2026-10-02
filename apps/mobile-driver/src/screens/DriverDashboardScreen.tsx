@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -87,6 +88,9 @@ const parseApiResponse = async <T,>(response: Response): Promise<ApiResponse<T> 
   }
 };
 
+const getPastRidesStorageKey = (driverId: string) => `driver_past_rides:${driverId}`;
+const getUsernameStorageKey = (driverId: string) => `driver_username:${driverId}`;
+
 export default function DriverDashboardScreen() {
   const router = useRouter();
 
@@ -94,14 +98,18 @@ export default function DriverDashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [payload, setPayload] = useState<HomePayload | null>(null);
+  const [pastRides, setPastRides] = useState<RequestInfo[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [profileName, setProfileName] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [notificationText, setNotificationText] = useState<string | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const seenRequestIds = React.useRef(new Set<string>());
+  const loadedPastRidesForDriver = React.useRef<string | null>(null);
+  const loadedUsernameForDriver = React.useRef<string | null>(null);
 
   const loadHome = useCallback(async () => {
     const response = await apiFetch('/api/ambulance/driver/home');
@@ -192,8 +200,35 @@ export default function DriverDashboardScreen() {
       return;
     }
 
-    setProfileName(payload.driver.user.name ?? '');
     setProfilePhone(payload.driver.user.phone ?? '');
+
+    const driverId = payload.driver.driver_id;
+    if (loadedUsernameForDriver.current !== driverId) {
+      loadedUsernameForDriver.current = driverId;
+      AsyncStorage.getItem(getUsernameStorageKey(driverId))
+        .then((storedUsername) => setProfileName(storedUsername ?? ''))
+        .catch((error) => console.warn('Failed to load driver username:', error));
+    }
+
+    if (loadedPastRidesForDriver.current === driverId) {
+      return;
+    }
+
+    loadedPastRidesForDriver.current = driverId;
+    AsyncStorage.getItem(getPastRidesStorageKey(driverId))
+      .then((storedRides) => {
+        if (!storedRides) {
+          return;
+        }
+
+        try {
+          const parsedRides = JSON.parse(storedRides) as RequestInfo[];
+          setPastRides(Array.isArray(parsedRides) ? parsedRides : []);
+        } catch {
+          setPastRides([]);
+        }
+      })
+      .catch((error) => console.warn('Failed to load past rides:', error));
   }, [payload]);
 
   useEffect(() => {
@@ -307,6 +342,12 @@ export default function DriverDashboardScreen() {
 
   const runRequestAction = useCallback(
     async (requestId: string, action: 'accept' | 'status-arrived' | 'status-completed' | 'cancel') => {
+      if (action === 'accept' && payload?.active_request) {
+        setNotificationText('Complete or cancel the current ride before accepting another request.');
+        return;
+      }
+
+      const completedRide = action === 'status-completed' ? payload?.active_request : null;
       setBusyAction(`${action}:${requestId}`);
 
       try {
@@ -339,6 +380,29 @@ export default function DriverDashboardScreen() {
           throw new Error(body?.message || 'Request update failed.');
         }
 
+        if (action === 'accept') {
+          setPayload((current) =>
+            current
+              ? {
+                ...current,
+                pending_requests: current.pending_requests.filter((request) => request.id !== requestId),
+                pending_count: Math.max(0, current.pending_count - 1),
+              }
+              : current
+          );
+        }
+
+        if (action === 'status-completed' && completedRide) {
+          const ride = { ...completedRide, status: 'COMPLETED' };
+          setPastRides((current) => {
+            const nextRides = [ride, ...current.filter((existingRide) => existingRide.id !== ride.id)];
+            AsyncStorage.setItem(getPastRidesStorageKey(payload?.driver.driver_id ?? ''), JSON.stringify(nextRides)).catch(
+              (error) => console.warn('Failed to save past ride:', error)
+            );
+            return nextRides;
+          });
+        }
+
         await refreshDashboard();
         setNotificationText(body?.message || 'Request updated successfully.');
       } catch (error) {
@@ -347,7 +411,7 @@ export default function DriverDashboardScreen() {
         setBusyAction(null);
       }
     },
-    [handleRequestError, refreshDashboard]
+    [handleRequestError, payload, refreshDashboard]
   );
 
   const handleAcceptRequest = useCallback(
@@ -425,19 +489,11 @@ export default function DriverDashboardScreen() {
   }, []);
 
   const handleSaveProfile = useCallback(async () => {
-    const trimmedUsername = profileName.trim().toLowerCase();
+    const trimmedUsername = profileName.trim();
     const trimmedPhone = profilePhone.trim();
 
     if (!trimmedUsername && !trimmedPhone) {
       Alert.alert('Missing details', 'Enter a username or phone number to save your profile.');
-      return;
-    }
-
-    if (trimmedUsername && !/^[a-z0-9_]{3,20}$/.test(trimmedUsername)) {
-      Alert.alert(
-        'Invalid Username',
-        'Username must be 3-20 characters long and contain only lowercase letters, numbers, and underscores (e.g. driver_sam).'
-      );
       return;
     }
 
@@ -457,6 +513,11 @@ export default function DriverDashboardScreen() {
         throw new Error(body?.message || 'Could not save profile details.');
       }
 
+      if (trimmedUsername) {
+        await AsyncStorage.setItem(getUsernameStorageKey(payload?.driver.driver_id ?? ''), trimmedUsername);
+        setProfileName(trimmedUsername);
+      }
+
       setPayload((current) =>
         current
           ? {
@@ -471,13 +532,15 @@ export default function DriverDashboardScreen() {
           }
           : current
       );
+          setIsEditingProfile(false);
       setNotificationText(body?.message || 'Profile details saved successfully.');
     } catch (error) {
-      handleRequestError(error, 'Could not save driver profile details.');
+      const message = error instanceof Error ? error.message : 'Could not save driver profile details.';
+      Alert.alert('Could not save profile', message);
     } finally {
       setBusyAction(null);
     }
-  }, [handleRequestError, profileName, profilePhone]);
+  }, [payload, profileName, profilePhone]);
 
   const openRequestLocation = useCallback(async (lat: number, lng: number) => {
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
@@ -517,6 +580,12 @@ export default function DriverDashboardScreen() {
   const isTabRequests = activeTab === 'requests';
   const isTabPastRides = activeTab === 'pastRides';
   const isTabProfile = activeTab === 'profile';
+  const displayedPastRides = [
+    ...pastRides,
+    ...(payload?.completed_requests ?? []).filter(
+      (ride) => !pastRides.some((storedRide) => storedRide.id === ride.id)
+    ),
+  ];
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -757,7 +826,7 @@ export default function DriverDashboardScreen() {
                     <Pressable
                       style={[styles.inlineActionButton, busyAction === `accept:${request.id}` && styles.buttonDisabled]}
                       onPress={() => handleAcceptRequest(request.id)}
-                      disabled={busyAction === `accept:${request.id}` || busyAction?.startsWith('status-') || busyAction?.startsWith('cancel:')}>
+                      disabled={Boolean(payload?.active_request) || busyAction === `accept:${request.id}` || busyAction?.startsWith('status-') || busyAction?.startsWith('cancel:')}>
                       <Text style={styles.inlineActionButtonText}>Accept</Text>
                     </Pressable>
                   </View>
@@ -773,8 +842,8 @@ export default function DriverDashboardScreen() {
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Past rides</Text>
             <Text style={styles.sectionCopy}>A history of all ambulance runs you have accepted and completed.</Text>
-            {payload?.completed_requests && payload.completed_requests.length > 0 ? (
-              payload.completed_requests.map((ride) => (
+            {displayedPastRides.length > 0 ? (
+              displayedPastRides.map((ride) => (
                 <View key={ride.id} style={styles.notificationCard}>
                   <View style={styles.notificationInfo}>
                     <Text style={styles.notificationType}>{ride.requester.name}</Text>
@@ -829,28 +898,35 @@ export default function DriverDashboardScreen() {
             <TextInput
               value={profileName}
               onChangeText={setProfileName}
-              placeholder="3-20 lowercase alphanumeric characters"
+              editable={isEditingProfile}
+              placeholder="Enter your username"
               placeholderTextColor="#94A3B8"
-              autoCapitalize="none"
               style={styles.input}
             />
-            <Text style={styles.hintText}>Only lowercase letters, numbers, and underscores.</Text>
+            <Text style={styles.hintText}>Username should be lowercase, 3-20 characters, using only letters, numbers, and underscores.</Text>
 
             <Text style={styles.label}>Phone Number</Text>
             <TextInput
               value={profilePhone}
               onChangeText={setProfilePhone}
+              editable={isEditingProfile}
               placeholder="Enter your phone number"
               placeholderTextColor="#94A3B8"
               keyboardType="phone-pad"
               style={styles.input}
             />
-            <Pressable
-              style={[styles.primaryButton, busyAction === 'profile' && styles.buttonDisabled]}
-              onPress={handleSaveProfile}
-              disabled={busyAction === 'profile'}>
-              <Text style={styles.primaryButtonText}>Save profile</Text>
-            </Pressable>
+            {isEditingProfile ? (
+              <Pressable
+                style={[styles.primaryButton, busyAction === 'profile' && styles.buttonDisabled]}
+                onPress={handleSaveProfile}
+                disabled={busyAction === 'profile'}>
+                <Text style={styles.primaryButtonText}>Save profile</Text>
+              </Pressable>
+            ) : (
+              <Pressable style={styles.primaryButton} onPress={() => setIsEditingProfile(true)}>
+                <Text style={styles.primaryButtonText}>Edit profile</Text>
+              </Pressable>
+            )}
           </View>
         ) : null}
 
