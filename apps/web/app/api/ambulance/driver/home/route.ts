@@ -19,7 +19,7 @@ export async function GET(request: Request) {
             name: true,
             email: true,
             phone: true,
-            fcm_token: true,
+            deviceTokens: { select: { token: true } },
           },
         },
       },
@@ -46,7 +46,6 @@ export async function GET(request: Request) {
           select: {
             id: true,
             name: true,
-            email: true,
             phone: true,
           },
         },
@@ -64,7 +63,6 @@ export async function GET(request: Request) {
           select: {
             id: true,
             name: true,
-            email: true,
             phone: true,
           },
         },

@@ -185,7 +185,7 @@ export default function CompleteProfileScreen() {
 
       if (response.ok) {
         Alert.alert('Success', 'Profile completed successfully!', [
-          { text: 'OK', onPress: () => router.push('/dashboard') }
+          { text: 'OK', onPress: () => router.push('/(tabs)') }
         ]);
       } else {
         console.log("❌ Backend Validation Error Details:", responseData);

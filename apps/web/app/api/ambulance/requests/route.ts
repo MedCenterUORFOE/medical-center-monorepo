@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       where: { is_available: true },
       include: {
         driver: {
-          include: { user: true }
+          include: { user: { include: { deviceTokens: true } } }
         }
       }
     });
@@ -66,11 +66,10 @@ export async function POST(request: Request) {
       return successResponse(newRequest, "Emergency logged, but no drivers are currently online.", 201);
     }
 
-    // 3. Extract Firebase FCM Tokens
+    // 3. Extract Firebase FCM Tokens (each driver may have multiple devices)
     const tokens: string[] = [];
     availableDrivers.forEach(availability => {
-      const token = availability.driver.user.fcm_token;
-      if (token) tokens.push(token);
+      availability.driver.user.deviceTokens.forEach(dt => tokens.push(dt.token));
     });
 
     // 4. Broadcast via Firebase Cloud Messaging
@@ -107,6 +106,53 @@ export async function POST(request: Request) {
     }
     
     console.error("Emergency Request Creation Error:", error);
+    return apiErrors.internal();
+  }
+}
+
+// ============================================================================
+// GET: Fetch Active Emergency Requests (PENDING, DISPATCHED, ASSIGNED, ARRIVED)
+// ============================================================================
+export async function GET(request: Request) {
+  try {
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
+
+    const isAuthorized = ["ADMIN", "DOCTOR", "NURSE", "AMBULANCE_DRIVER"].includes(session.role);
+    if (!isAuthorized) {
+      return apiErrors.forbidden("Unauthorized. Fleet staff and Admins only.");
+    }
+
+    const activeRequests = await prisma.emergencyRequest.findMany({
+      where: session.role === "AMBULANCE_DRIVER"
+        ? {
+            OR: [
+              { status: 'PENDING' },
+              { driver_id: session.id, status: { in: ['DISPATCHED', 'ASSIGNED', 'ARRIVED'] } },
+            ],
+          }
+        : { status: { in: ['PENDING', 'DISPATCHED', 'ASSIGNED', 'ARRIVED'] } },
+      include: {
+        requester: {
+          select: { name: true, phone: true }
+        },
+        driver: {
+          include: {
+            user: {
+              select: { name: true, phone: true }
+            }
+          }
+        }
+      },
+      orderBy: {
+        created_at: 'desc'
+      }
+    });
+
+    return successResponse({ requests: activeRequests }, "Active emergency requests retrieved successfully.");
+
+  } catch (error) {
+    console.error("Emergency Fetch Error:", error);
     return apiErrors.internal();
   }
 }

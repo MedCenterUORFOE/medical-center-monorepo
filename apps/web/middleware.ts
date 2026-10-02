@@ -9,7 +9,6 @@ const publicRoutes = [
   '/register',
   '/forgot-password',
   '/reset-password',
-  '/setup-account',
 
   // API Routes
   '/api/health',
@@ -20,7 +19,8 @@ const publicRoutes = [
   '/api/auth/reset-password',
   '/api/auth/verify',
   '/api/auth/resend-verification',
-  '/api/webhooks' // <-- Protected by exact match or sub-directory logic now
+  '/api/webhooks', // <-- Protected by exact match or sub-directory logic now
+  '/api/cron'      // <-- Internal cron endpoints use their own secret checks
 ];
 
 // 2. The VIP List: Specific roles required for specific folders
@@ -29,7 +29,8 @@ const roleAccessMap: Record<string, string[]> = {
   '/admin': ['ADMIN'],
   '/dashboard/doctor': ['DOCTOR'],
   '/dashboard/nurse': ['NURSE'],
-  '/dashboard/pharmacist': ['PHARMACIST'],
+  '/dashboard/pharmacist': ['PHARMACIST', 'NURSE'],
+  '/dashboard/emergency': ['ADMIN', 'DOCTOR', 'NURSE', 'AMBULANCE_DRIVER'],
   '/inventory': ['PHARMACIST', 'NURSE', 'ADMIN'],
 
   // API Routes

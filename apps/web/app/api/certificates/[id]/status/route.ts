@@ -49,11 +49,11 @@ export async function PATCH(
     const certRequest = await prisma.medicalCertificateRequest.findUnique({
       where: { id: requestId },
       include: {
-        patient: { include: { user: { select: { name: true, fcm_token: true } } } },
+        patient: { include: { user: { select: { name: true, deviceTokens: { select: { token: true } } } } } },
       }
     });
 
-    if (!certRequest) return apiErrors.notFound("Certificate request not found.");
+    if (!certRequest || certRequest.doctor_id !== doctorId) return apiErrors.notFound("Certificate request not found.");
     if (certRequest.status !== "PENDING") return errorResponse("This request has already been processed.", 400);
 
     const patientStatusError = await verifyPatientStatus(certRequest.patient_id);
@@ -96,8 +96,8 @@ export async function PATCH(
     // ------------------------------------------------------------------------
     // FIREBASE PUSH NOTIFICATION (Real-time ping to the Patient's Phone)
     // ------------------------------------------------------------------------
-    const patientToken = certRequest.patient.user.fcm_token;
-    if (patientToken) {
+    const patientTokens = certRequest.patient.user.deviceTokens.map(dt => dt.token);
+    if (patientTokens.length > 0) {
       const title = validatedData.status === "APPROVED" 
         ? "📄 Certificate Approved" 
         : "❌ Certificate Rejected";
@@ -107,7 +107,7 @@ export async function PATCH(
         : "Your certificate request was rejected. Tap to view doctor notes.";
 
       await sendPushNotification({
-        tokens: patientToken,
+        tokens: patientTokens,
         title: title,
         body: bodyText,
         data: {

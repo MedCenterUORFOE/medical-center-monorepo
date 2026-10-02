@@ -21,6 +21,11 @@ type LoginResponse = {
   message?: string;
   data?: {
     token: string;
+    user?: {
+      id?: string;
+      name?: string;
+      role?: string;
+    };
   };
 };
 
@@ -31,25 +36,43 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSignIn = async () => {
+<<<<<<< HEAD
     const trimmed = identifier.trim();
 
     if (!trimmed || !password.trim()) {
       Alert.alert('Missing details', 'Enter your email or Driver ID / NIC and password to continue.');
+=======
+    const trimmedInput = email.trim();
+
+    if (!trimmedInput || !password.trim()) {
+      Alert.alert('Missing details', 'Enter your email or driver ID and password to continue.');
+>>>>>>> dev
       return;
     }
 
     setIsLoading(true);
 
     try {
+<<<<<<< HEAD
       const isEmail = trimmed.includes('@');
       const payload = isEmail
         ? { email: trimmed, password }
         : { driver_id: trimmed, password };
+=======
+      const isEmail = trimmedInput.includes('@');
+      const loginPayload = isEmail
+        ? { email: trimmedInput, password }
+        : { driver_id: trimmedInput, password };
+>>>>>>> dev
 
       const response = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+<<<<<<< HEAD
         body: JSON.stringify(payload),
+=======
+        body: JSON.stringify(loginPayload),
+>>>>>>> dev
       });
 
       const rawBody = await response.text();
@@ -71,6 +94,12 @@ export default function LoginScreen() {
 
       if (!body?.data?.token) {
         Alert.alert('Sign in failed', 'The server did not return a session token.');
+        return;
+      }
+
+      // Check role if backend returned user details
+      if (body.data.user?.role && body.data.user.role !== 'AMBULANCE_DRIVER') {
+        Alert.alert('Access Denied', 'Only registered ambulance drivers can sign in to this app.');
         return;
       }
 

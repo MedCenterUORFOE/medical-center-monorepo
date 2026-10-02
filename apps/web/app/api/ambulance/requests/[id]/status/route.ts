@@ -36,7 +36,7 @@ export async function PATCH(
     // 1. Verify Request and Driver Ownership
     const emergencyRequest = await prisma.emergencyRequest.findUnique({
       where: { id: requestId },
-      include: { requester: true }
+      include: { requester: { include: { deviceTokens: true } } }
     });
 
     if (!emergencyRequest) {
@@ -45,7 +45,7 @@ export async function PATCH(
     
     // Security check: Only the assigned driver can update this request
     if (emergencyRequest.driver_id !== userId) {
-      return apiErrors.unauthorized("You are not assigned to this emergency.");
+      return apiErrors.forbidden("You are not assigned to this emergency.");
     }
 
     if (status === 'COMPLETED') {
@@ -79,16 +79,16 @@ export async function PATCH(
     }
 
     // 4. Fire Push Notification to the Patient
-    const patientToken = emergencyRequest.requester?.fcm_token;
+    const patientTokens = emergencyRequest.requester?.deviceTokens.map(dt => dt.token) ?? [];
 
-    if (patientToken) {
+    if (patientTokens.length > 0) {
       const title = status === 'ARRIVED' ? "🚨 Ambulance Arrived" : "✅ Emergency Completed";
       const message = status === 'ARRIVED' 
         ? "Your ambulance is outside. Please proceed to the vehicle if possible."
         : "You have arrived at the medical center. Get well soon!";
 
       await sendPushNotification({
-        tokens: patientToken,
+        tokens: patientTokens,
         title: title,
         body: message,
         data: {

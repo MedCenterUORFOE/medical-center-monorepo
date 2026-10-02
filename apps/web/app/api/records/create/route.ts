@@ -4,6 +4,7 @@ import { successResponse, errorResponse, apiErrors } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { getUserSession } from '@/lib/auth';
 import { verifyPatientStatus } from '@/lib/patient-verification';
+import { recomputePrescriptionFulfillment } from '@/lib/prescription-fulfillment';
 
 // -----------------------------------------------------------------------------
 // ZOD VALIDATION SCHEMAS
@@ -197,6 +198,7 @@ export async function POST(request: Request) {
           },
           include: { items: true } 
         });
+        await recomputePrescriptionFulfillment(tx, createdPrescription.id);
       }
 
       // 4. Write the Immutable Audit Log

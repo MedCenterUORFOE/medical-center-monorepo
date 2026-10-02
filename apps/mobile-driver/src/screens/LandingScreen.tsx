@@ -1,10 +1,25 @@
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getSessionToken } from '../lib/api';
 
 export default function LandingScreen() {
   const router = useRouter();
+
+  useEffect(() => {
+    let active = true;
+    getSessionToken()
+      .then((token) => {
+        if (token && active) {
+          router.replace('/home');
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [router]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>

@@ -18,7 +18,7 @@ export async function GET(request: Request) {
       where: { verification_token: token },
     });
 
-    if (!user) {
+    if (!user || user.status !== 'UNVERIFIED') {
       return NextResponse.redirect(new URL('/login?error=InvalidToken', request.url));
     }
 

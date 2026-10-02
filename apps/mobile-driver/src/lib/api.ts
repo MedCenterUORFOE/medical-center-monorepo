@@ -3,6 +3,9 @@ import axios, { AxiosInstance } from 'axios';
 import { router } from 'expo-router';
 import Constants from 'expo-constants';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+
 // ---------------------------------------------------------------------------
 // Base URL resolution — tries candidates in order, first working one wins.
 // Priority: env var → LAN IP → localhost → loopback → Android emulator
@@ -15,6 +18,7 @@ const getDevUrl = (): string | null => {
   return `http://${ip}:3000`;
 };
 
+<<<<<<< HEAD
 const API_BASE_URL_CANDIDATES = [
   process.env.EXPO_PUBLIC_API_URL,
   getDevUrl(),
@@ -26,6 +30,24 @@ const API_BASE_URL_CANDIDATES = [
   'http://127.0.0.1:3000',
   'http://10.0.2.2:3000',
 ].filter((c): c is string => Boolean(c?.trim()));
+=======
+const API_BASE_URL_CANDIDATES = Array.from(
+  new Set(
+    [
+      process.env.EXPO_PUBLIC_API_URL,
+      getDevUrl(),
+      'http://10.239.65.242:3000', // Current Wi-Fi IP
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://10.0.2.2:3000',
+      'http://192.168.1.140:3000',
+      'http://10.28.219.242:3000',
+      'http://10.238.170.242:3000',
+      'http://192.168.8.147:3000',
+    ].filter((c): c is string => Boolean(c?.trim()))
+  )
+);
+>>>>>>> dev
 
 export const API_BASE_URL = API_BASE_URL_CANDIDATES[0] ?? '';
 const SESSION_TOKEN_KEY = 'driver_session_token';
@@ -33,16 +55,47 @@ const SESSION_TOKEN_KEY = 'driver_session_token';
 // ---------------------------------------------------------------------------
 // Secure token storage (uses expo-secure-store on device, AsyncStorage on web)
 // ---------------------------------------------------------------------------
+
 export async function setSessionToken(token: string) {
-  await SecureStore.setItemAsync(SESSION_TOKEN_KEY, token);
+  try {
+    if (Platform.OS === 'web') {
+      await AsyncStorage.setItem(SESSION_TOKEN_KEY, token);
+    } else {
+      await SecureStore.setItemAsync(SESSION_TOKEN_KEY, token);
+    }
+  } catch (err) {
+    console.warn('Failed to save session token:', err);
+    await AsyncStorage.setItem(SESSION_TOKEN_KEY, token).catch(() => {});
+  }
 }
 
-export async function getSessionToken() {
-  return SecureStore.getItemAsync(SESSION_TOKEN_KEY);
+export async function getSessionToken(): Promise<string | null> {
+  try {
+    if (Platform.OS === 'web') {
+      return await AsyncStorage.getItem(SESSION_TOKEN_KEY);
+    } else {
+      const token = await SecureStore.getItemAsync(SESSION_TOKEN_KEY);
+      if (token) return token;
+      return await AsyncStorage.getItem(SESSION_TOKEN_KEY);
+    }
+  } catch (err) {
+    console.warn('Failed to retrieve session token:', err);
+    return await AsyncStorage.getItem(SESSION_TOKEN_KEY).catch(() => null);
+  }
 }
 
 export async function clearSessionToken() {
-  await SecureStore.deleteItemAsync(SESSION_TOKEN_KEY);
+  try {
+    if (Platform.OS === 'web') {
+      await AsyncStorage.removeItem(SESSION_TOKEN_KEY);
+    } else {
+      await SecureStore.deleteItemAsync(SESSION_TOKEN_KEY).catch(() => {});
+      await AsyncStorage.removeItem(SESSION_TOKEN_KEY).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('Failed to clear session token:', err);
+    await AsyncStorage.removeItem(SESSION_TOKEN_KEY).catch(() => {});
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -57,9 +110,17 @@ function buildAxiosInstance(baseURL: string): AxiosInstance {
 
   // Inject JWT on every request
   instance.interceptors.request.use(async (config) => {
-    const token = await getSessionToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    try {
+      const token = await getSessionToken();
+      if (token && config.headers) {
+        if (typeof config.headers.set === 'function') {
+          config.headers.set('Authorization', `Bearer ${token}`);
+        } else {
+          config.headers['Authorization'] = `Bearer ${token}`;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to inject auth header:', e);
     }
     return config;
   });
@@ -98,6 +159,7 @@ async function getWorkingAxiosInstance(): Promise<AxiosInstance> {
     try {
       const probe = buildAxiosInstance(baseUrl);
       const res = await probe.get('/api/health', {
+<<<<<<< HEAD
         timeout: 2000,
         validateStatus: () => true,
       });
@@ -105,6 +167,15 @@ async function getWorkingAxiosInstance(): Promise<AxiosInstance> {
         _axiosInstance = probe;
         _activeBaseUrl = baseUrl;
         console.log(`[api] Connected to ${baseUrl}`);
+=======
+        timeout: 2500,
+        validateStatus: () => true,
+      });
+      if (res.status) {
+        _axiosInstance = probe;
+        _activeBaseUrl = baseUrl;
+        console.log(`[api] Connected to ${baseUrl} (status ${res.status})`);
+>>>>>>> dev
         return probe;
       }
     } catch {
