@@ -33,7 +33,7 @@ export async function getUserSessionFromRequest(request?: Request): Promise<Sess
 
     // 1. Grab the cookie store
     const cookieStore = await cookies();
-    
+
     // 2. Look for the specific session token we set during login
     const token = cookieStore.get('session_token')?.value;
 
@@ -44,7 +44,7 @@ export async function getUserSessionFromRequest(request?: Request): Promise<Sess
 
     // 3. Verify the token using the exact same secret key we used to sign it
     const secretKey = new TextEncoder().encode(process.env.JWT_SECRET!);
-    
+
     const { payload } = await jwtVerify(token, secretKey);
 
     // 4. Return the typed payload

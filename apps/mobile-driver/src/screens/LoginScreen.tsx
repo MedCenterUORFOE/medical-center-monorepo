@@ -21,33 +21,40 @@ type LoginResponse = {
   message?: string;
   data?: {
     token: string;
+    user?: {
+      id?: string;
+      name?: string;
+      role?: string;
+    };
   };
 };
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSignIn = async () => {
-    const trimmedEmail = email.trim();
+    const trimmed = identifier.trim();
 
-    if (!trimmedEmail || !password.trim()) {
-      Alert.alert('Missing details', 'Enter your email and password to continue.');
+    if (!trimmed || !password.trim()) {
+      Alert.alert('Missing details', 'Enter your email or Driver ID / NIC and password to continue.');
       return;
     }
 
     setIsLoading(true);
 
     try {
+      const isEmail = trimmed.includes('@');
+      const payload = isEmail
+        ? { email: trimmed, password }
+        : { driver_id: trimmed, password };
+
       const response = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: trimmedEmail,
-          password,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const rawBody = await response.text();
@@ -59,12 +66,22 @@ export default function LoginScreen() {
       }
 
       if (!response.ok) {
-        Alert.alert('Sign in failed', body?.message || 'Check your credentials and try again.');
+        const errorMsg =
+          body?.message === 'Database connection failed'
+            ? 'The backend server is online, but the database connection failed. Please ensure the database is running.'
+            : body?.message || 'Check your credentials and try again.';
+        Alert.alert('Sign in failed', errorMsg);
         return;
       }
 
       if (!body?.data?.token) {
         Alert.alert('Sign in failed', 'The server did not return a session token.');
+        return;
+      }
+
+      // Check role if backend returned user details
+      if (body.data.user?.role && body.data.user.role !== 'AMBULANCE_DRIVER') {
+        Alert.alert('Access Denied', 'Only registered ambulance drivers can sign in to this app.');
         return;
       }
 
@@ -106,19 +123,19 @@ export default function LoginScreen() {
             </Pressable>
             <Text style={styles.title}>Driver Login</Text>
             <Text style={styles.subtitle}>
-              Sign in with the email and password created by the admin.
+              Sign in with your email or Driver ID / NIC and password.
             </Text>
           </View>
 
           <View style={styles.formCard}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>Email or Driver ID / NIC</Text>
             <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Enter your email"
+              value={identifier}
+              onChangeText={setIdentifier}
+              placeholder="Enter your email or Driver ID / NIC"
               placeholderTextColor="#94A3B8"
               autoCapitalize="none"
-              keyboardType="email-address"
+              keyboardType="default"
               style={styles.input}
               editable={!isLoading}
             />
