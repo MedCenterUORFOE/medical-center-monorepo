@@ -1,10 +1,17 @@
-import React from 'react';
-import { Stack } from 'expo-router';
+import React, { useEffect } from 'react';
+import { Stack, useRouter } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppSettingsProvider, useAppSettings } from '../src/context/AppSettingsContext';
 import PinLockOverlay from '../components/PinLockOverlay';
 import OfflineBanner from '../components/OfflineBanner';
 import { ThemeProvider as NavigationThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native';
+import { getMessaging, setBackgroundMessageHandler } from '@react-native-firebase/messaging';
+import * as SecureStore from 'expo-secure-store';
+import { setupNotificationHandlers, startTokenRefreshListener, registerDeviceToken } from '../src/notifications/pushNotifications';
+
+const messaging = getMessaging();
+setBackgroundMessageHandler(messaging, async () => {});
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,6 +25,23 @@ const queryClient = new QueryClient({
 
 function AppContent() {
   const { isDark } = useAppSettings();
+  const router = useRouter();
+
+  useEffect(() => {
+    const unsubHandlers = setupNotificationHandlers(router);
+    const unsubRefresh = startTokenRefreshListener();
+
+    SecureStore.getItemAsync('userToken').then(token => {
+      if (token) {
+        registerDeviceToken();
+      }
+    });
+
+    return () => {
+      unsubHandlers();
+      unsubRefresh();
+    };
+  }, [router]);
 
   const navTheme = isDark ? DarkTheme : DefaultTheme;
 

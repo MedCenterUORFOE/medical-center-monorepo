@@ -8,15 +8,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAppSettings } from '../context/AppSettingsContext';
+import { GoogleSignin, isSuccessResponse, isErrorWithCode, statusCodes } from '@react-native-google-signin/google-signin';
+import { registerDeviceToken } from '../notifications/pushNotifications';
 
-// Import libraries for Google Login Web Overlays
-import * as WebBrowser from 'expo-web-browser';
-// NOTE: 'expo-linking' is only needed by the disabled redirect-based Google login
-// (see handleGoogleLogin below). Re-enable this import together with that code.
-// import * as Linking from 'expo-linking';
-
-// Completes the auth session context if the app was closed during login redirect flows
-WebBrowser.maybeCompleteAuthSession();
+GoogleSignin.configure({ webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID });
 
 export default function LoginScreen() {
   const [email, setEmail] = useState<string>('');
@@ -27,7 +22,7 @@ export default function LoginScreen() {
   const { authenticateWithBiometrics, biometricsEnabled, setBiometricsEnabled } = useAppSettings();
 
   // Dynamically decoupled environment config package reference
-  const API_URL = process.env.EXPO_PUBLIC_API_URL;
+  const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/+$/, '');
 
   // Trigger biometric auto-login if the user has successfully logged in once
   useEffect(() => {
@@ -51,6 +46,11 @@ export default function LoginScreen() {
 
   // --- Function to handle standard Email/Password Login Navigation Flow ---
   const handleLogin = async () => {
+    if (!API_URL) {
+      Alert.alert('Configuration Error', 'API URL is not configured.');
+      return;
+    }
+
     if (!email || !password) {
       Alert.alert('Validation Error', 'Please enter both your email address and secure password.');
       return;
@@ -95,6 +95,7 @@ export default function LoginScreen() {
           }
         }
 
+        await registerDeviceToken();
         router.push('/(tabs)' as any);
 
       } else {
@@ -102,7 +103,11 @@ export default function LoginScreen() {
       }
     } catch (error) {
       console.error("Login Error:", error);
-      Alert.alert('Network Error', 'Could not connect to the server.');
+      if (error instanceof SyntaxError) {
+        Alert.alert('Server Error', 'The server returned an unexpected response.');
+      } else {
+        Alert.alert('Network Error', 'Could not connect to the server.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -110,33 +115,74 @@ export default function LoginScreen() {
 
   // --- Function to handle Google SSO Login Cloud Handshake ---
   const handleGoogleLogin = async () => {
-    // TODO: Google sign-in is temporarily disabled on the app side.
-    // The backend has moved from the browser-redirect (code) flow to the
-    // ID-token flow, so the redirect-based implementation below no longer
-    // matches the API. Re-implement using the ID-token flow (see the
-    // frontend implementation guide) before re-enabling.
-    Alert.alert(
-      'Coming soon',
-      'Google sign-in will be available in an upcoming update. Please sign in with your email and password.'
-    );
-
-    /* Previous redirect-based implementation (kept for reference):
-    try {
-      const redirectUrl = Linking.createURL('/dashboard');
-      const authUrl = `${API_URL}/api/auth/google?redirect=${encodeURIComponent(redirectUrl)}`;
-
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
-
-      if (result.type === 'success') {
-         router.push('/(tabs)' as any);
-      } else if (result.type === 'cancel') {
-         console.log("Google Login sequence intentionally aborted by the user constraint.");
-      }
-    } catch (error) {
-      console.log("Google Login Compilation Error: ", error);
-      Alert.alert("Authentication Error", "Something went critically wrong attempting to link your Google Workspace identity.");
+    if (!API_URL) {
+      Alert.alert('Configuration Error', 'API URL is not configured.');
+      return;
     }
-    */
+
+    setIsLoading(true);
+    try {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const response = await GoogleSignin.signIn();
+      if (!isSuccessResponse(response)) return;
+      
+      const idToken = response.data.idToken;
+      if (!idToken) {
+        Alert.alert('Login Failed', 'Unable to verify Google Account.');
+        return;
+      }
+
+      const res = await fetch(`${API_URL}/api/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        Alert.alert('Login Failed', data.message || 'Authentication failed on server.');
+        return;
+      }
+
+      const activeUserId = data.data?.user?.id;
+      const activeToken = data.data?.token;
+
+      if (activeUserId) {
+        await SecureStore.setItemAsync('userId', String(activeUserId));
+        await AsyncStorage.setItem('userId', String(activeUserId));
+      } else {
+        console.warn("⚠️ Warning: User ID not found in data.data.user.id");
+      }
+
+      if (activeToken) {
+        await SecureStore.setItemAsync('userToken', String(activeToken));
+        await AsyncStorage.setItem('userToken', String(activeToken));
+      }
+
+      if (activeUserId && activeToken) {
+        await AsyncStorage.setItem('hasLoggedInOnce', 'true');
+        const savedBio = await AsyncStorage.getItem('biometricsEnabled');
+        if (savedBio === null) {
+          await setBiometricsEnabled(true);
+        }
+      }
+
+      await registerDeviceToken();
+      router.push('/(tabs)' as any);
+
+    } catch (error: any) {
+      if (isErrorWithCode(error)) {
+        if (error.code === statusCodes.IN_PROGRESS) return;
+        if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+          Alert.alert('Error', 'Google Play Services are not available on this device.');
+          return;
+        }
+      }
+      console.error(error.message);
+      Alert.alert('Authentication Error', 'An error occurred during Google Sign-In.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
