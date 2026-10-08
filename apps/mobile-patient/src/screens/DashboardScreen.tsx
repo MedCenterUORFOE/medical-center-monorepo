@@ -20,6 +20,8 @@ import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
 import * as SecureStore from 'expo-secure-store';
 import { useQuery } from '@tanstack/react-query';
+import { useFocusEffect } from 'expo-router';
+import { getUnreadCount, subscribe } from '../notifications/notificationStore';
 
 // ── TypeScript Data Interfaces ──
 interface ProfileSchema {
@@ -58,6 +60,13 @@ interface MedicalRecordSchema {
   follow_up_date?: string | null;
 }
 
+const isUpcoming = (appointment: AppointmentSchema) => {
+  if (!appointment.scheduled_time) return true;
+  const d = new Date(appointment.scheduled_time);
+  if (isNaN(d.getTime())) return true;
+  return d >= new Date();
+};
+
 export default function PatientDashboard() {
   const router = useRouter();
   
@@ -65,7 +74,20 @@ export default function PatientDashboard() {
   const [activeTab, setActiveTab] = useState<'CONSULTATIONS' | 'TIMELINE'>('CONSULTATIONS');
   const [greeting, setGreeting] = useState<string>('');
   const [isMutating, setIsMutating] = useState<boolean>(false);
-  const unreadNotifCount = 0;
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+
+  const loadUnreadCount = async () => {
+    const count = await getUnreadCount();
+    setUnreadNotifCount(count);
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadUnreadCount();
+      const unsubscribe = subscribe(loadUnreadCount);
+      return () => unsubscribe();
+    }, [])
+  );
   const [isConfirmEmergencyModalVisible, setIsConfirmEmergencyModalVisible] = useState<boolean>(false);
 
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -162,9 +184,11 @@ export default function PatientDashboard() {
     enabled: !!patientId,
   });
 
+  const upcomingConsultations = appointmentsList.filter(isUpcoming);
+
   // Derived state mappings for template compatibility
   const hasVerifiedProfile = profile ? profile.is_profile_complete : true;
-  const nextAppointment = appointmentsList.length > 0 ? appointmentsList[0] : null;
+  const nextAppointment = upcomingConsultations.length > 0 ? upcomingConsultations[0] : null;
   const isLoading = isProfileLoading || isAppointmentsLoading || isHistoryLoading || isMutating;
 
   const fetchDashboardDataFromBackend = async () => {
@@ -472,7 +496,7 @@ export default function PatientDashboard() {
                     onPress={() => setActiveTab('CONSULTATIONS')}
                   >
                     <Text style={[styles.tabLabelStringText, activeTab === 'CONSULTATIONS' && styles.activeTabLabelStringText]}>
-                      Consultations ({appointmentsList.length})
+                      Consultations ({upcomingConsultations.length})
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
@@ -487,15 +511,15 @@ export default function PatientDashboard() {
 
                 <View style={styles.tabPanelBodyWrapper}>
                   {activeTab === 'CONSULTATIONS' ? (
-                    appointmentsList.length === 0 ? (
+                    upcomingConsultations.length === 0 ? (
                       <View style={styles.emptyStateCardView}>
-                        <Text style={styles.emptyStateDescriptionLabelText}>No upcoming consultations booked.</Text>
+                        <Text style={styles.emptyStateDescriptionLabelText}>No upcoming consultations</Text>
                         <TouchableOpacity style={styles.emptyStateActionButtonCtaPill} onPress={() => router.push('/book-appointment' as any)}>
                           <Text style={styles.ctaButtonLabelText}>Book one now</Text>
                         </TouchableOpacity>
                       </View>
                     ) : (
-                      appointmentsList.map((item) => {
+                      upcomingConsultations.map((item) => {
                       // 🚀 මෙන්න සුපිරිම වැඩේ: Backend එකෙන් එන නම මොකක් වුණත් අපි ඒක හරියටම ගන්නවා!
                       const validId = item.id || item.appointment_id;
 

@@ -13,6 +13,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { getNotifications, markRead, markAllRead, subscribe } from '../notifications/notificationStore';
 
 type NotificationItem = {
   id: string;
@@ -62,6 +63,8 @@ export default function NotificationsScreen() {
 
   useEffect(() => {
     loadNotifications();
+    const unsubscribe = subscribe(loadNotifications);
+    return () => unsubscribe();
   }, []);
 
   const getHeaders = async () => {
@@ -74,6 +77,9 @@ export default function NotificationsScreen() {
 
   const loadNotifications = async () => {
     setErrorMessage(null);
+
+    let serverItems: NotificationItem[] = [];
+    let fetchError: Error | null = null;
 
     try {
       if (!API_URL) {
@@ -98,11 +104,37 @@ export default function NotificationsScreen() {
         throw new Error(parsedResponse?.message || 'Unable to load notifications.');
       }
 
-      const items: NotificationItem[] = parsedResponse?.data?.notifications || parsedResponse?.notifications || [];
-      setNotifications(items);
+      serverItems = parsedResponse?.data?.notifications || parsedResponse?.notifications || [];
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to load notifications.';
-      setErrorMessage(message);
+      fetchError = error instanceof Error ? error : new Error('Unable to load notifications.');
+    }
+
+    try {
+      const localData = await getNotifications();
+      const localItems: NotificationItem[] = localData.map(n => ({
+        id: `local:${n.id}`,
+        type: 'PUSH',
+        message: n.body ? `${n.title}\n${n.body}` : n.title,
+        is_read: n.read,
+        action_url: null,
+        sent_at: new Date(n.receivedAt).toISOString()
+      }));
+
+      const merged = [...localItems, ...serverItems].sort((a, b) => {
+        return new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime();
+      });
+
+      setNotifications(merged);
+
+      if (fetchError && localItems.length === 0) {
+        setErrorMessage(fetchError.message);
+      } else if (fetchError && localItems.length > 0) {
+        console.warn('Failed to load server notifications, showing local only.', fetchError.message);
+      }
+    } catch (e) {
+      if (fetchError) {
+        setErrorMessage(fetchError.message);
+      }
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -117,6 +149,17 @@ export default function NotificationsScreen() {
   const markNotificationAsRead = async (notificationId: string) => {
     const targetNotification = notifications.find((notification) => notification.id === notificationId);
     if (!targetNotification || targetNotification.is_read) {
+      return;
+    }
+
+    if (notificationId.startsWith('local:')) {
+      const realId = notificationId.replace('local:', '');
+      await markRead(realId);
+      setNotifications((currentNotifications) =>
+        currentNotifications.map((notification) =>
+          notification.id === notificationId ? { ...notification, is_read: true } : notification
+        )
+      );
       return;
     }
 
@@ -153,7 +196,14 @@ export default function NotificationsScreen() {
 
     setIsBulkUpdating(true);
     try {
-      await Promise.all(unreadNotifications.map((notification) => markNotificationAsRead(notification.id)));
+      const hasLocalUnread = unreadNotifications.some(n => n.id.startsWith('local:'));
+      if (hasLocalUnread) {
+        await markAllRead();
+      }
+
+      const serverUnread = unreadNotifications.filter(n => !n.id.startsWith('local:'));
+      await Promise.all(serverUnread.map((notification) => markNotificationAsRead(notification.id)));
+      
       setNotifications((currentNotifications) =>
         currentNotifications.map((notification) => ({
           ...notification,

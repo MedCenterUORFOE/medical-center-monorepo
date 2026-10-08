@@ -34,7 +34,7 @@ export default function LoginScreen() {
         if (hasLoggedInOnce === 'true' && token && biometricsEnabled) {
           const success = await authenticateWithBiometrics();
           if (success) {
-            router.replace('/dashboard' as any);
+            router.replace('/(tabs)' as any);
           }
         }
       } catch (e) {
@@ -123,6 +123,8 @@ export default function LoginScreen() {
     setIsLoading(true);
     try {
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      // Force the account picker
+      try { await GoogleSignin.signOut(); } catch (e) {}
       const response = await GoogleSignin.signIn();
       if (!isSuccessResponse(response)) return;
       

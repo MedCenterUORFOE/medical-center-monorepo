@@ -1,7 +1,8 @@
 import { getMessaging, getToken, requestPermission, onMessage, onNotificationOpenedApp, getInitialNotification, onTokenRefresh, AuthorizationStatus } from '@react-native-firebase/messaging';
 import type { RemoteMessage } from '@react-native-firebase/messaging';
 import * as SecureStore from 'expo-secure-store';
-import { Alert, PermissionsAndroid, Platform } from 'react-native';
+import { addNotification } from './notificationStore';
+import { PermissionsAndroid, Platform } from 'react-native';
 
 const messaging = getMessaging();
 
@@ -23,6 +24,7 @@ export const registerDeviceToken = async () => {
     if (!enabled) return;
 
     const fcmToken = await getToken(messaging);
+    console.log('FCM_TOKEN_DEBUG', fcmToken); // REMOVE BEFORE RELEASE
     const userToken = await SecureStore.getItemAsync('userToken');
 
     if (userToken && fcmToken) {
@@ -60,18 +62,17 @@ export const routeFromNotification = (data: any, router: any) => {
 
 export const setupNotificationHandlers = (router: any) => {
   const unsubscribeOnMessage = onMessage(messaging, async (remoteMessage: RemoteMessage) => {
-    Alert.alert(
-      remoteMessage.notification?.title || 'Notification',
-      remoteMessage.notification?.body || ''
-    );
+    await addNotification(remoteMessage);
   });
 
-  const unsubscribeOnNotificationOpenedApp = onNotificationOpenedApp(messaging, (remoteMessage: RemoteMessage) => {
+  const unsubscribeOnNotificationOpenedApp = onNotificationOpenedApp(messaging, async (remoteMessage: RemoteMessage) => {
+    await addNotification(remoteMessage);
     routeFromNotification(remoteMessage.data, router);
   });
 
-  getInitialNotification(messaging).then(remoteMessage => {
+  getInitialNotification(messaging).then(async remoteMessage => {
     if (remoteMessage) {
+      await addNotification(remoteMessage);
       routeFromNotification(remoteMessage.data, router);
     }
   });

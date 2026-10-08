@@ -136,7 +136,7 @@ export default function RescheduleAppointmentScreen() {
       
       if (res.ok) {
         Alert.alert('Success', 'Your appointment has been rescheduled successfully!');
-        router.replace('/dashboard' as any); 
+        router.replace('/(tabs)' as any); 
       } else {
         const errorData = await res.json();
         Alert.alert('Error', errorData.message || 'Failed to reschedule.');
