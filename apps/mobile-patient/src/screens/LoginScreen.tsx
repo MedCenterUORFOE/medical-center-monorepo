@@ -27,7 +27,7 @@ export default function LoginScreen() {
   const { authenticateWithBiometrics, biometricsEnabled, setBiometricsEnabled } = useAppSettings();
 
   // Dynamically decoupled environment config package reference
-  const API_URL = process.env.EXPO_PUBLIC_API_URL;
+  const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/+$/, '');
 
   // Trigger biometric auto-login if the user has successfully logged in once
   useEffect(() => {
@@ -53,6 +53,12 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Validation Error', 'Please enter both your email address and secure password.');
+      return;
+    }
+
+    if (!API_URL) {
+      console.error('EXPO_PUBLIC_API_URL is not set in this build');
+      Alert.alert('Configuration Error', 'The server address is not configured in this build.');
       return;
     }
 
@@ -100,9 +106,13 @@ export default function LoginScreen() {
       } else {
         Alert.alert('Login Failed', data.message || 'Incorrect Email or Password combination!');
       }
-    } catch (error) {
-      console.error("Login Error:", error);
-      Alert.alert('Network Error', 'Could not connect to the server.');
+    } catch (error: any) {
+      console.error("Login Error:", error?.message, "| URL:", `${API_URL}/api/auth/login`);
+      if (error instanceof SyntaxError) {
+        Alert.alert('Server Error', 'The server returned an unexpected response. Please try again later.');
+      } else {
+        Alert.alert('Network Error', 'Could not connect to the server.');
+      }
     } finally {
       setIsLoading(false);
     }
