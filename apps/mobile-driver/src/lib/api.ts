@@ -25,7 +25,7 @@ const API_BASE_URL_CANDIDATES = [
   'http://localhost:3000',
   'http://127.0.0.1:3001',
   'http://10.0.2.2:3001',
-  'http://192.168.1.140:3001',
+  'http://192.168.1.140:3001', 
   'http://10.28.219.242:3001',
   'http://10.238.170.242:3001',
   'http://192.168.8.147:3001',
@@ -34,9 +34,9 @@ const API_BASE_URL_CANDIDATES = [
 export const API_BASE_URL = API_BASE_URL_CANDIDATES[0] ?? '';
 const SESSION_TOKEN_KEY = 'driver_session_token';
 
-// ---------------------------------------------------------------------------
+
 // Secure token storage (uses expo-secure-store on device, AsyncStorage on web)
-// ---------------------------------------------------------------------------
+
 
 export async function setSessionToken(token: string) {
   try {
