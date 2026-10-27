@@ -56,6 +56,12 @@ export default function LoginScreen() {
       return;
     }
 
+    if (!API_URL) {
+      console.error('EXPO_PUBLIC_API_URL is not set in this build');
+      Alert.alert('Configuration Error', 'The server address is not configured in this build.');
+      return;
+    }
+
     setIsLoading(true);
     try {
       const response = await fetch(`${API_URL}/api/auth/login`, {
@@ -124,10 +130,10 @@ export default function LoginScreen() {
     try {
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
       // Force the account picker
-      try { await GoogleSignin.signOut(); } catch (e) {}
+      try { await GoogleSignin.signOut(); } catch (e) { }
       const response = await GoogleSignin.signIn();
       if (!isSuccessResponse(response)) return;
-      
+
       const idToken = response.data.idToken;
       if (!idToken) {
         Alert.alert('Login Failed', 'Unable to verify Google Account.');
