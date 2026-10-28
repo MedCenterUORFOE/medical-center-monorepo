@@ -20,12 +20,14 @@ import {
 } from 'react-native';
 
 import { apiFetch, clearSessionToken } from '../lib/api';
-import { ensureNotificationChannelAsync, registerForPushNotificationsAsync } from '../lib/push';
+import { ensureNotificationChannelAsync } from '../lib/push';
+import { getUnreadCount, subscribe } from '../notifications/notificationStore';
 
 type RequestInfo = {
   id: string;
   status?: string;
   created_at: string;
+  completed_at?: string;
   requester: {
     name: string;
     phone: string | null;
@@ -100,7 +102,8 @@ export default function DriverDashboardScreen() {
   const [payload, setPayload] = useState<HomePayload | null>(null);
   const [pastRides, setPastRides] = useState<RequestInfo[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [serverUnreadCount, setServerUnreadCount] = useState(0);
+  const [localUnreadCount, setLocalUnreadCount] = useState(0);
   const [profileName, setProfileName] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -137,25 +140,6 @@ export default function DriverDashboardScreen() {
     return body?.data ?? { unread_count: 0, notifications: [] };
   }, []);
 
-  const syncPushToken = useCallback(async () => {
-    try {
-      const token = await Promise.race([
-        registerForPushNotificationsAsync(),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
-      ]);
-      if (!token) {
-        return;
-      }
-
-      await apiFetch('/api/users/settings', {
-        method: 'PATCH',
-        body: JSON.stringify({ fcm_token: token }),
-      });
-    } catch (pushError) {
-      console.warn('Failed to sync push token on dashboard:', pushError);
-    }
-  }, []);
-
   const refreshHome = useCallback(async () => {
     const data = await loadHome();
     setPayload(data);
@@ -182,7 +166,8 @@ export default function DriverDashboardScreen() {
   const refreshNotifications = useCallback(async () => {
     const data = await loadNotifications();
     setNotifications(data.notifications);
-    setUnreadCount(data.unread_count);
+    setServerUnreadCount(data.unread_count);
+    setLocalUnreadCount(await getUnreadCount());
   }, [loadNotifications]);
 
   const refreshDashboard = useCallback(async () => {
@@ -238,7 +223,6 @@ export default function DriverDashboardScreen() {
     (async () => {
       try {
         ensureNotificationChannelAsync().catch((err) => console.warn('Channel error:', err));
-        syncPushToken().catch((err) => console.warn('Push sync error:', err));
 
         if (!mounted) {
           return;
@@ -276,6 +260,9 @@ export default function DriverDashboardScreen() {
       }
       refreshDashboard().catch((err) => console.error('Error refreshing on push response:', err));
     });
+    const localNotificationUnsubscribe = subscribe(() => {
+      getUnreadCount().then(setLocalUnreadCount).catch((error) => console.warn('Failed to update local notification badge:', error));
+    });
 
     return () => {
       mounted = false;
@@ -284,8 +271,9 @@ export default function DriverDashboardScreen() {
       }
       notificationListener.remove();
       responseListener.remove();
+      localNotificationUnsubscribe();
     };
-  }, [refreshDashboard, refreshHome, refreshNotifications, router, syncPushToken]);
+  }, [refreshDashboard, refreshHome, refreshNotifications, router]);
 
   const handleRequestError = useCallback((error: unknown, fallbackMessage: string) => {
     console.error(error);
@@ -393,7 +381,7 @@ export default function DriverDashboardScreen() {
         }
 
         if (action === 'status-completed' && completedRide) {
-          const ride = { ...completedRide, status: 'COMPLETED' };
+          const ride = { ...completedRide, status: 'COMPLETED', completed_at: new Date().toISOString() };
           setPastRides((current) => {
             const nextRides = [ride, ...current.filter((existingRide) => existingRide.id !== ride.id)];
             AsyncStorage.setItem(getPastRidesStorageKey(payload?.driver.driver_id ?? ''), JSON.stringify(nextRides)).catch(
@@ -470,7 +458,7 @@ export default function DriverDashboardScreen() {
             notification.id === notificationId ? { ...notification, is_read: true } : notification
           )
         );
-        setUnreadCount((current) => Math.max(0, current - 1));
+        setServerUnreadCount((current) => Math.max(0, current - 1));
       } catch (error) {
         handleRequestError(error, 'Could not update the notification.');
       } finally {
@@ -543,15 +531,9 @@ export default function DriverDashboardScreen() {
   }, [payload, profileName, profilePhone]);
 
   const openRequestLocation = useCallback(async (lat: number, lng: number) => {
-    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
 
     try {
-      const canOpen = await Linking.canOpenURL(mapsUrl);
-      if (!canOpen) {
-        Alert.alert('Maps unavailable', 'Could not open the location on maps.');
-        return;
-      }
-
       await Linking.openURL(mapsUrl);
     } catch (error) {
       console.error(error);
@@ -560,14 +542,19 @@ export default function DriverDashboardScreen() {
   }, []);
 
   const handleLogout = async () => {
+    await apiFetch('/api/users/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ fcm_token: null }),
+    }).catch(() => {});
     await clearSessionToken();
+    await AsyncStorage.removeItem('userId');
     router.replace('/');
   };
 
   if (loading) {
     return (
       <View style={styles.loadingWrap}>
-        <ActivityIndicator color="#99F6E4" size="large" />
+        <ActivityIndicator color="#2F8F72" size="large" />
       </View>
     );
   }
@@ -586,10 +573,11 @@ export default function DriverDashboardScreen() {
       (ride) => !pastRides.some((storedRide) => storedRide.id === ride.id)
     ),
   ];
+  const unreadCount = serverUnreadCount + localUnreadCount;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
 
       {/* Notification panel modal */}
       {showNotifications ? (
@@ -598,7 +586,7 @@ export default function DriverDashboardScreen() {
             <View style={styles.notifPanelHeader}>
               <Text style={styles.notifPanelTitle}>Notifications</Text>
               <Pressable onPress={() => setShowNotifications(false)} style={{ padding: 4 }}>
-                <Ionicons name="close" size={22} color="#0F172A" />
+                <Ionicons name="close" size={22} color="#111827" />
               </Pressable>
             </View>
             <View style={styles.notifBadgeRow}>
@@ -667,9 +655,9 @@ export default function DriverDashboardScreen() {
               </Text>
             </View>
             <Pressable
-              onPress={() => setShowNotifications(true)}
+              onPress={() => router.push('/notifications' as never)}
               style={{ padding: 4, position: 'relative' }}>
-              <Ionicons name="notifications-outline" size={26} color="#ffffff" />
+              <Ionicons name="notifications-outline" size={26} color="#111827" />
               {unreadCount > 0 ? (
                 <View style={styles.notifBadge}>
                   <Text style={styles.notifBadgeText}>{unreadCount}</Text>
@@ -704,7 +692,7 @@ export default function DriverDashboardScreen() {
             <View style={styles.sectionCard}>
               <Text style={styles.sectionTitle}>Shift controls</Text>
               <Text style={styles.sectionCopy}>
-                Toggle your availability before, during, or after a run. This updates the driver status on the server.
+                Toggle your availability before, during, or after a run. This updates the driver status.
               </Text>
               <Pressable
                 style={[styles.primaryButton, busyAction === 'availability' && styles.buttonDisabled]}
@@ -725,10 +713,6 @@ export default function DriverDashboardScreen() {
               <View style={styles.metricCard}>
                 <Text style={styles.metricValue}>{payload?.pending_count ?? 0}</Text>
                 <Text style={styles.metricLabel}>Pending requests</Text>
-              </View>
-              <View style={styles.metricCard}>
-                <Text style={styles.metricValue}>{payload?.active_request ? '1' : '0'}</Text>
-                <Text style={styles.metricLabel}>Active runs</Text>
               </View>
               <View style={styles.metricCard}>
                 <Text style={styles.metricValue}>{unreadCount}</Text>
@@ -855,7 +839,7 @@ export default function DriverDashboardScreen() {
                       Lat {ride.patient_location_lat.toFixed(5)}, Lng {ride.patient_location_lng.toFixed(5)}
                     </Text>
                     <Text style={styles.notificationMeta}>
-                      {new Date(ride.created_at).toLocaleString([], {
+                      Completed: {new Date(ride.completed_at ?? ride.created_at).toLocaleString([], {
                         month: 'short',
                         day: 'numeric',
                         hour: '2-digit',
@@ -884,7 +868,7 @@ export default function DriverDashboardScreen() {
             </Text>
 
             <View style={styles.readOnlyCard}>
-              <Text style={styles.readOnlyLabel}>Full Name (Admin Provisioned)</Text>
+              <Text style={styles.readOnlyLabel}>Full Name</Text>
               <Text style={styles.readOnlyValue}>{payload?.driver.user.name ?? 'Not set'}</Text>
 
               <Text style={[styles.readOnlyLabel, { marginTop: 10 }]}>Email Address</Text>
@@ -900,7 +884,7 @@ export default function DriverDashboardScreen() {
               onChangeText={setProfileName}
               editable={isEditingProfile}
               placeholder="Enter your username"
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor="#78958B"
               style={styles.input}
             />
             <Text style={styles.hintText}>Username should be lowercase, 3-20 characters, using only letters, numbers, and underscores.</Text>
@@ -911,7 +895,7 @@ export default function DriverDashboardScreen() {
               onChangeText={setProfilePhone}
               editable={isEditingProfile}
               placeholder="Enter your phone number"
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor="#78958B"
               keyboardType="phone-pad"
               style={styles.input}
             />
@@ -946,7 +930,7 @@ export default function DriverDashboardScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#071821',
+    backgroundColor: '#F2FAF6',
   },
   scroll: {
     flex: 1,
@@ -959,30 +943,30 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#071821',
+    backgroundColor: '#F2FAF6',
   },
   headerCard: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#FFFFFF',
     borderRadius: 28,
     padding: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: '#D2E8DC',
   },
   kicker: {
-    color: '#99F6E4',
+    color: '#2F8F72',
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 1.2,
     fontWeight: '800',
   },
   title: {
-    color: '#FFFFFF',
+    color: '#111827',
     fontSize: 28,
     fontWeight: '800',
     marginTop: 8,
   },
   subtitle: {
-    color: 'rgba(226,232,240,0.75)',
+    color: '#527067',
     marginTop: 8,
     fontSize: 14,
   },
@@ -992,7 +976,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: '#E8F3ED',
     borderRadius: 999,
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -1003,30 +987,30 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   statusOnline: {
-    backgroundColor: '#34D399',
+    backgroundColor: '#4CAF7D',
   },
   statusOffline: {
-    backgroundColor: '#FB7185',
+    backgroundColor: '#D78A8A',
   },
   statusText: {
-    color: '#FFFFFF',
+    color: '#365B4D',
     fontSize: 13,
     fontWeight: '700',
   },
   alertCard: {
-    backgroundColor: '#053B3A',
+    backgroundColor: '#DDEFE6',
     borderRadius: 22,
     padding: 16,
   },
   alertTitle: {
-    color: '#99F6E4',
+    color: '#2F8F72',
     fontWeight: '800',
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   alertText: {
-    color: '#FFFFFF',
+    color: '#111827',
     marginTop: 6,
     fontSize: 15,
     lineHeight: 22,
@@ -1037,29 +1021,29 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
     borderRadius: 22,
     padding: 16,
   },
   metricValue: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 26,
     fontWeight: '900',
   },
   metricLabel: {
-    color: '#475569',
+    color: '#527067',
     marginTop: 4,
     fontSize: 13,
   },
   sectionCard: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
     borderRadius: 28,
     padding: 18,
     gap: 12,
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: '#E8F3ED',
     borderRadius: 18,
     padding: 6,
     gap: 6,
@@ -1072,18 +1056,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tabButtonActive: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
   },
   tabButtonText: {
-    color: 'rgba(255,255,255,0.75)',
+    color: '#527067',
     fontSize: 12,
     fontWeight: '800',
   },
   tabButtonTextActive: {
-    color: '#0F172A',
+    color: '#111827',
   },
   sectionTitle: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 18,
     fontWeight: '800',
   },
@@ -1094,33 +1078,33 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionCopy: {
-    color: '#475569',
+    color: '#527067',
     fontSize: 13,
     lineHeight: 19,
   },
   badgeText: {
-    color: '#0F766E',
+    color: '#2F8F72',
     fontSize: 12,
     fontWeight: '800',
   },
   tripCard: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#E8F3ED',
     borderRadius: 20,
     padding: 16,
     gap: 6,
   },
   tripName: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 16,
     fontWeight: '800',
   },
   tripMeta: {
-    color: '#475569',
+    color: '#527067',
     fontSize: 13,
   },
   requestCard: {
     borderRadius: 18,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#E8F3ED',
     padding: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1131,12 +1115,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   requestTitle: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 15,
     fontWeight: '800',
   },
   requestMeta: {
-    color: '#64748B',
+    color: '#66847A',
     fontSize: 12,
     marginTop: 3,
   },
@@ -1154,21 +1138,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderColor: '#C8DED3',
     alignSelf: 'flex-start',
   },
   inlineActionButtonText: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 12,
     fontWeight: '800',
   },
   dangerButton: {
-    backgroundColor: '#FFF1F2',
+    backgroundColor: '#FFF4F2',
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#FDA4AF',
+    borderColor: '#E8B5AD',
     alignSelf: 'flex-start',
   },
   dangerButtonText: {
@@ -1178,7 +1162,7 @@ const styles = StyleSheet.create({
   },
   notificationCard: {
     borderRadius: 18,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#E8F3ED',
     padding: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1192,25 +1176,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   notificationType: {
-    color: '#0F766E',
+    color: '#2F8F72',
     fontSize: 11,
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   notificationMessage: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 14,
     fontWeight: '700',
     marginTop: 4,
   },
   notificationMeta: {
-    color: '#64748B',
+    color: '#66847A',
     fontSize: 12,
     marginTop: 4,
   },
   mapButton: {
-    backgroundColor: '#0F766E',
+    backgroundColor: '#2F8F72',
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -1222,23 +1206,23 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   input: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#E8F3ED',
     borderRadius: 18,
     paddingHorizontal: 16,
     paddingVertical: 15,
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 16,
     marginBottom: 12,
   },
   label: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 14,
     fontWeight: '700',
     marginBottom: 8,
     marginTop: 6,
   },
   emptyText: {
-    color: '#64748B',
+    color: '#66847A',
     fontSize: 14,
   },
   actionsRow: {
@@ -1250,7 +1234,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 54,
     borderRadius: 18,
-    backgroundColor: '#0F766E',
+    backgroundColor: '#2F8F72',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1265,12 +1249,12 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderColor: '#C8DED3',
     alignItems: 'center',
     justifyContent: 'center',
   },
   secondaryButtonText: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 15,
     fontWeight: '800',
   },
@@ -1283,7 +1267,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   callButton: {
-    backgroundColor: '#0D9488',
+    backgroundColor: '#267A60',
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -1295,26 +1279,26 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   readOnlyCard: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#E8F3ED',
     borderRadius: 16,
     padding: 14,
     marginTop: 6,
   },
   readOnlyLabel: {
-    color: '#64748B',
+    color: '#66847A',
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   readOnlyValue: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 15,
     fontWeight: '700',
     marginTop: 2,
   },
   hintText: {
-    color: '#64748B',
+    color: '#66847A',
     fontSize: 12,
     marginTop: -6,
     marginBottom: 10,
@@ -1323,7 +1307,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -2,
     right: -2,
-    backgroundColor: '#EF4444',
+    backgroundColor: '#C96D6D',
     borderRadius: 8,
     minWidth: 16,
     height: 16,
@@ -1332,7 +1316,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   notifBadgeText: {
-    color: '#ffffff',
+    color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '800',
   },
@@ -1342,7 +1326,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(23,59,49,0.18)',
     zIndex: 100,
     justifyContent: 'flex-start',
     alignItems: 'flex-end',
@@ -1354,7 +1338,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 16,
     width: 320,
-    shadowColor: '#000',
+    shadowColor: '#7FAF98',
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 10,
@@ -1368,7 +1352,7 @@ const styles = StyleSheet.create({
   notifPanelTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#0F172A',
+    color: '#111827',
   },
   notifBadgeRow: {
     marginBottom: 10,

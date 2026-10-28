@@ -1,0 +1,76 @@
+{
+  "project_info": {
+    "project_number": "320206360728",
+    "project_id": "medical-center-dispatch",
+    "storage_bucket": "medical-center-dispatch.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:320206360728:android:db94303d62ecbaa09200ed",
+        "android_client_info": {
+          "package_name": "com.medical.driver"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "320206360728-mpmi9l8ehq673jsah63ppa2hb1pdlte0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCG9B5ur_yDQTW_5EvY8DqJJwMWPHMHWSc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "320206360728-mpmi9l8ehq673jsah63ppa2hb1pdlte0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:320206360728:android:ca6a146910955bfc9200ed",
+        "android_client_info": {
+          "package_name": "com.risitha.mobilepatientv2"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "320206360728-nmsq7684vstv3ju9csaebflccvqbrdjt.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.risitha.mobilepatientv2",
+            "certificate_hash": "efd09c09a3bc324e66e0b1d0d217748b3a9a0e92"
+          }
+        },
+        {
+          "client_id": "320206360728-mpmi9l8ehq673jsah63ppa2hb1pdlte0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCG9B5ur_yDQTW_5EvY8DqJJwMWPHMHWSc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "320206360728-mpmi9l8ehq673jsah63ppa2hb1pdlte0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
