@@ -11,16 +11,21 @@ export async function POST(
 ) {
   try {
     const { recordId } = params;
-    
+
     // === PRODUCTION AUTH BLOCK ===
     const session = await getUserSession();
     if (!session?.id) return apiErrors.unauthorized();
-    
-    if (session.role !== "DOCTOR" && session.role !== "NURSE") {
-      return apiErrors.forbidden("Only doctors and nurses can upload medical reports.");
+
+    const PATIENT_ROLES = ["STUDENT", "ACADEMIC_STAFF"];
+    const STAFF_ROLES = ["DOCTOR", "NURSE"];
+    const isPatient = PATIENT_ROLES.includes(session.role);
+    const isStaff = STAFF_ROLES.includes(session.role);
+
+    if (!isPatient && !isStaff) {
+      return apiErrors.forbidden("You do not have permission to upload medical reports.");
     }
 
-    // Ownership Check: Ensure the record exists and doctors only access their own charts
+    // Fetch record first — needed for ownership checks below
     const targetRecord = await prisma.medicalRecord.findUnique({
       where: { id: recordId }
     });
@@ -29,12 +34,21 @@ export async function POST(
       return apiErrors.notFound("Medical record not found.");
     }
 
+    // Patients may only upload to their own record
+    if (isPatient && targetRecord.patient_id !== session.id) {
+      return apiErrors.forbidden("You can only upload reports to your own medical records.");
+    }
+
+    // Doctors may only upload to records they are assigned to
     if (session.role === "DOCTOR" && targetRecord.doctor_id !== session.id) {
       return apiErrors.forbidden("You do not have permission to upload reports to this specific record.");
     }
 
-    const patientStatusError = await verifyPatientStatus(targetRecord.patient_id);
-    if (patientStatusError) return patientStatusError;
+    // Only verify patient status when staff uploads on behalf of a patient
+    if (isStaff) {
+      const patientStatusError = await verifyPatientStatus(targetRecord.patient_id);
+      if (patientStatusError) return patientStatusError;
+    }
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -44,7 +58,7 @@ export async function POST(
 
     // 2. Upload to Supabase Storage
     const fileName = `${recordId}/${Date.now()}-${file.name}`;
-    
+
     // FIX: Removed 'data: uploadData' to fix unused variable linting error
     const { error: uploadError } = await supabase.storage
       .from('medical-documents')
@@ -67,7 +81,7 @@ export async function POST(
 
       // Notify the Doctor who owns this record
       const record = await tx.medicalRecord.findUnique({ where: { id: recordId } });
-      
+
       if (record) {
         await tx.notification.create({
           data: {
