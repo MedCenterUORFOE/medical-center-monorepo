@@ -113,7 +113,7 @@ export default function CertificateDrawer({ isOpen, onClose, onProcessed }: Cert
       <div className="px-6 py-4 bg-[#151c2c] border-b border-slate-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <FileText className="w-5 h-5 text-emerald-400" />
-          <h2 className="text-sm font-bold text-white uppercase tracking-wider">Leave Certificates</h2>
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider">Medical Certificates</h2>
         </div>
         <button
           onClick={onClose}

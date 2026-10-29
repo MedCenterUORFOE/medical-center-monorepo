@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { KeyRound, Loader2, LockKeyhole, LogOut, UserCircle, X } from 'lucide-react';
 import api from '@/lib/axios';
 
@@ -120,7 +121,7 @@ export default function UserProfilePanel() {
         <span className="max-w-36 truncate text-xs font-bold text-slate-200">{displayName}</span>
       </button>
 
-      {isOpen && (
+      {isOpen && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[70]">
           <button
             type="button"
@@ -227,7 +228,8 @@ export default function UserProfilePanel() {
               </button>
             </div>
           </aside>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
