@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Search, User, Calendar, Activity, Weight, FileText, PlusCircle, Save, Edit3, Loader2, CheckCircle2, AlertTriangle, ShieldAlert, Key, Plus, Trash2, Clock, History, AlertCircle } from 'lucide-react';
+import { Search, User, Calendar, Activity, Weight, FileText, PlusCircle, Save, Edit3, Loader2, CheckCircle2, AlertTriangle, ShieldAlert, Plus, Trash2, Clock, History, AlertCircle } from 'lucide-react';
 import api from '@/lib/axios';
 import CertificateDrawer from './components/CertificateDrawer';
+import UserProfilePanel from '@/components/UserProfilePanel';
 
 interface Patient {
   id: string;
@@ -48,6 +48,30 @@ interface Appointment {
     }
   }
 }
+
+interface AvailabilityDay {
+  day_of_week: number;
+  label: string;
+  is_available: boolean;
+  start_time: string;
+  end_time: string;
+}
+
+const DEFAULT_AVAILABILITY_SCHEDULE: AvailabilityDay[] = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+].map((label, day_of_week) => ({
+  day_of_week,
+  label,
+  is_available: false,
+  start_time: '09:00',
+  end_time: '17:00',
+}));
 
 interface Medicine {
   id: string;
@@ -97,14 +121,16 @@ interface PrescriptionFormItem {
 }
 
 export default function DoctorDashboard() {
-  const router = useRouter();
-
   // Certificate Drawer State
   const [isCertDrawerOpen, setIsCertDrawerOpen] = useState(false);
 
   // Appointments Sidebar States
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loadingAppointments, setLoadingAppointments] = useState(false);
+  const [savingAvailability, setSavingAvailability] = useState(false);
+  const [availabilitySchedule, setAvailabilitySchedule] = useState<AvailabilityDay[]>(
+    DEFAULT_AVAILABILITY_SCHEDULE
+  );
 
   // Search Patient (Walk-in case) States
   const [searchQuery, setSearchQuery] = useState('');
@@ -147,6 +173,36 @@ export default function DoctorDashboard() {
     fetchAppointments();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const token = localStorage.getItem('session_token');
+    if (!token) return;
+
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url
+        .replace(/-/g, '+')
+        .replace(/_/g, '/')
+        .padEnd(Math.ceil(base64Url.length / 4) * 4, '=');
+      const session = JSON.parse(atob(base64)) as { id?: string };
+      if (!session.id) return;
+
+      const savedSchedule = localStorage.getItem(`doctor_availability_${session.id}`);
+      if (!savedSchedule) return;
+
+      const parsedSchedule = JSON.parse(savedSchedule) as AvailabilityDay[];
+      if (
+        Array.isArray(parsedSchedule) &&
+        parsedSchedule.length === DEFAULT_AVAILABILITY_SCHEDULE.length
+      ) {
+        setAvailabilitySchedule(parsedSchedule);
+      }
+    } catch (error) {
+      console.error('Unable to restore saved availability schedule:', error);
+    }
+  }, []);
+
   const fetchAppointments = async () => {
     setLoadingAppointments(true);
     try {
@@ -158,6 +214,90 @@ export default function DoctorDashboard() {
       console.error('Error fetching appointments:', err);
     } finally {
       setLoadingAppointments(false);
+    }
+  };
+
+  const handleAvailabilityChange = (
+    dayOfWeek: number,
+    field: 'is_available' | 'start_time' | 'end_time',
+    value: boolean | string
+  ) => {
+    setAvailabilitySchedule((current) =>
+      current.map((day) =>
+        day.day_of_week === dayOfWeek ? { ...day, [field]: value } : day
+      )
+    );
+  };
+
+  const handleAvailabilitySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setToast(null);
+
+    const invalidDay = availabilitySchedule.find(
+      (day) =>
+        day.is_available &&
+        (!day.start_time ||
+          !day.end_time ||
+          day.start_time >= day.end_time)
+    );
+
+    if (invalidDay) {
+      showToast(
+        'error',
+        `${invalidDay.label}: the ending time must be later than the starting time.`
+      );
+      return;
+    }
+
+    setSavingAvailability(true);
+
+    const schedule = availabilitySchedule.map((day) => {
+      const baseDate = new Date(Date.UTC(1970, 0, 4 + day.day_of_week));
+      const [startHour, startMinute] = day.start_time.split(':').map(Number);
+      const [endHour, endMinute] = day.end_time.split(':').map(Number);
+
+      const startTime = new Date(baseDate);
+      startTime.setUTCHours(startHour, startMinute, 0, 0);
+
+      const endTime = new Date(baseDate);
+      endTime.setUTCHours(endHour, endMinute, 0, 0);
+
+      return {
+        day_of_week: day.day_of_week,
+        start_time: startTime.toISOString(),
+        end_time: endTime.toISOString(),
+        is_available: day.is_available,
+      };
+    });
+
+    try {
+      const response = await api.put('/availability/medicalstaff', { schedule });
+      const token = localStorage.getItem('session_token');
+      if (token) {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url
+          .replace(/-/g, '+')
+          .replace(/_/g, '/')
+          .padEnd(Math.ceil(base64Url.length / 4) * 4, '=');
+        const session = JSON.parse(atob(base64)) as { id?: string };
+        if (session.id) {
+          localStorage.setItem(
+            `doctor_availability_${session.id}`,
+            JSON.stringify(availabilitySchedule)
+          );
+        }
+      }
+      showToast(
+        'success',
+        response.data?.message || 'Weekly availability schedule saved successfully.'
+      );
+    } catch (err: any) {
+      showToast(
+        'error',
+        err.response?.data?.message || 'Failed to save your availability schedule.'
+      );
+    } finally {
+      setSavingAvailability(false);
     }
   };
 
@@ -410,9 +550,9 @@ export default function DoctorDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#07131a] text-slate-100 flex flex-col font-sans">
       {/* Header Bar */}
-      <header className="bg-[#111827] border-b border-slate-800 px-6 py-4 flex items-center justify-between shrink-0">
+      <header className="bg-[#0d1726]/85 border-b border-slate-700/80 px-6 py-4 flex items-center justify-between shrink-0 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-emerald-500 rounded-lg text-white">
             <Activity className="w-6 h-6" />
@@ -431,25 +571,31 @@ export default function DoctorDashboard() {
             <FileText className="w-4 h-4" />
             <span>Certificates Panel</span>
           </button>
-
-          <button
-            onClick={() => {
-              localStorage.removeItem('session_token');
-              document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-              router.push('/login');
-            }}
-            className="px-4 py-2 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 text-xs font-bold rounded-lg border border-transparent hover:border-rose-500/20 transition-all flex items-center gap-2"
-          >
-            <Key className="w-4 h-4" />
-            <span>Sign Out</span>
-          </button>
+          <UserProfilePanel />
         </div>
       </header>
+
+      {toast && (
+        <div
+          className={`fixed right-6 top-20 z-[60] flex items-center gap-3 rounded-xl border p-4 shadow-2xl ${
+            toast.type === 'success'
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+              : 'border-rose-500/30 bg-rose-500/10 text-rose-200'
+          }`}
+        >
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
+          ) : (
+            <ShieldAlert className="h-5 w-5 shrink-0 text-rose-400" />
+          )}
+          <span className="text-xs font-semibold">{toast.message}</span>
+        </div>
+      )}
 
       {/* Main Workspace Layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar: Walk-in lookup + Scheduled Appointments */}
-        <aside className="w-80 border-r border-slate-800 bg-[#0f1422] p-5 flex flex-col gap-6 shrink-0 overflow-y-auto">
+        <aside className="w-80 border-r border-slate-700/80 bg-[#0b1520]/80 p-5 flex flex-col gap-6 shrink-0 overflow-y-auto backdrop-blur-sm">
           {/* Walk-in Lookup */}
           <div>
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Walk-in Patient Lookup</h3>
@@ -481,6 +627,97 @@ export default function DoctorDashboard() {
               )}
             </div>
           </div>
+
+          {/* Weekly Availability */}
+          <form
+            onSubmit={handleAvailabilitySubmit}
+            className="border-y border-slate-800 py-5 space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Weekly Availability
+                </h3>
+                <p className="text-[10px] text-slate-600 mt-1">
+                  Set the hours patients can book
+                </p>
+              </div>
+              <Calendar className="w-4 h-4 text-emerald-400" />
+            </div>
+
+            <div className="space-y-2.5">
+              {availabilitySchedule.map((day) => (
+                <div
+                  key={day.day_of_week}
+                  className="rounded-lg border border-slate-800 bg-[#0b0f19] p-2.5 space-y-2"
+                >
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <span className="text-xs font-semibold text-slate-200">{day.label}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-500">
+                        {day.is_available ? 'Available' : 'Unavailable'}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={day.is_available}
+                        onChange={(e) =>
+                          handleAvailabilityChange(
+                            day.day_of_week,
+                            'is_available',
+                            e.target.checked
+                          )
+                        }
+                        className="h-4 w-4 accent-emerald-500"
+                      />
+                    </span>
+                  </label>
+
+                  {day.is_available && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="text-[10px] text-slate-500">
+                        Start
+                        <input
+                          type="time"
+                          value={day.start_time}
+                          onChange={(e) =>
+                            handleAvailabilityChange(
+                              day.day_of_week,
+                              'start_time',
+                              e.target.value
+                            )
+                          }
+                          className="mt-1 w-full rounded-md border border-slate-800 bg-[#151b2c] px-2 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                        />
+                      </label>
+                      <label className="text-[10px] text-slate-500">
+                        End
+                        <input
+                          type="time"
+                          value={day.end_time}
+                          onChange={(e) =>
+                            handleAvailabilityChange(
+                              day.day_of_week,
+                              'end_time',
+                              e.target.value
+                            )
+                          }
+                          className="mt-1 w-full rounded-md border border-slate-800 bg-[#151b2c] px-2 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="submit"
+              disabled={savingAvailability}
+              className="w-full rounded-lg bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-400 border border-emerald-500/20 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {savingAvailability ? 'Saving Schedule...' : 'Save Availability'}
+            </button>
+          </form>
 
           {/* Appointments Sidebar */}
           <div className="flex-1 flex flex-col min-h-0 gap-3">
@@ -539,7 +776,7 @@ export default function DoctorDashboard() {
         </aside>
 
         {/* Main Work Area: History timeline (left) + Clinical Interaction form (right) */}
-        <main className="flex-1 bg-[#0b0f19] p-6 overflow-hidden flex gap-6">
+        <main className="flex-1 bg-[#08131c] p-6 overflow-hidden flex gap-6">
           {loadingPatient ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-400">
               <Loader2 className="w-10 h-10 animate-spin text-emerald-500" />
@@ -547,24 +784,6 @@ export default function DoctorDashboard() {
             </div>
           ) : selectedPatient ? (
             <div className="flex-1 flex gap-6 overflow-hidden">
-              {/* Floating Toast */}
-              {toast && (
-                <div
-                  className={`fixed top-20 right-6 z-50 p-4 rounded-xl shadow-2xl flex items-center gap-3 border transition-all duration-300 transform translate-y-0 ${
-                    toast.type === 'success'
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
-                      : 'bg-rose-500/10 border-rose-500/30 text-rose-200'
-                  }`}
-                >
-                  {toast.type === 'success' ? (
-                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                  ) : (
-                    <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0" />
-                  )}
-                  <span className="text-xs font-semibold">{toast.message}</span>
-                </div>
-              )}
-
               {/* Left Column: Demographics + Historical Timeline */}
               <div className="w-1/2 flex flex-col gap-4 overflow-hidden h-full">
                 {/* Patient Profile Card */}

@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "883c2c86-7448-440e-b379-6ee4f22fd3c5"
+      }
+    },
+    "android": {
+      "package": "com.risitha.medicalcentermonorepo"
+    }
+  }
+}

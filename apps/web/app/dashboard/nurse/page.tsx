@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, User, Calendar, Activity, Weight, FileText, PlusCircle, Save, Edit3, Loader2, CheckCircle2, AlertTriangle, ShieldAlert, Key, Pill } from 'lucide-react';
+import { Search, User, Calendar, Activity, Weight, FileText, PlusCircle, Save, Edit3, Loader2, CheckCircle2, AlertTriangle, ShieldAlert, Pill } from 'lucide-react';
 import api from '@/lib/axios';
+import UserProfilePanel from '@/components/UserProfilePanel';
 
 interface Patient {
   id: string;
@@ -205,9 +206,9 @@ export default function NurseDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#07131a] text-slate-100 flex flex-col font-sans">
       {/* Header Bar */}
-      <header className="bg-[#111827] border-b border-slate-800 px-6 py-4 flex items-center justify-between shrink-0">
+      <header className="bg-[#0d1726]/85 border-b border-slate-700/80 px-6 py-4 flex items-center justify-between shrink-0 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-emerald-500 rounded-lg text-white">
             <Activity className="w-6 h-6" />
@@ -226,25 +227,14 @@ export default function NurseDashboard() {
             <Pill className="w-4 h-4" />
             <span>Pharmacy Station</span>
           </button>
-          
-          <button
-            onClick={() => {
-              localStorage.removeItem('session_token');
-              document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-              router.push('/login');
-            }}
-            className="px-4 py-2 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 text-xs font-bold rounded-lg border border-transparent hover:border-rose-500/20 transition-all flex items-center gap-2"
-          >
-            <Key className="w-4 h-4" />
-            <span>Sign Out</span>
-          </button>
+          <UserProfilePanel />
         </div>
       </header>
 
       {/* Main Workspace Layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Side Pane: Patient Search */}
-        <aside className="w-80 border-r border-slate-800 bg-[#0f1422] p-5 flex flex-col gap-5 shrink-0 overflow-y-auto">
+        <aside className="w-80 border-r border-slate-700/80 bg-[#0b1520]/80 p-5 flex flex-col gap-5 shrink-0 overflow-y-auto backdrop-blur-sm">
           <div>
             <h3 className="text-sm font-semibold text-slate-300 mb-2">Search Patient</h3>
             <div className="relative">
@@ -316,7 +306,7 @@ export default function NurseDashboard() {
         </aside>
 
         {/* Right Side Pane: Detailed View / Form Editor */}
-        <main className="flex-1 bg-[#0b0f19] p-6 md:p-8 flex flex-col overflow-y-auto relative">
+        <main className="flex-1 bg-[#08131c] p-6 md:p-8 flex flex-col overflow-y-auto relative">
           {/* Floating Toast */}
           {toast && (
             <div

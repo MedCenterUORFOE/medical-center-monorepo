@@ -1,5 +1,8 @@
 import { useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,12 +20,14 @@ import {
 } from 'react-native';
 
 import { apiFetch, clearSessionToken } from '../lib/api';
-import { ensureNotificationChannelAsync, registerForPushNotificationsAsync } from '../lib/push';
+import { ensureNotificationChannelAsync } from '../lib/push';
+import { getUnreadCount, subscribe } from '../notifications/notificationStore';
 
 type RequestInfo = {
   id: string;
   status?: string;
   created_at: string;
+  completed_at?: string;
   requester: {
     name: string;
     phone: string | null;
@@ -55,6 +60,7 @@ type HomePayload = {
   } | null;
   active_request: RequestInfo | null;
   pending_requests: RequestInfo[];
+  completed_requests: RequestInfo[];
   pending_count: number;
 };
 
@@ -84,20 +90,29 @@ const parseApiResponse = async <T,>(response: Response): Promise<ApiResponse<T> 
   }
 };
 
+const getPastRidesStorageKey = (driverId: string) => `driver_past_rides:${driverId}`;
+const getUsernameStorageKey = (driverId: string) => `driver_username:${driverId}`;
+
 export default function DriverDashboardScreen() {
   const router = useRouter();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'notifications' | 'profile'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'pastRides' | 'profile'>('overview');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [payload, setPayload] = useState<HomePayload | null>(null);
+  const [pastRides, setPastRides] = useState<RequestInfo[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [serverUnreadCount, setServerUnreadCount] = useState(0);
+  const [localUnreadCount, setLocalUnreadCount] = useState(0);
   const [profileName, setProfileName] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [notificationText, setNotificationText] = useState<string | null>(null);
+  const [showNotifications, setShowNotifications] = useState(false);
   const seenRequestIds = React.useRef(new Set<string>());
+  const loadedPastRidesForDriver = React.useRef<string | null>(null);
+  const loadedUsernameForDriver = React.useRef<string | null>(null);
 
   const loadHome = useCallback(async () => {
     const response = await apiFetch('/api/ambulance/driver/home');
@@ -123,25 +138,6 @@ export default function DriverDashboardScreen() {
     }
 
     return body?.data ?? { unread_count: 0, notifications: [] };
-  }, []);
-
-  const syncPushToken = useCallback(async () => {
-    try {
-      const token = await Promise.race([
-        registerForPushNotificationsAsync(),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
-      ]);
-      if (!token) {
-        return;
-      }
-
-      await apiFetch('/api/users/settings', {
-        method: 'PATCH',
-        body: JSON.stringify({ fcm_token: token }),
-      });
-    } catch (pushError) {
-      console.warn('Failed to sync push token on dashboard:', pushError);
-    }
   }, []);
 
   const refreshHome = useCallback(async () => {
@@ -170,7 +166,8 @@ export default function DriverDashboardScreen() {
   const refreshNotifications = useCallback(async () => {
     const data = await loadNotifications();
     setNotifications(data.notifications);
-    setUnreadCount(data.unread_count);
+    setServerUnreadCount(data.unread_count);
+    setLocalUnreadCount(await getUnreadCount());
   }, [loadNotifications]);
 
   const refreshDashboard = useCallback(async () => {
@@ -188,8 +185,35 @@ export default function DriverDashboardScreen() {
       return;
     }
 
-    setProfileName(payload.driver.user.name ?? '');
     setProfilePhone(payload.driver.user.phone ?? '');
+
+    const driverId = payload.driver.driver_id;
+    if (loadedUsernameForDriver.current !== driverId) {
+      loadedUsernameForDriver.current = driverId;
+      AsyncStorage.getItem(getUsernameStorageKey(driverId))
+        .then((storedUsername) => setProfileName(storedUsername ?? ''))
+        .catch((error) => console.warn('Failed to load driver username:', error));
+    }
+
+    if (loadedPastRidesForDriver.current === driverId) {
+      return;
+    }
+
+    loadedPastRidesForDriver.current = driverId;
+    AsyncStorage.getItem(getPastRidesStorageKey(driverId))
+      .then((storedRides) => {
+        if (!storedRides) {
+          return;
+        }
+
+        try {
+          const parsedRides = JSON.parse(storedRides) as RequestInfo[];
+          setPastRides(Array.isArray(parsedRides) ? parsedRides : []);
+        } catch {
+          setPastRides([]);
+        }
+      })
+      .catch((error) => console.warn('Failed to load past rides:', error));
   }, [payload]);
 
   useEffect(() => {
@@ -198,8 +222,7 @@ export default function DriverDashboardScreen() {
 
     (async () => {
       try {
-        await ensureNotificationChannelAsync();
-        await syncPushToken();
+        ensureNotificationChannelAsync().catch((err) => console.warn('Channel error:', err));
 
         if (!mounted) {
           return;
@@ -212,7 +235,7 @@ export default function DriverDashboardScreen() {
           refreshNotifications().catch((error) => console.error(error));
         }, 15000);
       } catch (error) {
-        console.error(error);
+        console.error('Driver dashboard initialization error:', error);
         Alert.alert('Unable to load home screen', 'Please sign in again.');
         await clearSessionToken();
         router.replace('/login');
@@ -223,13 +246,34 @@ export default function DriverDashboardScreen() {
       }
     })();
 
+    // Push Notification Listeners for foreground receipt and notification interaction
+    const notificationListener = Notifications.addNotificationReceivedListener((notification) => {
+      console.log('Push notification received in foreground:', notification);
+      refreshDashboard().catch((err) => console.error('Error refreshing on push received:', err));
+    });
+
+    const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
+      console.log('Notification response received (driver tapped notification):', response);
+      const data = response.notification.request.content.data;
+      if (data?.type === 'NEW_EMERGENCY' || data?.request_id) {
+        setActiveTab('requests');
+      }
+      refreshDashboard().catch((err) => console.error('Error refreshing on push response:', err));
+    });
+    const localNotificationUnsubscribe = subscribe(() => {
+      getUnreadCount().then(setLocalUnreadCount).catch((error) => console.warn('Failed to update local notification badge:', error));
+    });
+
     return () => {
       mounted = false;
       if (intervalId) {
         clearInterval(intervalId);
       }
+      notificationListener.remove();
+      responseListener.remove();
+      localNotificationUnsubscribe();
     };
-  }, [refreshDashboard, refreshHome, refreshNotifications, router, syncPushToken]);
+  }, [refreshDashboard, refreshHome, refreshNotifications, router]);
 
   const handleRequestError = useCallback((error: unknown, fallbackMessage: string) => {
     console.error(error);
@@ -269,11 +313,11 @@ export default function DriverDashboardScreen() {
       setPayload((current) =>
         current
           ? {
-              ...current,
-              availability: {
-                is_available: body?.data?.is_available ?? nextAvailability,
-              },
-            }
+            ...current,
+            availability: {
+              is_available: body?.data?.is_available ?? nextAvailability,
+            },
+          }
           : current
       );
       setNotificationText(body?.message || (nextAvailability ? 'You are now online.' : 'You are now offline.'));
@@ -286,6 +330,12 @@ export default function DriverDashboardScreen() {
 
   const runRequestAction = useCallback(
     async (requestId: string, action: 'accept' | 'status-arrived' | 'status-completed' | 'cancel') => {
+      if (action === 'accept' && payload?.active_request) {
+        setNotificationText('Complete or cancel the current ride before accepting another request.');
+        return;
+      }
+
+      const completedRide = action === 'status-completed' ? payload?.active_request : null;
       setBusyAction(`${action}:${requestId}`);
 
       try {
@@ -301,21 +351,44 @@ export default function DriverDashboardScreen() {
             ? { method: 'POST' }
             : action === 'cancel'
               ? {
-                  method: 'PATCH',
-                  body: JSON.stringify({ reason: 'Cancelled from the driver app.' }),
-                }
+                method: 'PATCH',
+                body: JSON.stringify({ reason: 'Cancelled from the driver app.' }),
+              }
               : {
-                  method: 'PATCH',
-                  body: JSON.stringify({
-                    status: action === 'status-arrived' ? 'ARRIVED' : 'COMPLETED',
-                  }),
-                };
+                method: 'PATCH',
+                body: JSON.stringify({
+                  status: action === 'status-arrived' ? 'ARRIVED' : 'COMPLETED',
+                }),
+              };
 
         const response = await apiFetch(endpoint, init);
         const body = await parseApiResponse<unknown>(response);
 
         if (!response.ok) {
           throw new Error(body?.message || 'Request update failed.');
+        }
+
+        if (action === 'accept') {
+          setPayload((current) =>
+            current
+              ? {
+                ...current,
+                pending_requests: current.pending_requests.filter((request) => request.id !== requestId),
+                pending_count: Math.max(0, current.pending_count - 1),
+              }
+              : current
+          );
+        }
+
+        if (action === 'status-completed' && completedRide) {
+          const ride = { ...completedRide, status: 'COMPLETED', completed_at: new Date().toISOString() };
+          setPastRides((current) => {
+            const nextRides = [ride, ...current.filter((existingRide) => existingRide.id !== ride.id)];
+            AsyncStorage.setItem(getPastRidesStorageKey(payload?.driver.driver_id ?? ''), JSON.stringify(nextRides)).catch(
+              (error) => console.warn('Failed to save past ride:', error)
+            );
+            return nextRides;
+          });
         }
 
         await refreshDashboard();
@@ -326,7 +399,7 @@ export default function DriverDashboardScreen() {
         setBusyAction(null);
       }
     },
-    [handleRequestError, refreshDashboard]
+    [handleRequestError, payload, refreshDashboard]
   );
 
   const handleAcceptRequest = useCallback(
@@ -385,7 +458,7 @@ export default function DriverDashboardScreen() {
             notification.id === notificationId ? { ...notification, is_read: true } : notification
           )
         );
-        setUnreadCount((current) => Math.max(0, current - 1));
+        setServerUnreadCount((current) => Math.max(0, current - 1));
       } catch (error) {
         handleRequestError(error, 'Could not update the notification.');
       } finally {
@@ -395,11 +468,19 @@ export default function DriverDashboardScreen() {
     [handleRequestError]
   );
 
+  const handleCallRequester = useCallback((phone: string | null | undefined, name?: string) => {
+    if (!phone?.trim()) {
+      Alert.alert('No phone number', `${name || 'The requester'} has not provided a contact number.`);
+      return;
+    }
+    Linking.openURL(`tel:${phone.trim()}`);
+  }, []);
+
   const handleSaveProfile = useCallback(async () => {
-    const trimmedName = profileName.trim();
+    const trimmedUsername = profileName.trim();
     const trimmedPhone = profilePhone.trim();
 
-    if (!trimmedName && !trimmedPhone) {
+    if (!trimmedUsername && !trimmedPhone) {
       Alert.alert('Missing details', 'Enter a username or phone number to save your profile.');
       return;
     }
@@ -410,7 +491,7 @@ export default function DriverDashboardScreen() {
       const response = await apiFetch('/api/users/settings', {
         method: 'PATCH',
         body: JSON.stringify({
-          ...(trimmedName ? { username: trimmedName } : {}),
+          ...(trimmedUsername ? { username: trimmedUsername } : {}),
           ...(trimmedPhone ? { phone: trimmedPhone } : {}),
         }),
       });
@@ -420,39 +501,39 @@ export default function DriverDashboardScreen() {
         throw new Error(body?.message || 'Could not save profile details.');
       }
 
+      if (trimmedUsername) {
+        await AsyncStorage.setItem(getUsernameStorageKey(payload?.driver.driver_id ?? ''), trimmedUsername);
+        setProfileName(trimmedUsername);
+      }
+
       setPayload((current) =>
         current
           ? {
-              ...current,
-              driver: {
-                ...current.driver,
-                user: {
-                  ...current.driver.user,
-                  name: trimmedName || current.driver.user.name,
-                  phone: trimmedPhone || null,
-                },
+            ...current,
+            driver: {
+              ...current.driver,
+              user: {
+                ...current.driver.user,
+                phone: trimmedPhone || current.driver.user.phone,
               },
-            }
+            },
+          }
           : current
       );
-      setNotificationText(body?.message || 'Profile details saved.');
+          setIsEditingProfile(false);
+      setNotificationText(body?.message || 'Profile details saved successfully.');
     } catch (error) {
-      handleRequestError(error, 'Could not save driver profile details.');
+      const message = error instanceof Error ? error.message : 'Could not save driver profile details.';
+      Alert.alert('Could not save profile', message);
     } finally {
       setBusyAction(null);
     }
-  }, [handleRequestError, profileName, profilePhone]);
+  }, [payload, profileName, profilePhone]);
 
   const openRequestLocation = useCallback(async (lat: number, lng: number) => {
-    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
 
     try {
-      const canOpen = await Linking.canOpenURL(mapsUrl);
-      if (!canOpen) {
-        Alert.alert('Maps unavailable', 'Could not open the location on maps.');
-        return;
-      }
-
       await Linking.openURL(mapsUrl);
     } catch (error) {
       console.error(error);
@@ -461,14 +542,19 @@ export default function DriverDashboardScreen() {
   }, []);
 
   const handleLogout = async () => {
+    await apiFetch('/api/users/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ fcm_token: null }),
+    }).catch(() => {});
     await clearSessionToken();
+    await AsyncStorage.removeItem('userId');
     router.replace('/');
   };
 
   if (loading) {
     return (
       <View style={styles.loadingWrap}>
-        <ActivityIndicator color="#99F6E4" size="large" />
+        <ActivityIndicator color="#2F8F72" size="large" />
       </View>
     );
   }
@@ -479,24 +565,105 @@ export default function DriverDashboardScreen() {
   const isCurrentTripArrived = activeRequestStatus === 'ARRIVED';
   const isTabOverview = activeTab === 'overview';
   const isTabRequests = activeTab === 'requests';
-  const isTabNotifications = activeTab === 'notifications';
+  const isTabPastRides = activeTab === 'pastRides';
   const isTabProfile = activeTab === 'profile';
+  const displayedPastRides = [
+    ...pastRides,
+    ...(payload?.completed_requests ?? []).filter(
+      (ride) => !pastRides.some((storedRide) => storedRide.id === ride.id)
+    ),
+  ];
+  const unreadCount = serverUnreadCount + localUnreadCount;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
+
+      {/* Notification panel modal */}
+      {showNotifications ? (
+        <View style={styles.notifOverlay}>
+          <View style={styles.notifPanel}>
+            <View style={styles.notifPanelHeader}>
+              <Text style={styles.notifPanelTitle}>Notifications</Text>
+              <Pressable onPress={() => setShowNotifications(false)} style={{ padding: 4 }}>
+                <Ionicons name="close" size={22} color="#111827" />
+              </Pressable>
+            </View>
+            <View style={styles.notifBadgeRow}>
+              <Text style={styles.badgeText}>{unreadCount} unread</Text>
+            </View>
+            <ScrollView style={{ maxHeight: 420 }}>
+              {notifications.length ? (
+                notifications.map((notification) => (
+                  <View key={notification.id} style={[styles.notificationCard, notification.is_read && styles.notificationRead]}>
+                    <View style={styles.notificationInfo}>
+                      <Text style={styles.notificationType}>{notification.type}</Text>
+                      <Text style={styles.notificationMessage}>{notification.message}</Text>
+                      <Text style={styles.notificationMeta}>
+                        {new Date(notification.sent_at).toLocaleString([], {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </Text>
+                    </View>
+                    <View style={styles.requestActions}>
+                      {!notification.is_read ? (
+                        <Pressable
+                          style={[styles.inlineActionButton, busyAction === `notification:${notification.id}` && styles.buttonDisabled]}
+                          onPress={() => void handleMarkNotificationRead(notification.id)}
+                          disabled={busyAction === `notification:${notification.id}`}>
+                          <Text style={styles.inlineActionButtonText}>Mark read</Text>
+                        </Pressable>
+                      ) : null}
+                      {notification.action_url ? (
+                        <Pressable
+                          style={styles.mapButton}
+                          onPress={async () => {
+                            try {
+                              await Linking.openURL(notification.action_url ?? '');
+                            } catch (error) {
+                              handleRequestError(error, 'Could not open the notification link.');
+                            }
+                          }}>
+                          <Text style={styles.mapButtonText}>Open</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.emptyText}>No notifications yet.</Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      ) : null}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
       >
         <View style={styles.headerCard}>
-          <View>
-            <Text style={styles.kicker}>Driver dashboard</Text>
-            <Text style={styles.title}>Ready for ambulance dispatch</Text>
-            <Text style={styles.subtitle}>
-              {payload?.driver.user.name} · {payload?.driver.vehicle_registration}
-            </Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.kicker}>Driver dashboard</Text>
+              <Text style={styles.title}>Ready for ambulance dispatch</Text>
+              <Text style={styles.subtitle}>
+                {payload?.driver.user.name} · {payload?.driver.vehicle_registration}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => router.push('/notifications' as never)}
+              style={{ padding: 4, position: 'relative' }}>
+              <Ionicons name="notifications-outline" size={26} color="#111827" />
+              {unreadCount > 0 ? (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>{unreadCount}</Text>
+                </View>
+              ) : null}
+            </Pressable>
           </View>
 
           <View style={styles.statusPill}>
@@ -512,10 +679,8 @@ export default function DriverDashboardScreen() {
           <Pressable style={[styles.tabButton, isTabRequests && styles.tabButtonActive]} onPress={() => setActiveTab('requests')}>
             <Text style={[styles.tabButtonText, isTabRequests && styles.tabButtonTextActive]}>Requests</Text>
           </Pressable>
-          <Pressable
-            style={[styles.tabButton, isTabNotifications && styles.tabButtonActive]}
-            onPress={() => setActiveTab('notifications')}>
-            <Text style={[styles.tabButtonText, isTabNotifications && styles.tabButtonTextActive]}>Notifications</Text>
+          <Pressable style={[styles.tabButton, isTabPastRides && styles.tabButtonActive]} onPress={() => setActiveTab('pastRides')}>
+            <Text style={[styles.tabButtonText, isTabPastRides && styles.tabButtonTextActive]}>Past rides</Text>
           </Pressable>
           <Pressable style={[styles.tabButton, isTabProfile && styles.tabButtonActive]} onPress={() => setActiveTab('profile')}>
             <Text style={[styles.tabButtonText, isTabProfile && styles.tabButtonTextActive]}>Profile</Text>
@@ -527,7 +692,7 @@ export default function DriverDashboardScreen() {
             <View style={styles.sectionCard}>
               <Text style={styles.sectionTitle}>Shift controls</Text>
               <Text style={styles.sectionCopy}>
-                Toggle your availability before, during, or after a run. This updates the driver status on the server.
+                Toggle your availability before, during, or after a run. This updates the driver status.
               </Text>
               <Pressable
                 style={[styles.primaryButton, busyAction === 'availability' && styles.buttonDisabled]}
@@ -550,10 +715,6 @@ export default function DriverDashboardScreen() {
                 <Text style={styles.metricLabel}>Pending requests</Text>
               </View>
               <View style={styles.metricCard}>
-                <Text style={styles.metricValue}>{payload?.active_request ? '1' : '0'}</Text>
-                <Text style={styles.metricLabel}>Active runs</Text>
-              </View>
-              <View style={styles.metricCard}>
                 <Text style={styles.metricValue}>{unreadCount}</Text>
                 <Text style={styles.metricLabel}>Unread notifications</Text>
               </View>
@@ -565,14 +726,26 @@ export default function DriverDashboardScreen() {
                 <View style={styles.tripCard}>
                   <Text style={styles.tripName}>{activeRequest.requester.name}</Text>
                   <Text style={styles.tripMeta}>Status: {activeRequest.status}</Text>
+                  {activeRequest.requester.phone ? (
+                    <Text style={styles.tripMeta}>Contact: {activeRequest.requester.phone}</Text>
+                  ) : null}
                   <Text style={styles.tripMeta}>
                     Lat {activeRequest.patient_location_lat.toFixed(5)}, Lng {activeRequest.patient_location_lng.toFixed(5)}
                   </Text>
-                  <Pressable
-                    style={styles.mapButton}
-                    onPress={() => openRequestLocation(activeRequest.patient_location_lat, activeRequest.patient_location_lng)}>
-                    <Text style={styles.mapButtonText}>View on maps</Text>
-                  </Pressable>
+                  <View style={styles.buttonRow}>
+                    <Pressable
+                      style={styles.mapButton}
+                      onPress={() => openRequestLocation(activeRequest.patient_location_lat, activeRequest.patient_location_lng)}>
+                      <Text style={styles.mapButtonText}>View on maps</Text>
+                    </Pressable>
+                    {activeRequest.requester.phone ? (
+                      <Pressable
+                        style={styles.callButton}
+                        onPress={() => handleCallRequester(activeRequest.requester.phone, activeRequest.requester.name)}>
+                        <Text style={styles.callButtonText}>Call Requester</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
                   <View style={styles.actionStack}>
                     {!isCurrentTripArrived ? (
                       <Pressable
@@ -611,6 +784,9 @@ export default function DriverDashboardScreen() {
                 <View key={request.id} style={styles.requestCard}>
                   <View style={styles.requestInfo}>
                     <Text style={styles.requestTitle}>{request.requester.name}</Text>
+                    {request.requester.phone ? (
+                      <Text style={styles.requestMeta}>Phone: {request.requester.phone}</Text>
+                    ) : null}
                     <Text style={styles.requestMeta}>
                       {new Date(request.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </Text>
@@ -622,12 +798,19 @@ export default function DriverDashboardScreen() {
                     <Pressable
                       style={styles.mapButton}
                       onPress={() => openRequestLocation(request.patient_location_lat, request.patient_location_lng)}>
-                      <Text style={styles.mapButtonText}>View on maps</Text>
+                      <Text style={styles.mapButtonText}>Maps</Text>
                     </Pressable>
+                    {request.requester.phone ? (
+                      <Pressable
+                        style={styles.callButton}
+                        onPress={() => handleCallRequester(request.requester.phone, request.requester.name)}>
+                        <Text style={styles.callButtonText}>Call</Text>
+                      </Pressable>
+                    ) : null}
                     <Pressable
                       style={[styles.inlineActionButton, busyAction === `accept:${request.id}` && styles.buttonDisabled]}
                       onPress={() => handleAcceptRequest(request.id)}
-                      disabled={busyAction === `accept:${request.id}` || busyAction?.startsWith('status-') || busyAction?.startsWith('cancel:')}>
+                      disabled={Boolean(payload?.active_request) || busyAction === `accept:${request.id}` || busyAction?.startsWith('status-') || busyAction?.startsWith('cancel:')}>
                       <Text style={styles.inlineActionButtonText}>Accept</Text>
                     </Pressable>
                   </View>
@@ -639,20 +822,24 @@ export default function DriverDashboardScreen() {
           </View>
         ) : null}
 
-        {isTabNotifications ? (
+        {isTabPastRides ? (
           <View style={styles.sectionCard}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Notifications</Text>
-              <Text style={styles.badgeText}>{unreadCount} unread</Text>
-            </View>
-            {notifications.length ? (
-              notifications.map((notification) => (
-                <View key={notification.id} style={[styles.notificationCard, notification.is_read && styles.notificationRead]}>
+            <Text style={styles.sectionTitle}>Past rides</Text>
+            <Text style={styles.sectionCopy}>A history of all ambulance runs you have accepted and completed.</Text>
+            {displayedPastRides.length > 0 ? (
+              displayedPastRides.map((ride) => (
+                <View key={ride.id} style={styles.notificationCard}>
                   <View style={styles.notificationInfo}>
-                    <Text style={styles.notificationType}>{notification.type}</Text>
-                    <Text style={styles.notificationMessage}>{notification.message}</Text>
+                    <Text style={styles.notificationType}>{ride.requester.name}</Text>
+                    {ride.requester.phone ? (
+                      <Text style={styles.notificationMessage}>Phone: {ride.requester.phone}</Text>
+                    ) : null}
+                    <Text style={styles.notificationMessage}>Status: {ride.status}</Text>
                     <Text style={styles.notificationMeta}>
-                      {new Date(notification.sent_at).toLocaleString([], {
+                      Lat {ride.patient_location_lat.toFixed(5)}, Lng {ride.patient_location_lng.toFixed(5)}
+                    </Text>
+                    <Text style={styles.notificationMeta}>
+                      Completed: {new Date(ride.completed_at ?? ride.created_at).toLocaleString([], {
                         month: 'short',
                         day: 'numeric',
                         hour: '2-digit',
@@ -660,33 +847,15 @@ export default function DriverDashboardScreen() {
                       })}
                     </Text>
                   </View>
-                  <View style={styles.requestActions}>
-                    {!notification.is_read ? (
-                      <Pressable
-                        style={[styles.inlineActionButton, busyAction === `notification:${notification.id}` && styles.buttonDisabled]}
-                        onPress={() => void handleMarkNotificationRead(notification.id)}
-                        disabled={busyAction === `notification:${notification.id}`}>
-                        <Text style={styles.inlineActionButtonText}>Mark read</Text>
-                      </Pressable>
-                    ) : null}
-                    {notification.action_url ? (
-                      <Pressable
-                        style={styles.mapButton}
-                        onPress={async () => {
-                          try {
-                            await Linking.openURL(notification.action_url ?? '');
-                          } catch (error) {
-                            handleRequestError(error, 'Could not open the notification link.');
-                          }
-                        }}>
-                        <Text style={styles.mapButtonText}>Open</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
+                  <Pressable
+                    style={styles.mapButton}
+                    onPress={() => openRequestLocation(ride.patient_location_lat, ride.patient_location_lng)}>
+                    <Text style={styles.mapButtonText}>Maps</Text>
+                  </Pressable>
                 </View>
               ))
             ) : (
-              <Text style={styles.emptyText}>No notifications yet.</Text>
+              <Text style={styles.emptyText}>No past rides yet.</Text>
             )}
           </View>
         ) : null}
@@ -694,31 +863,54 @@ export default function DriverDashboardScreen() {
         {isTabProfile ? (
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Driver profile</Text>
-            <Text style={styles.sectionCopy}>Update your username and phone number from the app.</Text>
-            <Text style={styles.label}>Username</Text>
+            <Text style={styles.sectionCopy}>
+              Official vehicle and account credentials are managed by the administrator.
+            </Text>
+
+            <View style={styles.readOnlyCard}>
+              <Text style={styles.readOnlyLabel}>Full Name</Text>
+              <Text style={styles.readOnlyValue}>{payload?.driver.user.name ?? 'Not set'}</Text>
+
+              <Text style={[styles.readOnlyLabel, { marginTop: 10 }]}>Email Address</Text>
+              <Text style={styles.readOnlyValue}>{payload?.driver.user.email ?? 'Not set'}</Text>
+
+              <Text style={[styles.readOnlyLabel, { marginTop: 10 }]}>Vehicle Registration</Text>
+              <Text style={styles.readOnlyValue}>{payload?.driver.vehicle_registration ?? 'Not set'}</Text>
+            </View>
+
+            <Text style={[styles.label, { marginTop: 14 }]}>Username (Handle)</Text>
             <TextInput
               value={profileName}
               onChangeText={setProfileName}
+              editable={isEditingProfile}
               placeholder="Enter your username"
-              placeholderTextColor="#94A3B8"
-              autoCapitalize="none"
+              placeholderTextColor="#78958B"
               style={styles.input}
             />
-            <Text style={styles.label}>Phone</Text>
+            <Text style={styles.hintText}>Username should be lowercase, 3-20 characters, using only letters, numbers, and underscores.</Text>
+
+            <Text style={styles.label}>Phone Number</Text>
             <TextInput
               value={profilePhone}
               onChangeText={setProfilePhone}
+              editable={isEditingProfile}
               placeholder="Enter your phone number"
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor="#78958B"
               keyboardType="phone-pad"
               style={styles.input}
             />
-            <Pressable
-              style={[styles.primaryButton, busyAction === 'profile' && styles.buttonDisabled]}
-              onPress={handleSaveProfile}
-              disabled={busyAction === 'profile'}>
-              <Text style={styles.primaryButtonText}>Save profile</Text>
-            </Pressable>
+            {isEditingProfile ? (
+              <Pressable
+                style={[styles.primaryButton, busyAction === 'profile' && styles.buttonDisabled]}
+                onPress={handleSaveProfile}
+                disabled={busyAction === 'profile'}>
+                <Text style={styles.primaryButtonText}>Save profile</Text>
+              </Pressable>
+            ) : (
+              <Pressable style={styles.primaryButton} onPress={() => setIsEditingProfile(true)}>
+                <Text style={styles.primaryButtonText}>Edit profile</Text>
+              </Pressable>
+            )}
           </View>
         ) : null}
 
@@ -738,7 +930,7 @@ export default function DriverDashboardScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#071821',
+    backgroundColor: '#F2FAF6',
   },
   scroll: {
     flex: 1,
@@ -751,30 +943,30 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#071821',
+    backgroundColor: '#F2FAF6',
   },
   headerCard: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#FFFFFF',
     borderRadius: 28,
     padding: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: '#D2E8DC',
   },
   kicker: {
-    color: '#99F6E4',
+    color: '#2F8F72',
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 1.2,
     fontWeight: '800',
   },
   title: {
-    color: '#FFFFFF',
+    color: '#111827',
     fontSize: 28,
     fontWeight: '800',
     marginTop: 8,
   },
   subtitle: {
-    color: 'rgba(226,232,240,0.75)',
+    color: '#527067',
     marginTop: 8,
     fontSize: 14,
   },
@@ -784,7 +976,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: '#E8F3ED',
     borderRadius: 999,
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -795,30 +987,30 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   statusOnline: {
-    backgroundColor: '#34D399',
+    backgroundColor: '#4CAF7D',
   },
   statusOffline: {
-    backgroundColor: '#FB7185',
+    backgroundColor: '#D78A8A',
   },
   statusText: {
-    color: '#FFFFFF',
+    color: '#365B4D',
     fontSize: 13,
     fontWeight: '700',
   },
   alertCard: {
-    backgroundColor: '#053B3A',
+    backgroundColor: '#DDEFE6',
     borderRadius: 22,
     padding: 16,
   },
   alertTitle: {
-    color: '#99F6E4',
+    color: '#2F8F72',
     fontWeight: '800',
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   alertText: {
-    color: '#FFFFFF',
+    color: '#111827',
     marginTop: 6,
     fontSize: 15,
     lineHeight: 22,
@@ -829,29 +1021,29 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
     borderRadius: 22,
     padding: 16,
   },
   metricValue: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 26,
     fontWeight: '900',
   },
   metricLabel: {
-    color: '#475569',
+    color: '#527067',
     marginTop: 4,
     fontSize: 13,
   },
   sectionCard: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
     borderRadius: 28,
     padding: 18,
     gap: 12,
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: '#E8F3ED',
     borderRadius: 18,
     padding: 6,
     gap: 6,
@@ -864,18 +1056,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tabButtonActive: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
   },
   tabButtonText: {
-    color: 'rgba(255,255,255,0.75)',
+    color: '#527067',
     fontSize: 12,
     fontWeight: '800',
   },
   tabButtonTextActive: {
-    color: '#0F172A',
+    color: '#111827',
   },
   sectionTitle: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 18,
     fontWeight: '800',
   },
@@ -886,33 +1078,33 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionCopy: {
-    color: '#475569',
+    color: '#527067',
     fontSize: 13,
     lineHeight: 19,
   },
   badgeText: {
-    color: '#0F766E',
+    color: '#2F8F72',
     fontSize: 12,
     fontWeight: '800',
   },
   tripCard: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#E8F3ED',
     borderRadius: 20,
     padding: 16,
     gap: 6,
   },
   tripName: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 16,
     fontWeight: '800',
   },
   tripMeta: {
-    color: '#475569',
+    color: '#527067',
     fontSize: 13,
   },
   requestCard: {
     borderRadius: 18,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#E8F3ED',
     padding: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -923,12 +1115,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   requestTitle: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 15,
     fontWeight: '800',
   },
   requestMeta: {
-    color: '#64748B',
+    color: '#66847A',
     fontSize: 12,
     marginTop: 3,
   },
@@ -946,21 +1138,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderColor: '#C8DED3',
     alignSelf: 'flex-start',
   },
   inlineActionButtonText: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 12,
     fontWeight: '800',
   },
   dangerButton: {
-    backgroundColor: '#FFF1F2',
+    backgroundColor: '#FFF4F2',
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#FDA4AF',
+    borderColor: '#E8B5AD',
     alignSelf: 'flex-start',
   },
   dangerButtonText: {
@@ -970,7 +1162,7 @@ const styles = StyleSheet.create({
   },
   notificationCard: {
     borderRadius: 18,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#E8F3ED',
     padding: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -984,25 +1176,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   notificationType: {
-    color: '#0F766E',
+    color: '#2F8F72',
     fontSize: 11,
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   notificationMessage: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 14,
     fontWeight: '700',
     marginTop: 4,
   },
   notificationMeta: {
-    color: '#64748B',
+    color: '#66847A',
     fontSize: 12,
     marginTop: 4,
   },
   mapButton: {
-    backgroundColor: '#0F766E',
+    backgroundColor: '#2F8F72',
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -1014,23 +1206,23 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   input: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#E8F3ED',
     borderRadius: 18,
     paddingHorizontal: 16,
     paddingVertical: 15,
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 16,
     marginBottom: 12,
   },
   label: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 14,
     fontWeight: '700',
     marginBottom: 8,
     marginTop: 6,
   },
   emptyText: {
-    color: '#64748B',
+    color: '#66847A',
     fontSize: 14,
   },
   actionsRow: {
@@ -1042,7 +1234,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 54,
     borderRadius: 18,
-    backgroundColor: '#0F766E',
+    backgroundColor: '#2F8F72',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1057,16 +1249,112 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderColor: '#C8DED3',
     alignItems: 'center',
     justifyContent: 'center',
   },
   secondaryButtonText: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 15,
     fontWeight: '800',
   },
   buttonDisabled: {
     opacity: 0.55,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  callButton: {
+    backgroundColor: '#267A60',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignSelf: 'flex-start',
+  },
+  callButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  readOnlyCard: {
+    backgroundColor: '#E8F3ED',
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 6,
+  },
+  readOnlyLabel: {
+    color: '#66847A',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  readOnlyValue: {
+    color: '#111827',
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  hintText: {
+    color: '#66847A',
+    fontSize: 12,
+    marginTop: -6,
+    marginBottom: 10,
+  },
+  notifBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#C96D6D',
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  notifBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  notifOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(23,59,49,0.18)',
+    zIndex: 100,
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 60,
+    paddingRight: 12,
+  },
+  notifPanel: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    width: 320,
+    shadowColor: '#7FAF98',
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  notifPanelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  notifPanelTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  notifBadgeRow: {
+    marginBottom: 10,
   },
 });

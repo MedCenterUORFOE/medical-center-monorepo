@@ -1,0 +1,34 @@
+{
+  "cli": {
+    "version": ">= 24.8.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "DATABASE_URL": "postgresql://dummy:dummy@localhost/dummy",
+        "EXPO_PUBLIC_API_URL": "https://medical-center-monorepo.vercel.app"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": {
+        "DATABASE_URL": "postgresql://dummy:dummy@localhost/dummy",
+        "EXPO_PUBLIC_API_URL": "http://10.57.151.119:3000"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "DATABASE_URL": "postgresql://dummy:dummy@localhost/dummy",
+        "EXPO_PUBLIC_API_URL": "https://medical-center-monorepo.vercel.app"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

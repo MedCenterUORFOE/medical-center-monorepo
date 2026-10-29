@@ -15,39 +15,47 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { apiFetch, setSessionToken } from '../lib/api';
-import { registerForPushNotificationsAsync } from '../lib/push';
+import { registerDeviceToken } from '../notifications/pushNotifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type LoginResponse = {
   message?: string;
   data?: {
     token: string;
+    user?: {
+      id?: string;
+      name?: string;
+      role?: string;
+    };
   };
 };
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSignIn = async () => {
-    const trimmedEmail = email.trim();
+    const trimmed = identifier.trim();
 
-    if (!trimmedEmail || !password.trim()) {
-      Alert.alert('Missing details', 'Enter your email and password to continue.');
+    if (!trimmed || !password.trim()) {
+      Alert.alert('Missing details', 'Enter your email or Driver ID / NIC and password to continue.');
       return;
     }
 
     setIsLoading(true);
 
     try {
+      const isEmail = trimmed.includes('@');
+      const payload = isEmail
+        ? { email: trimmed, password }
+        : { driver_id: trimmed, password };
+
       const response = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: trimmedEmail,
-          password,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const rawBody = await response.text();
@@ -59,7 +67,11 @@ export default function LoginScreen() {
       }
 
       if (!response.ok) {
-        Alert.alert('Sign in failed', body?.message || 'Check your credentials and try again.');
+        const errorMsg =
+          body?.message === 'Database connection failed'
+            ? 'The backend server is online, but the database connection failed. Please ensure the database is running.'
+            : body?.message || 'Check your credentials and try again.';
+        Alert.alert('Sign in failed', errorMsg);
         return;
       }
 
@@ -68,19 +80,18 @@ export default function LoginScreen() {
         return;
       }
 
-      await setSessionToken(body.data.token);
+      // Check role if backend returned user details
+      if (body.data.user?.role && body.data.user.role !== 'AMBULANCE_DRIVER') {
+        Alert.alert('Access Denied', 'Only registered ambulance drivers can sign in to this app.');
+        return;
+      }
 
-      // Async push notification sync - completely non-blocking
-      registerForPushNotificationsAsync()
-        .then((pushToken) => {
-          if (pushToken) {
-            apiFetch('/api/users/settings', {
-              method: 'PATCH',
-              body: JSON.stringify({ fcm_token: pushToken }),
-            }).catch((err) => console.warn('Failed to upload push token:', err));
-          }
-        })
-        .catch((err) => console.warn('Failed to register push token:', err));
+      await setSessionToken(body.data.token);
+      if (body.data.user?.id) {
+        await AsyncStorage.setItem('userId', body.data.user.id);
+      }
+
+      await registerDeviceToken();
 
       router.replace('/home');
     } catch (error) {
@@ -93,7 +104,7 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
       <View style={styles.backgroundGlow} />
 
       <KeyboardAvoidingView
@@ -106,19 +117,19 @@ export default function LoginScreen() {
             </Pressable>
             <Text style={styles.title}>Driver Login</Text>
             <Text style={styles.subtitle}>
-              Sign in with the email and password created by the admin.
+              Sign in with your email or Driver ID / NIC and password.
             </Text>
           </View>
 
           <View style={styles.formCard}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>Email or Driver ID / NIC</Text>
             <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Enter your email"
+              value={identifier}
+              onChangeText={setIdentifier}
+              placeholder="Enter your email or Driver ID / NIC"
               placeholderTextColor="#94A3B8"
               autoCapitalize="none"
-              keyboardType="email-address"
+              keyboardType="default"
               style={styles.input}
               editable={!isLoading}
             />
@@ -158,7 +169,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#06141D',
+    backgroundColor: '#F2FAF6',
   },
   flex: {
     flex: 1,
@@ -170,7 +181,7 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 110,
-    backgroundColor: 'rgba(45, 212, 191, 0.16)',
+    backgroundColor: 'rgba(111, 190, 155, 0.18)',
   },
   container: {
     flex: 1,
@@ -183,48 +194,48 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   backLink: {
-    color: '#99F6E4',
+    color: '#2F8F72',
     fontSize: 14,
     fontWeight: '700',
     marginBottom: 22,
   },
   title: {
-    color: '#FFFFFF',
+    color: '#111827',
     fontSize: 34,
     lineHeight: 40,
     fontWeight: '800',
     maxWidth: 260,
   },
   subtitle: {
-    color: 'rgba(226, 232, 240, 0.76)',
+    color: '#527067',
     marginTop: 12,
     fontSize: 15,
     lineHeight: 23,
     maxWidth: 320,
   },
   formCard: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
     borderRadius: 32,
     padding: 22,
-    shadowColor: '#000000',
+    shadowColor: '#7FAF98',
     shadowOpacity: 0.18,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 12 },
     elevation: 8,
   },
   label: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 14,
     fontWeight: '700',
     marginBottom: 8,
     marginTop: 6,
   },
   input: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#E8F3ED',
     borderRadius: 18,
     paddingHorizontal: 16,
     paddingVertical: 15,
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 16,
     marginBottom: 12,
   },
@@ -243,23 +254,23 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   secondaryAction: {
-    color: '#0F766E',
+    color: '#2F8F72',
     fontSize: 13,
     fontWeight: '700',
   },
   helperText: {
-    color: '#64748B',
+    color: '#66847A',
     fontSize: 12,
   },
   primaryButton: {
-    backgroundColor: '#0F766E',
+    backgroundColor: '#2F8F72',
     borderRadius: 18,
     minHeight: 54,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primaryButtonLoading: {
-    backgroundColor: '#0D9488',
+    backgroundColor: '#267A60',
     opacity: 0.85,
   },
   primaryButtonText: {
@@ -272,7 +283,7 @@ const styles = StyleSheet.create({
     minHeight: 54,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderColor: '#C8DED3',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -280,11 +291,11 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   ghostButtonText: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 15,
     fontWeight: '700',
   },
   ghostButtonTextDisabled: {
-    color: '#64748B',
+    color: '#66847A',
   },
 });
