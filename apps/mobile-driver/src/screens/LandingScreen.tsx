@@ -23,19 +23,19 @@ export default function LandingScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
       <View style={styles.backgroundGlowTop} />
       <View style={styles.backgroundGlowBottom} />
 
       <View style={styles.container}>
         <View style={styles.heroCard}>
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>Driver App</Text>
+            <Text style={styles.badgeText}> Ambulance Driver App</Text>
           </View>
 
           <Text style={styles.title}>Medical Center Driver Portal</Text>
           <Text style={styles.subtitle}>
-            Accept assignments, review pickup details, and keep trips moving from one clean home screen.
+            Accept assignments and review emergency pickups.
           </Text>
 
           <View style={styles.statsRow}>
@@ -53,7 +53,7 @@ export default function LandingScreen() {
         <View style={styles.actionCard}>
           <Text style={styles.actionTitle}>Start your shift</Text>
           <Text style={styles.actionCopy}>
-            Sign in to view today's route list and your current transport requests.
+            Sign in to view today's transport requests.
           </Text>
 
           <Pressable style={styles.primaryButton} onPress={() => router.push('/login')}>
@@ -62,7 +62,7 @@ export default function LandingScreen() {
 
           <View style={styles.footerRow}>
             <View style={styles.footerDot} />
-            <Text style={styles.footerText}>Built for drivers, tuned for quick access</Text>
+            <Text style={styles.footerText}>Built for drivers</Text>
           </View>
         </View>
       </View>
@@ -73,7 +73,7 @@ export default function LandingScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#071821',
+    backgroundColor: '#F2FAF6',
   },
   container: {
     flex: 1,
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     width: 240,
     height: 240,
     borderRadius: 120,
-    backgroundColor: 'rgba(33, 211, 173, 0.22)',
+    backgroundColor: 'rgba(111, 190, 155, 0.2)',
   },
   backgroundGlowBottom: {
     position: 'absolute',
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
     width: 260,
     height: 260,
     borderRadius: 130,
-    backgroundColor: 'rgba(14, 116, 144, 0.2)',
+    backgroundColor: 'rgba(185, 222, 203, 0.42)',
   },
   heroCard: {
     flex: 1,
@@ -109,27 +109,27 @@ const styles = StyleSheet.create({
   badge: {
     alignSelf: 'flex-start',
     borderRadius: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#DDEFE6',
     paddingHorizontal: 14,
     paddingVertical: 8,
     marginBottom: 18,
   },
   badgeText: {
-    color: '#BFF9E6',
+    color: '#2F8F72',
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
   title: {
-    color: '#FFFFFF',
+    color: '#111827',
     fontSize: 38,
     lineHeight: 44,
     fontWeight: '800',
     maxWidth: 320,
   },
   subtitle: {
-    color: 'rgba(226, 232, 240, 0.78)',
+    color: '#527067',
     fontSize: 16,
     lineHeight: 24,
     marginTop: 14,
@@ -143,46 +143,46 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#E8F3ED',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: '#D2E8DC',
     padding: 18,
   },
   statValue: {
-    color: '#FFFFFF',
+    color: '#111827',
     fontSize: 22,
     fontWeight: '800',
     marginBottom: 8,
   },
   statLabel: {
-    color: 'rgba(226, 232, 240, 0.72)',
+    color: '#66847A',
     fontSize: 13,
     lineHeight: 18,
   },
   actionCard: {
     borderRadius: 32,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
     padding: 22,
-    shadowColor: '#000000',
+    shadowColor: '#7FAF98',
     shadowOpacity: 0.16,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 12 },
     elevation: 8,
   },
   actionTitle: {
-    color: '#0F172A',
+    color: '#111827',
     fontSize: 22,
     fontWeight: '800',
   },
   actionCopy: {
-    color: '#475569',
+    color: '#527067',
     fontSize: 15,
     lineHeight: 22,
     marginTop: 10,
     marginBottom: 18,
   },
   primaryButton: {
-    backgroundColor: '#0F766E',
+    backgroundColor: '#2F8F72',
     borderRadius: 18,
     minHeight: 54,
     alignItems: 'center',
@@ -204,10 +204,10 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#0F766E',
+    backgroundColor: '#2F8F72',
   },
   footerText: {
-    color: '#64748B',
+    color: '#66847A',
     fontSize: 12,
     fontWeight: '500',
   },

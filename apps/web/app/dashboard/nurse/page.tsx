@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, User, Calendar, Activity, Weight, FileText, PlusCircle, Save, Edit3, Loader2, CheckCircle2, AlertTriangle, ShieldAlert, Key, Pill } from 'lucide-react';
+import { Search, User, Calendar, Activity, Weight, FileText, PlusCircle, Save, Edit3, Loader2, CheckCircle2, AlertTriangle, ShieldAlert, Pill } from 'lucide-react';
 import api from '@/lib/axios';
+import UserProfilePanel from '@/components/UserProfilePanel';
 
 interface Patient {
   id: string;
@@ -226,18 +227,7 @@ export default function NurseDashboard() {
             <Pill className="w-4 h-4" />
             <span>Pharmacy Station</span>
           </button>
-          
-          <button
-            onClick={() => {
-              localStorage.removeItem('session_token');
-              document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-              router.push('/login');
-            }}
-            className="px-4 py-2 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 text-xs font-bold rounded-lg border border-transparent hover:border-rose-500/20 transition-all flex items-center gap-2"
-          >
-            <Key className="w-4 h-4" />
-            <span>Sign Out</span>
-          </button>
+          <UserProfilePanel />
         </div>
       </header>
 
