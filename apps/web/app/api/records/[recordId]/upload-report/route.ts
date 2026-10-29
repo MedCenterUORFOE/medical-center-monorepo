@@ -50,7 +50,10 @@ export async function POST(
       .from('medical-documents')
       .upload(fileName, file);
 
-    if (uploadError) throw uploadError;
+    if (uploadError) {
+      console.error('[upload-report] Supabase storage upload failed:', uploadError);
+      throw uploadError;
+    }
 
     // 3. Save to DB and Notify
     const result = await prisma.$transaction(async (tx) => {

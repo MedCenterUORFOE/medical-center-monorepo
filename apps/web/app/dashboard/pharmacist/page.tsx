@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Pill, User, Calendar, Activity, CheckCircle2, ShieldAlert, Key, Plus, Trash2, Clock, History, AlertCircle, Loader2, Save, FileText, ArrowRight } from 'lucide-react';
+import { Pill, User, Calendar, Activity, CheckCircle2, ShieldAlert, Plus, Trash2, Clock, History, AlertCircle, Loader2, Save, FileText, ArrowRight } from 'lucide-react';
 import api from '@/lib/axios';
+import UserProfilePanel from '@/components/UserProfilePanel';
 
 interface Batch {
   id: string;
@@ -279,18 +280,7 @@ export default function PharmacistDashboard() {
               <span>Nurse Station</span>
             </button>
           )}
-
-          <button
-            onClick={() => {
-              localStorage.removeItem('session_token');
-              document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-              router.push('/login');
-            }}
-            className="px-4 py-2 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 text-xs font-bold rounded-lg border border-transparent hover:border-rose-500/20 transition-all flex items-center gap-2"
-          >
-            <Key className="w-4 h-4" />
-            <span>Sign Out</span>
-          </button>
+          <UserProfilePanel />
         </div>
       </header>
 

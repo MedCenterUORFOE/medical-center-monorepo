@@ -8,7 +8,6 @@ import {
   User,
   Shield,
   Briefcase,
-  Key,
   IdCard,
   Truck,
   CheckCircle2,
@@ -27,6 +26,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import api from '@/lib/axios';
+import UserProfilePanel from '@/components/UserProfilePanel';
 
 const MEDICAL_ROLES = ['DOCTOR', 'NURSE', 'PHARMACIST'] as const;
 
@@ -226,7 +226,9 @@ export default function AdminDashboardPage() {
         },
       });
       if (response.data && response.data.success) {
-        const staff = (response.data.data.users || []).filter((u: any) => u.role !== 'STUDENT');
+        const staff = (response.data.data.users || []).filter(
+          (u: UserItem) => u.role !== 'STUDENT' && !u.email.startsWith('deleted_')
+        );
         setUsers(staff);
       }
     } catch {
@@ -452,6 +454,35 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const handleStatusChange = async (user: UserItem) => {
+    const isSuspended = user.status === 'SUSPENDED';
+    const nextStatus = isSuspended ? 'VERIFIED' : 'SUSPENDED';
+    const action = isSuspended ? 'activate' : 'temporarily suspend';
+
+    if (
+      !window.confirm(
+        isSuspended
+          ? `Activate ${user.name}'s account again? They will be able to log in and use the system.`
+          : `Temporarily suspend ${user.name}'s account? They will not be able to log in until activated again.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const response = await api.patch(`/admin/users/${user.id}/status`, {
+        status: nextStatus,
+      });
+      showToast(
+        'success',
+        response.data.message || `Staff member successfully ${isSuspended ? 'activated' : 'suspended'}.`
+      );
+      fetchDirectory();
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || `Failed to ${action} the staff member.`);
+    }
+  };
+
   if (checkingAuth) {
     return (
       <div className="min-h-screen bg-[#0b0f19] flex items-center justify-center text-slate-400">
@@ -466,6 +497,10 @@ export default function AdminDashboardPage() {
   return (
     <div className="min-h-screen bg-[#07131a] text-slate-100 flex font-sans">
       {/* Admin Sidebar Navigation */}
+      <div className="fixed right-4 top-4 z-40">
+        <UserProfilePanel />
+      </div>
+
       <aside className="w-64 bg-[#0d1726]/85 border-r border-slate-700/80 hidden md:flex flex-col p-6 shrink-0 backdrop-blur-sm">
         <div className="flex items-center gap-3 mb-8">
           <div className="p-2 bg-emerald-500 rounded-lg text-white">
@@ -503,19 +538,6 @@ export default function AdminDashboardPage() {
           </button>
         </nav>
 
-        <div className="pt-4 border-t border-slate-800">
-          <button
-            onClick={() => {
-              localStorage.removeItem('session_token');
-              document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-              window.location.href = '/login';
-            }}
-            className="w-full text-left px-4 py-3 rounded-xl hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 text-sm font-semibold transition-all flex items-center gap-3"
-          >
-            <Key className="w-5 h-5" />
-            <span>Sign Out</span>
-          </button>
-        </div>
       </aside>
 
       {/* Main Content Pane */}
@@ -597,7 +619,7 @@ export default function AdminDashboardPage() {
                           setName(e.target.value);
                           if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: '' }));
                         }}
-                        placeholder="Dr. Dilisha Madushan"
+                        placeholder="Dilisha Madushan"
                         className={`w-full pl-11 pr-4 py-3 bg-[#0b0f19] border rounded-xl focus:outline-none focus:ring-1 text-xs text-white transition-colors ${
                           fieldErrors.name
                             ? 'border-rose-500/60 focus:ring-rose-500'
@@ -1082,7 +1104,7 @@ export default function AdminDashboardPage() {
                                   : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                               }`}
                             >
-                              {u.status}
+                              {u.status === 'VERIFIED' ? 'ACTIVE' : u.status}
                             </span>
                           </td>
                           <td className="py-4 px-6 text-right space-x-2.5">
@@ -1092,6 +1114,21 @@ export default function AdminDashboardPage() {
                             >
                               <Edit3 className="w-3.5 h-3.5" />
                               <span>Edit</span>
+                            </button>
+                            <button
+                              onClick={() => handleStatusChange(u)}
+                              className={`${
+                                u.status === 'SUSPENDED'
+                                  ? 'text-emerald-400 hover:text-emerald-300'
+                                  : 'text-amber-400 hover:text-amber-300'
+                              } transition-colors inline-flex items-center gap-1 font-bold`}
+                            >
+                              {u.status === 'SUSPENDED' ? (
+                                <ShieldCheck className="w-3.5 h-3.5" />
+                              ) : (
+                                <Lock className="w-3.5 h-3.5" />
+                              )}
+                              <span>{u.status === 'SUSPENDED' ? 'Activate' : 'Suspend'}</span>
                             </button>
                             <button
                               onClick={() => handleDeleteUser(u.id)}
