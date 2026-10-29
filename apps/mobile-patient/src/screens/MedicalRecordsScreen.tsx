@@ -11,6 +11,7 @@ import {
   Platform,
   RefreshControl,
   ScrollView,
+  Share,
   StatusBar,
   StyleSheet,
   Text,
@@ -29,6 +30,7 @@ import { supabase } from '../lib/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const LOCAL_STORAGE_CACHE_KEY = 'localMedicalReportFiles';
+const REPORT_URI_CACHE_PREFIX = 'report_uri_';
 
 // ── Types & Interfaces ──
 export interface MedicalReportItem {
@@ -179,6 +181,7 @@ export default function MedicalRecordsScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<FilterCategory>('All');
   const [openingReportId, setOpeningReportId] = useState<string | null>(null);
+  const [downloadingReportId, setDownloadingReportId] = useState<string | null>(null);
 
   // Upload Modal State
   const [isUploadModalVisible, setIsUploadModalVisible] = useState(false);
@@ -191,6 +194,12 @@ export default function MedicalRecordsScreen() {
   // In-App Image Preview Modal State
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState<string>('');
+  const [currentPreviewItem, setCurrentPreviewItem] = useState<MedicalReportItem | null>(null);
+
+  useEffect(() => {
+    // Purge legacy oversized monolithic cache key that causes CursorWindow overflow on Android
+    void AsyncStorage.removeItem(LOCAL_STORAGE_CACHE_KEY).catch(() => {});
+  }, []);
 
   // ── Authentication token retrieval ──
   const getAuthCredentials = async () => {
@@ -311,105 +320,196 @@ export default function MedicalRecordsScreen() {
     });
   }, [reports, selectedFilter]);
 
-  // ── Document Viewing (Data URLs, Local Cache & Signed URLs) ──
-  const handleViewReport = async (item: MedicalReportItem) => {
+  // ── Resolve Report URL (Local Cache, Direct URL, or Cloud Signed URL) ──
+  const resolveReportUrl = async (
+    item: MedicalReportItem
+  ): Promise<{ url: string; isDirectData: boolean }> => {
     if (!item.file_url) {
-      Alert.alert('Unavailable', 'No file attachment URL was found for this report.');
-      return;
+      throw new Error('No file attachment URL was found for this report.');
     }
 
-    const typeMeta = resolveReportTypeMeta(item.type);
-    setPreviewTitle(typeMeta.label);
-
-    // CASE A: Direct Data URI (base64 stored in DB), local file URI, or content URI
-    if (
-      item.file_url.startsWith('data:image/') ||
-      item.file_url.startsWith('file://') ||
-      item.file_url.startsWith('content://')
-    ) {
-      setPreviewUri(item.file_url);
-      return;
+    // 1. Direct Data URI (base64)
+    if (item.file_url.startsWith('data:image/')) {
+      return { url: item.file_url, isDirectData: true };
     }
 
-    // Direct HTTP / HTTPS image or document URL
+    // 2. Direct Local File or Content URI
+    if (item.file_url.startsWith('file://') || item.file_url.startsWith('content://')) {
+      return { url: item.file_url, isDirectData: false };
+    }
+
+    // 3. Direct HTTP / HTTPS URL
     if (item.file_url.startsWith('http://') || item.file_url.startsWith('https://')) {
-      const isImg = /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(item.file_url);
-      if (isImg) {
-        setPreviewUri(item.file_url);
-      } else {
-        await Linking.openURL(item.file_url);
-      }
-      return;
+      return { url: item.file_url, isDirectData: false };
     }
 
-    // CASE B: Check Local Device AsyncStorage Cache
+    // 4. Check Per-Report Local Device Cache Key
     try {
-      const cachedRaw = await AsyncStorage.getItem(LOCAL_STORAGE_CACHE_KEY);
-      if (cachedRaw) {
-        const localMap: Record<string, string> = JSON.parse(cachedRaw);
-        const cachedUri = localMap[item.file_url] || localMap[item.id];
-        if (cachedUri) {
-          setPreviewUri(cachedUri);
-          return;
-        }
+      const localUri = await AsyncStorage.getItem(`${REPORT_URI_CACHE_PREFIX}${item.id}`);
+      if (localUri && (localUri.startsWith('file://') || localUri.startsWith('content://'))) {
+        return { url: localUri, isDirectData: false };
       }
-    } catch (cacheErr) {
-      console.warn('Local report cache lookup error:', cacheErr);
+    } catch {
+      // Continue to cloud resolution
     }
 
-    // CASE C: Cloud Storage Path -> Request Signed URL from Backend
-    try {
-      setOpeningReportId(item.id);
-      const { token, apiUrl } = await getAuthCredentials();
+    // 5. Cloud Storage Path -> Request Signed URL from Backend
+    const { token, apiUrl } = await getAuthCredentials();
+    if (!apiUrl || !token) {
+      throw new Error('Authentication session or API server URL missing. Please log in again.');
+    }
 
-      if (!apiUrl || !token) {
-        throw new Error('Authentication session or API URL missing.');
+    const response = await fetch(
+      `${apiUrl}/api/documents/sign-url?file_path=${encodeURIComponent(item.file_url)}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          Cookie: `session_token=${token}`,
+        },
       }
+    );
 
-      const response = await fetch(
-        `${apiUrl}/api/documents/sign-url?file_path=${encodeURIComponent(item.file_url)}`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-        }
+    const json = await response.json().catch(() => null);
+    const signedUrl = json?.data?.signed_url || json?.signed_url;
+
+    if (!response.ok || !signedUrl) {
+      throw new Error(
+        json?.message ||
+          json?.error?.message ||
+          'This medical report file is not available on the cloud storage server.'
       );
+    }
 
-      const json = await response.json();
+    return { url: signedUrl, isDirectData: false };
+  };
 
-      if (!response.ok || !json.data?.signed_url) {
-        // For older test records created before cloud storage was configured
-        Alert.alert(
-          'Report Unavailable',
-          'This older test record was uploaded before cloud storage was configured, so the physical file is not available on the server.\n\nPlease upload a new report to view or share it.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
+  // ── Document Viewing (In-App Modal / External PDF) ──
+  const handleViewReport = async (item: MedicalReportItem) => {
+    setOpeningReportId(item.id);
+    try {
+      const typeMeta = resolveReportTypeMeta(item.type);
+      setPreviewTitle(typeMeta.label);
+      setCurrentPreviewItem(item);
 
-      const signedUrl = json.data.signed_url;
+      const { url } = await resolveReportUrl(item);
 
-      // Check if image vs PDF / other
-      const isImage =
+      const isImg =
+        url.startsWith('data:image/') ||
+        url.startsWith('file://') ||
+        url.startsWith('content://') ||
         /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(item.file_url) ||
-        /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(signedUrl);
+        /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(url);
 
-      if (isImage) {
-        setPreviewUri(signedUrl);
+      if (isImg) {
+        setPreviewUri(url);
       } else {
         // PDF or external document - open via Linking
-        await Linking.openURL(signedUrl);
+        const supported = await Linking.canOpenURL(url).catch(() => false);
+        if (supported) {
+          await Linking.openURL(url);
+        } else {
+          Alert.alert('Cannot Open', 'No application found to view this document format.');
+        }
       }
-    } catch (error: any) {
-      console.error('Error opening report:', error);
+    } catch (err: any) {
+      console.error('Error opening report:', err);
       Alert.alert(
-        'Connection Notice',
-        'Unable to download this medical report. Please check your internet connection and try again.'
+        'Report Unavailable',
+        err?.message || 'Unable to open this report. Please check your network connection.'
       );
     } finally {
       setOpeningReportId(null);
+    }
+  };
+
+  // ── Document Downloading (System Browser / Storage / Share) ──
+  const handleDownloadReport = async (item: MedicalReportItem) => {
+    setDownloadingReportId(item.id);
+    try {
+      const typeMeta = resolveReportTypeMeta(item.type);
+      const { url, isDirectData } = await resolveReportUrl(item);
+
+      if (!isDirectData) {
+        // CASE A: Standard HTTP / HTTPS or local file
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+          const canOpen = await Linking.canOpenURL(url).catch(() => false);
+          if (canOpen) {
+            await Linking.openURL(url);
+          } else {
+            await Share.share({
+              title: `${typeMeta.label} - Medical Center`,
+              message: `${typeMeta.label} Medical Report Document:\n${url}`,
+              url,
+            });
+          }
+        } else {
+          // Local file URI
+          await Share.share({
+            title: `${typeMeta.label} - Medical Center`,
+            url,
+          });
+        }
+      } else {
+        // CASE B: Base64 data:image/... URI
+        let downloadLink = '';
+        const hasSupabase =
+          process.env.EXPO_PUBLIC_SUPABASE_URL &&
+          !process.env.EXPO_PUBLIC_SUPABASE_URL.includes('placeholder');
+
+        if (hasSupabase) {
+          try {
+            const rawBase64 = url.split('base64,')[1] || url;
+            const uint8 = base64ToUint8Array(rawBase64);
+            const fileName = `temp_downloads/${item.id}_${Date.now()}.jpg`;
+            const { error: upErr } = await supabase.storage
+              .from('medical-documents')
+              .upload(fileName, uint8, { contentType: 'image/jpeg', upsert: true });
+
+            if (!upErr) {
+              const { data: signData } = await supabase.storage
+                .from('medical-documents')
+                .createSignedUrl(fileName, 300);
+              if (signData?.signedUrl) {
+                downloadLink = signData.signedUrl;
+              }
+            }
+          } catch (supErr) {
+            console.warn('Supabase temporary download upload error:', supErr);
+          }
+        }
+
+        if (downloadLink) {
+          await Linking.openURL(downloadLink);
+        } else {
+          if (Platform.OS === 'ios') {
+            await Share.share({
+              title: `${typeMeta.label} Report`,
+              url: url,
+            });
+          } else {
+            // On Android, data: URLs cannot be launched directly via Linking.
+            // Open full-screen in-app preview where user can view in high-res or save
+            setPreviewTitle(typeMeta.label);
+            setCurrentPreviewItem(item);
+            setPreviewUri(url);
+            Alert.alert(
+              'Report Opened',
+              'This medical report is opened in full view. You can take a screenshot or view all details full screen.',
+              [{ text: 'OK' }]
+            );
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('Download error:', err);
+      Alert.alert(
+        'Download Notice',
+        err?.message || 'Unable to download this report. Please check your internet connection.'
+      );
+    } finally {
+      setDownloadingReportId(null);
     }
   };
 
@@ -417,9 +517,8 @@ export default function MedicalRecordsScreen() {
   const handlePickImage = async (useCamera: boolean) => {
     try {
       const pickerOptions: ImagePicker.ImagePickerOptions = {
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.5,
-        base64: true,
+        mediaTypes: ['images'],
+        quality: 0.4,
         allowsEditing: false,
       };
 
@@ -524,89 +623,56 @@ export default function MedicalRecordsScreen() {
       }
 
       const cleanFileName = selectedImage.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const storageFilePath = `${selectedRecordId}/${Date.now()}-${cleanFileName}`;
       const dataUri = selectedImage.base64
         ? `data:${selectedImage.type || 'image/jpeg'};base64,${selectedImage.base64}`
         : selectedImage.uri;
 
-      let fileUrlToSave = '';
-      let supabaseUploadedSuccessfully = false;
+      // Prepare multipart/form-data payload as required by POST /api/records/{recordId}/upload-report
+      const formData = new FormData();
+      formData.append('file', {
+        uri: selectedImage.uri,
+        name: cleanFileName || `report_${Date.now()}.jpg`,
+        type: selectedImage.type || 'image/jpeg',
+      } as any);
+      formData.append('type', finalReportType);
 
-      // 1. Attempt upload to Supabase Storage if configured and base64 is available
-      const hasSupabase =
-        process.env.EXPO_PUBLIC_SUPABASE_URL &&
-        !process.env.EXPO_PUBLIC_SUPABASE_URL.includes('placeholder');
+      // Submit to backend API: POST /api/records/{recordId}/upload-report
+      const response = await fetch(
+        `${apiUrl}/api/records/${encodeURIComponent(selectedRecordId)}/upload-report`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Cookie: `session_token=${token}`,
+          },
+          body: formData,
+        }
+      );
 
-      if (hasSupabase && selectedImage.base64) {
+      const responseJson = await response.json().catch(() => null);
+
+      if (!response.ok || responseJson?.success === false) {
+        const errorMsg =
+          responseJson?.message ||
+          responseJson?.error?.message ||
+          responseJson?.error ||
+          `Server returned HTTP ${response.status} during upload.`;
+        throw new Error(errorMsg);
+      }
+
+      // Persist local file:// URI in AsyncStorage with lightweight per-report key (never store base64 in AsyncStorage)
+      if (selectedImage.uri) {
         try {
-          const uint8Array = base64ToUint8Array(selectedImage.base64);
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('medical-documents')
-            .upload(storageFilePath, uint8Array, {
-              contentType: selectedImage.type || 'image/jpeg',
-              upsert: true,
-            });
-
-          if (!uploadError && uploadData?.path) {
-            fileUrlToSave = uploadData.path;
-            supabaseUploadedSuccessfully = true;
-          } else if (uploadError) {
-            console.warn('Supabase storage upload error:', uploadError.message);
+          const uploadedReport = responseJson?.data?.report || responseJson?.data;
+          if (uploadedReport?.id) {
+            await AsyncStorage.setItem(
+              `${REPORT_URI_CACHE_PREFIX}${uploadedReport.id}`,
+              selectedImage.uri
+            );
           }
-        } catch (uploadException) {
-          console.warn('Supabase upload exception:', uploadException);
+        } catch (cacheErr) {
+          console.warn('Local cache write error:', cacheErr);
         }
-      }
-
-      // If Supabase upload didn't succeed (e.g., Anon key RLS restriction or missing credentials),
-      // we store the dataUri directly into PostgreSQL (TEXT column has no limit).
-      // This guarantees the image is saved and viewable everywhere without 404!
-      if (!supabaseUploadedSuccessfully) {
-        fileUrlToSave = dataUri;
-      }
-
-      // 2. Persist to local device cache in AsyncStorage as a failsafe
-      try {
-        const existingCacheRaw = await AsyncStorage.getItem(LOCAL_STORAGE_CACHE_KEY);
-        const cacheMap: Record<string, string> = existingCacheRaw ? JSON.parse(existingCacheRaw) : {};
-        cacheMap[storageFilePath] = dataUri;
-        cacheMap[selectedImage.uri] = dataUri;
-        if (fileUrlToSave) {
-          cacheMap[fileUrlToSave] = dataUri;
-        }
-        await AsyncStorage.setItem(LOCAL_STORAGE_CACHE_KEY, JSON.stringify(cacheMap));
-      } catch (cacheErr) {
-        console.warn('Local cache write error:', cacheErr);
-      }
-
-      // 3. Submit to backend API: POST /api/reports/upload
-      const response = await fetch(`${apiUrl}/api/reports/upload`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          record_id: selectedRecordId,
-          file_url: fileUrlToSave,
-          type: finalReportType,
-        }),
-      });
-
-      const responseJson = await response.json();
-
-      if (!response.ok || responseJson.success === false) {
-        throw new Error(responseJson.message || 'Server rejected the report submission.');
-      }
-
-      // Save report.id mapping in cache if returned
-      if (responseJson.data?.report?.id) {
-        try {
-          const existingCacheRaw = await AsyncStorage.getItem(LOCAL_STORAGE_CACHE_KEY);
-          const cacheMap: Record<string, string> = existingCacheRaw ? JSON.parse(existingCacheRaw) : {};
-          cacheMap[responseJson.data.report.id] = dataUri;
-          await AsyncStorage.setItem(LOCAL_STORAGE_CACHE_KEY, JSON.stringify(cacheMap));
-        } catch {}
       }
 
       Alert.alert(
@@ -635,6 +701,7 @@ export default function MedicalRecordsScreen() {
   const renderReportCard = ({ item }: { item: MedicalReportItem }) => {
     const typeMeta = resolveReportTypeMeta(item.type);
     const isOpening = openingReportId === item.id;
+    const isDownloading = downloadingReportId === item.id;
     const isDirectImage = item.file_url.startsWith('data:image/');
 
     return (
@@ -692,22 +759,40 @@ export default function MedicalRecordsScreen() {
           ) : null}
         </View>
 
-        {/* Action Button: View / Download */}
-        <TouchableOpacity
-          style={styles.viewDocButton}
-          onPress={() => handleViewReport(item)}
-          disabled={isOpening}
-          activeOpacity={0.8}
-        >
-          {isOpening ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <>
-              <Ionicons name="eye-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.viewDocButtonText}>View / Download Report</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        {/* Action Buttons: View & Download side-by-side */}
+        <View style={styles.cardActionsRow}>
+          <TouchableOpacity
+            style={styles.viewCardButton}
+            onPress={() => handleViewReport(item)}
+            disabled={isOpening || isDownloading}
+            activeOpacity={0.8}
+          >
+            {isOpening ? (
+              <ActivityIndicator size="small" color="#3B6E5C" />
+            ) : (
+              <>
+                <Ionicons name="eye-outline" size={17} color="#3B6E5C" />
+                <Text style={styles.viewCardButtonText}>View</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.downloadCardButton}
+            onPress={() => handleDownloadReport(item)}
+            disabled={isOpening || isDownloading}
+            activeOpacity={0.8}
+          >
+            {isDownloading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Ionicons name="download-outline" size={17} color="#FFFFFF" />
+                <Text style={styles.downloadCardButtonText}>Download</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
     );
   };
@@ -1059,20 +1144,51 @@ export default function MedicalRecordsScreen() {
         visible={!!previewUri}
         animationType="fade"
         transparent
-        onRequestClose={() => setPreviewUri(null)}
+        onRequestClose={() => {
+          setPreviewUri(null);
+          setCurrentPreviewItem(null);
+        }}
       >
         <SafeAreaView style={styles.previewBackdrop}>
           <View style={styles.previewHeaderBar}>
             <Text style={styles.previewHeaderTitle} numberOfLines={1}>
               {previewTitle || 'Report Preview'}
             </Text>
-            <TouchableOpacity
-              style={styles.previewCloseBtn}
-              onPress={() => setPreviewUri(null)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="close" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
+
+            <View style={styles.previewHeaderActions}>
+              {currentPreviewItem && (
+                <TouchableOpacity
+                  style={styles.previewDownloadBtn}
+                  onPress={() => {
+                    if (currentPreviewItem) {
+                      void handleDownloadReport(currentPreviewItem);
+                    }
+                  }}
+                  activeOpacity={0.8}
+                  disabled={downloadingReportId === currentPreviewItem.id}
+                >
+                  {downloadingReportId === currentPreviewItem.id ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="download-outline" size={16} color="#FFFFFF" />
+                      <Text style={styles.previewDownloadBtnText}>Save</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={styles.previewCloseBtn}
+                onPress={() => {
+                  setPreviewUri(null);
+                  setCurrentPreviewItem(null);
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.previewImageContainer}>
@@ -1335,6 +1451,68 @@ const styles = StyleSheet.create({
   viewDocButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
+    fontWeight: '700',
+  },
+  cardActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+  },
+  viewCardButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#3B6E5C',
+    borderRadius: 22,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  viewCardButtonText: {
+    color: '#3B6E5C',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  downloadCardButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3B6E5C',
+    borderRadius: 22,
+    paddingVertical: 10,
+    gap: 6,
+    shadowColor: '#3B6E5C',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  downloadCardButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  previewHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  previewDownloadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#3B6E5C',
+    borderRadius: 18,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    gap: 4,
+  },
+  previewDownloadBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '700',
   },
   loaderWrap: {
