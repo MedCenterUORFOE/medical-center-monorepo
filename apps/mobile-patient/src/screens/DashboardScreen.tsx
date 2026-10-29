@@ -13,13 +13,16 @@ import {
   Modal,
   Linking
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context'; 
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons, FontAwesome5, Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { colors } from '../theme/colors';
 import * as Location from 'expo-location';
-import AsyncStorage from '@react-native-async-storage/async-storage'; 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { useQuery } from '@tanstack/react-query';
+import { useFocusEffect } from 'expo-router';
+import { getUnreadCount, subscribe } from '../notifications/notificationStore';
 
 // ── TypeScript Data Interfaces ──
 interface ProfileSchema {
@@ -27,16 +30,16 @@ interface ProfileSchema {
   student_id: string;
   faculty: string;
   avatar_url?: string | null;
-  is_profile_complete: boolean; 
+  is_profile_complete: boolean;
 }
 
-// ✅ අලුත් Database Field නම් වලට ගැළපෙන්න වෙනස් කළා
+// ✅ Changed to match new Database Field names
 interface AppointmentSchema {
 
   id?: string;
- appointment_id?: string; 
+  appointment_id?: string;
   //appointment_id: string; 
-  scheduled_time: string; 
+  scheduled_time: string;
   status: string;
   doctor?: {
     staff?: {
@@ -58,14 +61,34 @@ interface MedicalRecordSchema {
   follow_up_date?: string | null;
 }
 
+const isUpcoming = (appointment: AppointmentSchema) => {
+  if (!appointment.scheduled_time) return true;
+  const d = new Date(appointment.scheduled_time);
+  if (isNaN(d.getTime())) return true;
+  return d >= new Date();
+};
+
 export default function PatientDashboard() {
   const router = useRouter();
-  
+
   const [patientId, setPatientId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'CONSULTATIONS' | 'TIMELINE'>('CONSULTATIONS');
   const [greeting, setGreeting] = useState<string>('');
   const [isMutating, setIsMutating] = useState<boolean>(false);
-  const unreadNotifCount = 0;
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+
+  const loadUnreadCount = async () => {
+    const count = await getUnreadCount();
+    setUnreadNotifCount(count);
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadUnreadCount();
+      const unsubscribe = subscribe(loadUnreadCount);
+      return () => unsubscribe();
+    }, [])
+  );
   const [isConfirmEmergencyModalVisible, setIsConfirmEmergencyModalVisible] = useState<boolean>(false);
 
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -162,9 +185,11 @@ export default function PatientDashboard() {
     enabled: !!patientId,
   });
 
+  const upcomingConsultations = appointmentsList.filter(isUpcoming);
+
   // Derived state mappings for template compatibility
   const hasVerifiedProfile = profile ? profile.is_profile_complete : true;
-  const nextAppointment = appointmentsList.length > 0 ? appointmentsList[0] : null;
+  const nextAppointment = upcomingConsultations.length > 0 ? upcomingConsultations[0] : null;
   const isLoading = isProfileLoading || isAppointmentsLoading || isHistoryLoading || isMutating;
 
   const fetchDashboardDataFromBackend = async () => {
@@ -175,31 +200,31 @@ export default function PatientDashboard() {
     ]);
   };
 
-  
 
-  
+
+
   const handleCancelAppointment = async (appointmentId: string) => {
     Alert.alert('Confirm Cancellation', 'Are you sure you want to cancel this appointment?', [
       { text: 'No', style: 'cancel' },
-      { 
-        text: 'Yes, Cancel', 
+      {
+        text: 'Yes, Cancel',
         style: 'destructive',
         onPress: async () => {
           setIsMutating(true);
           try {
             const API_URL = process.env.EXPO_PUBLIC_API_URL;
             const token = await SecureStore.getItemAsync('userToken');
-            
-            // ✅ Status එක Update කරන ඔයාගේ Route එකට කතා කරනවා
+
+            // ✅ Calling your route that updates Status
             const res = await fetch(`${API_URL}/api/appointments/${appointmentId}/status`, {
               method: 'PATCH',
-              headers: { 
+              headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}` 
+                'Authorization': `Bearer ${token}`
               },
               body: JSON.stringify({ status: 'CANCELLED' })
             });
-            
+
             if (res.ok) {
               Alert.alert('Success', 'Appointment cancelled successfully.');
               fetchDashboardDataFromBackend(); // Refresh Data
@@ -216,9 +241,9 @@ export default function PatientDashboard() {
     ]);
   };
 
-  
 
-  // --- Panic Button Logic --- (නොවෙනස්ව)
+
+  // --- Panic Button Logic ---
   const handleEmergencyPressIn = () => {
     Animated.parallel([
       Animated.timing(progressAnim, { toValue: 1, duration: 3000, useNativeDriver: false }),
@@ -287,17 +312,17 @@ export default function PatientDashboard() {
       if (response.status === 201 || responseBody?.success === true) {
         const reqId = responseBody?.data?.id;
         const serverMsg = responseBody?.message || "";
-        
+
         if (serverMsg.toLowerCase().includes("no driver")) {
           callHotline();
           return;
         }
-        
+
         if (reqId) {
           await AsyncStorage.setItem('activeEmergencyRequestId', reqId);
           await AsyncStorage.setItem('activeEmergencyStatus', 'PENDING');
         }
-        
+
         Alert.alert('Success', 'SOS Sent Successfully! We are finding the nearest ambulance.');
         router.push('/emergency' as any);
       } else {
@@ -353,7 +378,7 @@ export default function PatientDashboard() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="light-content" backgroundColor="#1B5E55" />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.softSurface} />
 
       {/* ── 1. DYNAMIC HEADER ── */}
       <View style={styles.header}>
@@ -369,7 +394,7 @@ export default function PatientDashboard() {
           </View>
 
           <TouchableOpacity style={styles.bellWrap} onPress={() => router.push('/notifications' as any)} activeOpacity={0.7}>
-            <Ionicons name="notifications-outline" size={26} color="#FFFFFF" />
+            <Ionicons name="notifications-outline" size={26} color={colors.textPrimary} />
             {unreadNotifCount > 0 && (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>{unreadNotifCount > 9 ? '9+' : unreadNotifCount}</Text>
@@ -381,7 +406,7 @@ export default function PatientDashboard() {
 
       {isLoading ? (
         <View style={styles.loaderContainer}>
-          <ActivityIndicator size="large" color="#1B5E55" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
         <View style={{ flex: 1, zIndex: 10, elevation: 10, marginTop: hasVerifiedProfile ? -40 : 0 }}>
@@ -392,23 +417,23 @@ export default function PatientDashboard() {
               <View style={styles.statusOverlapCard}>
                 <View style={styles.statusLeftRow}>
                   <View style={styles.checkCircleGreenIconFrame}>
-                    <Ionicons name="fitness-outline" size={32} color="#16A34A" />
+                    <Ionicons name="fitness-outline" size={32} color={colors.badges.records.icon} />
                   </View>
                   <View style={styles.statusLabelsTextContainer}>
                     <Text style={styles.statusHeadlineMainTextText} numberOfLines={1}>{currentHealthStatus}</Text>
                     {latestVisit && (
-                       <Text style={styles.lastVisitStringMetaLabelText}>Last visit: {formatDisplayDate(latestVisit.visit_date)}</Text>
+                      <Text style={styles.lastVisitStringMetaLabelText}>Last visit: {formatDisplayDate(latestVisit.visit_date)}</Text>
                     )}
                   </View>
                 </View>
-                
+
                 <View style={styles.nextAppointmentPillContainerPill}>
                   <Text style={styles.pillHeadingTitleLabelText}>Next Appt.</Text>
                   <Text style={styles.pillDateTimeStringValueText}>
                     {nextAppointment ? `${formatDisplayDate(nextAppointment.scheduled_time)}` : 'No upcoming'}
                   </Text>
                   {nextAppointment && (
-                    <Text style={{fontSize: 10, color: '#1B5E55', fontWeight: 'bold'}}>{formatDisplayTime(nextAppointment.scheduled_time)}</Text>
+                    <Text style={{ fontSize: 10, color: colors.primaryText, fontWeight: 'bold' }}>{formatDisplayTime(nextAppointment.scheduled_time)}</Text>
                   )}
                 </View>
               </View>
@@ -418,7 +443,7 @@ export default function PatientDashboard() {
             {!hasVerifiedProfile && (
               <TouchableOpacity style={styles.amberWarningCallout} onPress={() => router.push('/complete-profile' as any)}>
                 <View style={styles.warningHeaderRow}>
-                  <MaterialIcons name="warning" size={24} color="#D97706" />
+                  <MaterialIcons name="warning" size={24} color={colors.warningText} />
                   <Text style={styles.warningTitleText}>Action Required</Text>
                 </View>
                 <Text style={styles.warningBodyText}>
@@ -432,15 +457,15 @@ export default function PatientDashboard() {
               <Text style={styles.sectionHeadingTitleMainLabel}>Quick Actions</Text>
               <View style={styles.gridMatrixRowWrapper}>
                 <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/(tabs)/appointment' as any)}>
-                  <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: '#E0F2FE' }]}>
-                    <Feather name="calendar" size={22} color="#0284C7" />
+                  <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: colors.badges.appointment.background }]}>
+                    <Feather name="calendar" size={22} color={colors.badges.appointment.icon} />
                   </View>
                   <Text style={styles.actionCardLabelContentString}>Book Appointment</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/(tabs)/prescriptions' as any)}>
-                  <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: '#FDE8E8' }]}>
-                    <FontAwesome5 name="pills" size={20} color="#DC2626" />
+                  <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: colors.badges.prescriptions.background }]}>
+                    <FontAwesome5 name="pills" size={20} color={colors.badges.prescriptions.icon} />
                   </View>
                   <Text style={styles.actionCardLabelContentString}>My Prescriptions</Text>
                 </TouchableOpacity>
@@ -448,15 +473,15 @@ export default function PatientDashboard() {
 
               <View style={styles.gridMatrixRowWrapper}>
                 <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/(tabs)/records' as any)}>
-                  <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: '#DCFCE7' }]}>
-                    <Ionicons name="document-text-outline" size={22} color="#16A34A" />
+                  <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: colors.badges.records.background }]}>
+                    <Ionicons name="document-text-outline" size={22} color={colors.badges.records.icon} />
                   </View>
-                  <Text style={styles.actionCardLabelContentString}>Medical Records</Text>
+                  <Text style={styles.actionCardLabelContentString}>Medical Reports</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/academic-submission' as any)}>
-                  <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: '#F0F9FF' }]}>
-                    <Feather name="book-open" size={20} color="#0284C7" />
+                  <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: colors.badges.submission.background }]}>
+                    <Feather name="book-open" size={20} color={colors.badges.submission.icon} />
                   </View>
                   <Text style={styles.actionCardLabelContentString}>Submit to Lecturer</Text>
                 </TouchableOpacity>
@@ -467,15 +492,15 @@ export default function PatientDashboard() {
             {hasVerifiedProfile && (
               <>
                 <View style={styles.tabToggleRowBarContainer}>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[styles.segmentTabButton, activeTab === 'CONSULTATIONS' && styles.activeSegmentTabButton]}
                     onPress={() => setActiveTab('CONSULTATIONS')}
                   >
                     <Text style={[styles.tabLabelStringText, activeTab === 'CONSULTATIONS' && styles.activeTabLabelStringText]}>
-                      Consultations ({appointmentsList.length})
+                      Consultations ({upcomingConsultations.length})
                     </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[styles.segmentTabButton, activeTab === 'TIMELINE' && styles.activeSegmentTabButton]}
                     onPress={() => setActiveTab('TIMELINE')}
                   >
@@ -487,23 +512,23 @@ export default function PatientDashboard() {
 
                 <View style={styles.tabPanelBodyWrapper}>
                   {activeTab === 'CONSULTATIONS' ? (
-                    appointmentsList.length === 0 ? (
+                    upcomingConsultations.length === 0 ? (
                       <View style={styles.emptyStateCardView}>
-                        <Text style={styles.emptyStateDescriptionLabelText}>No upcoming consultations booked.</Text>
+                        <Text style={styles.emptyStateDescriptionLabelText}>No upcoming consultations</Text>
                         <TouchableOpacity style={styles.emptyStateActionButtonCtaPill} onPress={() => router.push('/book-appointment' as any)}>
                           <Text style={styles.ctaButtonLabelText}>Book one now</Text>
                         </TouchableOpacity>
                       </View>
                     ) : (
-                      appointmentsList.map((item) => {
-                      // 🚀 මෙන්න සුපිරිම වැඩේ: Backend එකෙන් එන නම මොකක් වුණත් අපි ඒක හරියටම ගන්නවා!
+                      upcomingConsultations.map((item) => {
+                      // 🚀 Here's the key part: Whatever name comes from the Backend, we get it accurately!
                       const validId = item.id || item.appointment_id;
 
                       return (
                         <View key={validId} style={styles.upcomingAppointmentCardWrapper}>
                           <View style={styles.cardHeaderFlexLineRow}>
                             <View style={styles.doctorAvatarCircleWrapperFramePlaceholder}>
-                              <FontAwesome5 name="user-md" size={22} color="#1B5E55" />
+                              <FontAwesome5 name="user-md" size={22} color={colors.primary} />
                             </View>
                             <View style={styles.doctorIdentityLabelsBlockText}>
                               
@@ -520,7 +545,7 @@ export default function PatientDashboard() {
                           </View>
                           
                           <View style={styles.appointmentTimeBadgeRowLinePill}>
-                            <Ionicons name="time-outline" size={16} color="#1B5E55" style={{ marginRight: 6 }} />
+                            <Ionicons name="time-outline" size={16} color={colors.primaryText} style={{ marginRight: 6 }} />
                             <Text style={styles.appointmentBadgeTimestampStringText}>
                               {formatDisplayDate(item.scheduled_time)} at {formatDisplayTime(item.scheduled_time)}
                             </Text>
@@ -562,22 +587,17 @@ export default function PatientDashboard() {
               </>
             )}
 
-            <View style={{ height: 120 }} />
+            <View style={{ height: 100 }} />
           </ScrollView>
 
-          {/* ── 5. NEW GLOBAL TRIGGER EMERGENCY FOOTER ── */}
-          <View style={styles.newEmergencyFooter}>
-            <TouchableOpacity
-              style={styles.newEmergencyButton}
-              onPress={() => setIsConfirmEmergencyModalVisible(true)}
-              activeOpacity={0.85}
-            >
-              <View style={styles.newEmergencyIconWrap}>
-                <Ionicons name="alert" size={24} color="#DC2626" />
-              </View>
-              <Text style={styles.newEmergencyButtonText}>TRIGGER EMERGENCY</Text>
-            </TouchableOpacity>
-          </View>
+          {/* ── 5. FLOATING CIRCULAR SOS BUTTON ── */}
+          <TouchableOpacity
+            style={styles.floatingSosButton}
+            onPress={() => setIsConfirmEmergencyModalVisible(true)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.floatingSosButtonText}>SOS</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -591,7 +611,7 @@ export default function PatientDashboard() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Ionicons name="alert-circle" size={56} color="#EF4444" />
+              <Ionicons name="alert-circle" size={56} color={colors.primary} />
               <Text style={styles.modalTitle}>Confirm Emergency SOS</Text>
             </View>
             <Text style={styles.modalBody}>
@@ -625,78 +645,240 @@ export default function PatientDashboard() {
 
 // ── STYLESHEET ──
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#E8ECEC' },
+  safeArea: { flex: 1, backgroundColor: colors.background },
   loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { backgroundColor: '#1B5E55', paddingHorizontal: 24, paddingTop: 24, paddingBottom: 65, borderBottomLeftRadius: 36, borderBottomRightRadius: 36 },
+  header: {
+    backgroundColor: colors.headerBanner,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 65,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   headerLeft: { flex: 1 },
-  greetingText: { color: 'rgba(255,255,255,0.78)', fontSize: 14, fontWeight: '500' },
-  userName: { color: '#FFFFFF', fontSize: 26, fontWeight: 'bold', marginTop: 3 },
-  studentIdSubTitleText: { color: 'rgba(255,255,255,0.72)', fontSize: 13, marginTop: 4, fontWeight: '500' },
-  bellWrap: { padding: 6, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 12 },
-  badge: { position: 'absolute', top: -4, right: -4, backgroundColor: '#EF4444', borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#1B5E55' },
+  greetingText: { color: colors.textSecondary, fontSize: 14, fontWeight: '500' },
+  userName: { color: colors.textPrimary, fontSize: 26, fontWeight: 'bold', marginTop: 3 },
+  studentIdSubTitleText: { color: colors.textSecondary, fontSize: 13, marginTop: 4, fontWeight: '500' },
+  bellWrap: { padding: 8, backgroundColor: 'rgba(255, 255, 255, 0.65)', borderRadius: 12 },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: colors.badges.prescriptions.icon,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
   badgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: 'bold' },
   scrollContent: { paddingBottom: 20 },
-  statusOverlapCard: { backgroundColor: '#FFFFFF', borderRadius: 20, marginHorizontal: 20, padding: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 8 },
+  statusOverlapCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    marginHorizontal: 20,
+    padding: 18,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+  },
   statusLeftRow: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10 },
   checkCircleGreenIconFrame: { marginRight: 10 },
   statusLabelsTextContainer: { flex: 1 },
-  statusHeadlineMainTextText: { fontSize: 16, fontWeight: 'bold', color: '#111111' },
-  lastVisitStringMetaLabelText: { fontSize: 12, color: '#6B7280', marginTop: 2, fontWeight: '500' },
-  nextAppointmentPillContainerPill: { backgroundColor: '#E6F4F4', borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12, alignItems: 'flex-end', maxWidth: '45%' },
-  pillHeadingTitleLabelText: { fontSize: 10, fontWeight: 'bold', color: '#1B5E55', textTransform: 'uppercase', letterSpacing: 0.3 },
-  pillDateTimeStringValueText: { fontSize: 12, fontWeight: 'bold', color: '#1B5E55', marginTop: 2 },
-  amberWarningCallout: { backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#FDE68A', borderRadius: 20, marginHorizontal: 20, marginTop: 20, padding: 16 },
+  statusHeadlineMainTextText: { fontSize: 16, fontWeight: 'bold', color: colors.textPrimary },
+  lastVisitStringMetaLabelText: { fontSize: 12, color: colors.textSecondary, marginTop: 2, fontWeight: '500' },
+  nextAppointmentPillContainerPill: {
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'flex-end',
+    maxWidth: '45%',
+  },
+  pillHeadingTitleLabelText: { fontSize: 10, fontWeight: 'bold', color: colors.primary, textTransform: 'uppercase', letterSpacing: 0.3 },
+  pillDateTimeStringValueText: { fontSize: 12, fontWeight: 'bold', color: colors.textPrimary, marginTop: 2 },
+  amberWarningCallout: {
+    backgroundColor: colors.warningBackground,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+    borderRadius: 16,
+    marginHorizontal: 20,
+    marginTop: 20,
+    padding: 16,
+  },
   warningHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  warningTitleText: { fontSize: 16, fontWeight: 'bold', color: '#92400E', marginLeft: 8 },
-  warningBodyText: { fontSize: 13, lineHeight: 20, color: '#B45309', fontWeight: '500' },
+  warningTitleText: { fontSize: 16, fontWeight: 'bold', color: colors.warningText, marginLeft: 8 },
+  warningBodyText: { fontSize: 13, lineHeight: 20, color: colors.warningBody, fontWeight: '500' },
   gridSectionSection: { marginTop: 24, paddingHorizontal: 20 },
-  sectionHeadingTitleMainLabel: { fontSize: 18, fontWeight: 'bold', color: '#111111', marginBottom: 14 },
+  sectionHeadingTitleMainLabel: { fontSize: 18, fontWeight: 'bold', color: colors.textPrimary, marginBottom: 14 },
   gridMatrixRowWrapper: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  gridActionCardElement: { backgroundColor: '#FFFFFF', width: '48%', borderRadius: 18, padding: 18, alignItems: 'flex-start', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 4 },
+  gridActionCardElement: {
+    backgroundColor: colors.surface,
+    width: '48%',
+    borderRadius: 16,
+    padding: 18,
+    alignItems: 'flex-start',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+  },
   iconBackgroundCircleWrapperFrame: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
-  actionCardLabelContentString: { fontSize: 14, fontWeight: 'bold', color: '#111111', lineHeight: 18 },
-  tabToggleRowBarContainer: { flexDirection: 'row', marginHorizontal: 20, marginTop: 20, backgroundColor: '#E4EAEA', padding: 4, borderRadius: 14 },
+  actionCardLabelContentString: { fontSize: 14, fontWeight: '600', color: colors.cardTitle, lineHeight: 18 },
+  tabToggleRowBarContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginTop: 20,
+    backgroundColor: colors.softSurface,
+    padding: 4,
+    borderRadius: 14,
+  },
   segmentTabButton: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
-  activeSegmentTabButton: { backgroundColor: '#FFFFFF', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 2 },
-  tabLabelStringText: { fontSize: 14, fontWeight: '600', color: '#6B7280' },
-  activeTabLabelStringText: { color: '#1B5E55', fontWeight: 'bold' },
+  activeSegmentTabButton: {
+    backgroundColor: colors.surface,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+  },
+  tabLabelStringText: { fontSize: 14, fontWeight: '600', color: colors.tabInactive },
+  activeTabLabelStringText: { color: colors.primary, fontWeight: 'bold' },
   tabPanelBodyWrapper: { marginTop: 16, paddingHorizontal: 20 },
-  emptyStateCardView: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB', borderStyle: 'dashed' },
-  emptyStateDescriptionLabelText: { fontSize: 13, color: '#6B7280', fontStyle: 'italic', textAlign: 'center' },
-  emptyStateActionButtonCtaPill: { backgroundColor: '#1B5E55', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16, marginTop: 14 },
+  emptyStateCardView: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+  },
+  emptyStateDescriptionLabelText: { fontSize: 13, color: colors.textSecondary, fontStyle: 'italic', textAlign: 'center' },
+  emptyStateActionButtonCtaPill: {
+    backgroundColor: colors.primary,
+    borderRadius: 28,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    marginTop: 14,
+  },
   ctaButtonLabelText: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold' },
-  upcomingAppointmentCardWrapper: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, marginBottom: 14, elevation: 2 },
+  upcomingAppointmentCardWrapper: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 14,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+  },
   cardHeaderFlexLineRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
-  doctorAvatarCircleWrapperFramePlaceholder: { width: 46, height: 44, borderRadius: 22, backgroundColor: '#E6F4F4', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  doctorAvatarCircleWrapperFramePlaceholder: {
+    width: 46,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.badges.records.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
   doctorIdentityLabelsBlockText: { flex: 1 },
-  doctorNameCardHeadlineText: { fontSize: 16, fontWeight: 'bold', color: '#111111' },
-  doctorSpecialtySubTextLabelText: { fontSize: 13, color: '#6B7280', marginTop: 1 },
-  appointmentTimeBadgeRowLinePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E6F4F4', alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, marginBottom: 16 },
-  appointmentBadgeTimestampStringText: { fontSize: 13, fontWeight: 'bold', color: '#1B5E55' },
+  doctorNameCardHeadlineText: { fontSize: 16, fontWeight: 'bold', color: colors.textPrimary },
+  doctorSpecialtySubTextLabelText: { fontSize: 13, color: colors.textSecondary, marginTop: 1 },
+  appointmentTimeBadgeRowLinePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    alignSelf: 'flex-start',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  appointmentBadgeTimestampStringText: { fontSize: 13, fontWeight: 'bold', color: colors.primary },
   actionButtonSplitButtonContainerRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  outlinedRescheduleActionButtonElement: { width: '48%', height: 45, borderWidth: 1.5, borderColor: '#1B5E55', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  outlinedButtonLabelTextContentString: { color: '#1B5E55', fontSize: 14, fontWeight: 'bold' },
-  filledLightRedCancelActionButtonElement: { width: '48%', height: 45, backgroundColor: '#FEE2E2', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  filledCancelButtonLabelTextContentString: { color: '#DC2626', fontSize: 14, fontWeight: 'bold' },
-  newEmergencyFooter: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFFFFF', paddingHorizontal: 24, paddingTop: 16, paddingBottom: Platform.OS === 'ios' ? 34 : 24, borderTopLeftRadius: 30, borderTopRightRadius: 30, elevation: 25, shadowColor: '#DC2626', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.15, shadowRadius: 15, alignItems: 'center', borderTopWidth: 1, borderColor: '#FEE2E2' },
-  newEmergencyButton: { flexDirection: 'row', width: '100%', backgroundColor: '#DC2626', borderRadius: 20, paddingVertical: 16, paddingHorizontal: 20, justifyContent: 'center', alignItems: 'center', elevation: 8, shadowColor: '#991B1B', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 10 },
-  newEmergencyIconWrap: { backgroundColor: '#FFFFFF', borderRadius: 12, width: 36, height: 36, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  newEmergencyButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: '900', letterSpacing: 1 },
-  
-  timelineClinicalLogCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, marginBottom: 14, borderLeftWidth: 4, borderLeftColor: '#1B5E55', elevation: 2 },
-  timelineDateTextHeadingLabel: { fontSize: 12, fontWeight: 'bold', color: '#1B5E55', textTransform: 'uppercase' },
-  clinicalDiagnosisValueTextString: { fontSize: 17, fontWeight: 'bold', color: '#111111', marginTop: 4, marginBottom: 8 },
+  outlinedRescheduleActionButtonElement: {
+    width: '48%',
+    height: 45,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  outlinedButtonLabelTextContentString: { color: colors.primary, fontSize: 14, fontWeight: 'bold' },
+  filledLightRedCancelActionButtonElement: {
+    width: '48%',
+    height: 45,
+    backgroundColor: colors.badges.prescriptions.background,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  filledCancelButtonLabelTextContentString: { color: colors.badges.prescriptions.icon, fontSize: 14, fontWeight: 'bold' },
+  floatingSosButton: {
+    position: 'absolute',
+    right: 24,
+    bottom: 24,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#C82829',
+    borderWidth: 2.5,
+    borderColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 50,
+    elevation: 8,
+    shadowColor: '#C82829',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+  },
+  floatingSosButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textAlign: 'center',
+  },
+
+  timelineClinicalLogCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 14,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+  },
+  timelineDateTextHeadingLabel: { fontSize: 12, fontWeight: 'bold', color: colors.primary, textTransform: 'uppercase' },
+  clinicalDiagnosisValueTextString: { fontSize: 17, fontWeight: 'bold', color: colors.textPrimary, marginTop: 4, marginBottom: 8 },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(22, 33, 28, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    backgroundColor: colors.surface,
+    borderRadius: 20,
     padding: 24,
     width: '100%',
     maxWidth: 340,
@@ -704,8 +886,8 @@ const styles = StyleSheet.create({
     elevation: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
   },
   modalHeader: {
     alignItems: 'center',
@@ -714,13 +896,13 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#111827',
+    color: colors.textPrimary,
     marginTop: 10,
     textAlign: 'center',
   },
   modalBody: {
     fontSize: 14,
-    color: '#4B5563',
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 24,
@@ -734,20 +916,20 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
+    borderColor: colors.border,
+    borderRadius: 28,
     alignItems: 'center',
   },
   cancelModalButtonText: {
-    color: '#4B5563',
+    color: colors.textSecondary,
     fontSize: 15,
     fontWeight: '700',
   },
   confirmModalButton: {
     flex: 1,
     paddingVertical: 12,
-    backgroundColor: '#DC2626',
-    borderRadius: 12,
+    backgroundColor: colors.primary,
+    borderRadius: 28,
     alignItems: 'center',
   },
   confirmModalButtonText: {

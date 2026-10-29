@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context'; // ✅ Swapped to modern context view wrapper
 import { useRouter } from 'expo-router';
+import { colors } from '../theme/colors';
 
 export default function WelcomeScreen() {
   // Initialize the routing context module hooks
@@ -17,7 +18,7 @@ export default function WelcomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="light-content" backgroundColor="#1D666A" />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <View style={styles.content}>
         
         <View style={styles.spacerDouble} />
@@ -79,7 +80,7 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1D666A', // Dark teal background base layer
+    backgroundColor: colors.background,
   },
   content: {
     flex: 1,
@@ -95,7 +96,7 @@ const styles = StyleSheet.create({
   logoContainer: {
     width: 150,
     height: 110,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.primary,
     borderRadius: 20,
     overflow: 'hidden', // Forces image assets to bend exactly around boundary clips
   },
@@ -106,49 +107,54 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 40,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
     letterSpacing: 1.2,
-    color: '#FFFFFF',
+    color: colors.primaryText,
     marginBottom: 8,
   },
   university: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.7)', 
+    color: colors.textSecondary, 
   },
   primaryButton: {
     width: 300,
     height: 55,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 30,
+    backgroundColor: colors.primary,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
+    elevation: 3,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
   },
   primaryButtonText: {
     fontSize: 16,
-    fontWeight: '500',
-    color: '#000000',
+    fontWeight: '600',
+    color: colors.textOnPrimary,
   },
   secondaryButton: {
     width: 300,
     height: 55,
-    backgroundColor: 'transparent',
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: '#FFFFFF',
+    backgroundColor: colors.surface,
+    borderRadius: 28,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   secondaryButtonText: {
     fontSize: 16,
-    fontWeight: '400',
-    color: '#FFFFFF',
+    fontWeight: '600',
+    color: colors.primary,
   },
   footer: {
     fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.54)', 
+    color: colors.textSecondary, 
   },
 });

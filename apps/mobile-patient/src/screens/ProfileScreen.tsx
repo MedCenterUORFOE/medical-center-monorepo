@@ -20,6 +20,7 @@ import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useQuery } from '@tanstack/react-query';
+import { colors } from '../theme/colors';
 
 const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?name=Patient&background=0D8ABC&color=fff';
 
@@ -152,7 +153,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.softSurface} />
 
       {/* HEADER */}
       <View style={styles.header}>
@@ -194,42 +195,42 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>Personal Details</Text>
 
           <View style={styles.inputContainer}>
-            <Ionicons name="call-outline" size={20} color="#64748B" style={styles.inputIcon} />
+            <Ionicons name="call-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
             <TextInput
               style={styles.textInput}
               value={phoneNumber}
               onChangeText={setPhoneNumber}
               placeholder="Your Phone Number"
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor={colors.placeholder}
               keyboardType="phone-pad"
             />
           </View>
 
           <View style={styles.inputContainer}>
-            <Ionicons name="person-outline" size={20} color="#64748B" style={styles.inputIcon} />
+            <Ionicons name="person-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
             <TextInput
               style={styles.textInput}
               value={emergencyContactName}
               onChangeText={setEmergencyContactName}
               placeholder="Emergency Contact Name"
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor={colors.placeholder}
             />
           </View>
 
           <View style={styles.inputContainer}>
-            <Ionicons name="alert-circle-outline" size={20} color="#64748B" style={styles.inputIcon} />
+            <Ionicons name="alert-circle-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
             <TextInput
               style={styles.textInput}
               value={emergencyContactPhone}
               onChangeText={setEmergencyContactPhone}
               placeholder="Emergency Contact Number"
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor={colors.placeholder}
               keyboardType="phone-pad"
             />
           </View>
 
           <TouchableOpacity style={styles.saveButton} onPress={handleSaveDetails} activeOpacity={0.8}>
-            <Ionicons name="save-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Ionicons name="save-outline" size={18} color={colors.textOnPrimary} style={{ marginRight: 6 }} />
             <Text style={styles.saveButtonText}>Save Personal Details</Text>
           </TouchableOpacity>
         </View>
@@ -248,12 +249,12 @@ export default function ProfileScreen() {
             <Text style={styles.photoSheetTitle}>Update Profile Photo</Text>
 
             <TouchableOpacity style={styles.photoSheetOption} onPress={() => handleImagePick(true)} activeOpacity={0.7}>
-              <Ionicons name="camera-outline" size={22} color="#0284C7" />
+              <Ionicons name="camera-outline" size={22} color={colors.primary} />
               <Text style={styles.photoSheetOptionText}>Take Photo</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.photoSheetOption} onPress={() => handleImagePick(false)} activeOpacity={0.7}>
-              <Ionicons name="image-outline" size={22} color="#0284C7" />
+              <Ionicons name="image-outline" size={22} color={colors.primary} />
               <Text style={styles.photoSheetOptionText}>Choose from Gallery</Text>
             </TouchableOpacity>
 
@@ -274,17 +275,18 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.headerBanner,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#F8FAFC',
-    borderBottomWidth: 1,
-    borderColor: '#E2E8F0',
+    paddingTop: 16,
+    paddingBottom: 20,
+    backgroundColor: colors.headerBanner,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
   backButton: {
     width: 40,
@@ -292,27 +294,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.65)',
   },
   headerTitle: {
-    color: '#0F172A',
+    color: colors.textPrimary,
     fontSize: 18,
     fontWeight: '800',
   },
   scrollContent: {
     padding: 16,
     paddingBottom: 40,
+    backgroundColor: colors.background,
   },
   avatarCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
     padding: 24,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#0F172A',
+    borderColor: colors.border,
+    shadowColor: '#000',
     shadowOpacity: 0.04,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 2,
     marginBottom: 20,
   },
@@ -321,7 +325,7 @@ const styles = StyleSheet.create({
     height: 110,
     borderRadius: 55,
     borderWidth: 3,
-    borderColor: '#0284C7',
+    borderColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -336,7 +340,7 @@ const styles = StyleSheet.create({
     width: 98,
     height: 98,
     borderRadius: 49,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: colors.softSurface,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -347,7 +351,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#0284C7',
+    backgroundColor: colors.primary,
     borderWidth: 2,
     borderColor: '#FFFFFF',
     alignItems: 'center',
@@ -358,31 +362,31 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   userNameText: {
-    color: '#0F172A',
+    color: colors.textPrimary,
     fontSize: 18,
     fontWeight: '800',
     marginBottom: 4,
   },
   userIdText: {
-    color: '#64748B',
+    color: colors.textSecondary,
     fontSize: 13,
     fontWeight: '500',
   },
   settingsSection: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#0F172A',
+    borderColor: colors.border,
+    shadowColor: '#000',
     shadowOpacity: 0.04,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 2,
     marginBottom: 20,
   },
   sectionTitle: {
-    color: '#0F172A',
+    color: colors.textPrimary,
     fontSize: 15,
     fontWeight: '800',
     marginBottom: 16,
@@ -390,10 +394,10 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: 16,
+    borderColor: colors.border,
+    borderRadius: 12,
     paddingHorizontal: 14,
     marginBottom: 14,
   },
@@ -403,7 +407,7 @@ const styles = StyleSheet.create({
   textInput: {
     flex: 1,
     paddingVertical: 12,
-    color: '#0F172A',
+    color: colors.textPrimary,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -411,10 +415,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0284C7',
-    borderRadius: 16,
-    paddingVertical: 13,
+    backgroundColor: colors.primary,
+    borderRadius: 28,
+    paddingVertical: 14,
     marginTop: 6,
+    elevation: 2,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   saveButtonText: {
     color: '#FFFFFF',
@@ -427,7 +436,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: colors.border,
   },
   toggleCardLeft: {
     flexDirection: 'row',
@@ -440,13 +449,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   toggleLabel: {
-    color: '#0F172A',
+    color: colors.textPrimary,
     fontSize: 14,
     fontWeight: '700',
     marginBottom: 2,
   },
   toggleDescription: {
-    color: '#64748B',
+    color: colors.textSecondary,
     fontSize: 12,
     fontWeight: '500',
   },
@@ -455,39 +464,39 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   pinChangeBtn: {
-    backgroundColor: '#F0F9FF',
+    backgroundColor: colors.badges.appointment.background,
     borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderColor: colors.badges.appointment.background,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
   pinChangeText: {
-    color: '#0284C7',
+    color: colors.badges.appointment.icon,
     fontSize: 12,
     fontWeight: '700',
   },
   pinDisableBtn: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: colors.badges.prescriptions.background,
     borderWidth: 1,
-    borderColor: '#FCA5A5',
+    borderColor: colors.badges.prescriptions.background,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
   pinDisableText: {
-    color: '#DC2626',
+    color: colors.badges.prescriptions.icon,
     fontSize: 12,
     fontWeight: '700',
   },
   pinSetupBtn: {
-    backgroundColor: '#F0F9FF',
+    backgroundColor: colors.badges.appointment.background,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 7,
   },
   pinSetupText: {
-    color: '#0284C7',
+    color: colors.badges.appointment.icon,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -495,7 +504,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   dangerSectionTitle: {
-    color: '#DC2626',
+    color: colors.error,
     fontSize: 15,
     fontWeight: '800',
     marginBottom: 12,
@@ -505,7 +514,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF5F5',
     borderColor: '#FEE2E2',
     borderWidth: 1.5,
-    borderRadius: 24,
+    borderRadius: 16,
     paddingVertical: 8,
     paddingHorizontal: 16,
   },
@@ -516,7 +525,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   logoutButtonText: {
-    color: '#DC2626',
+    color: colors.error,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -531,19 +540,19 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   deactivateButtonText: {
-    color: '#DC2626',
+    color: colors.error,
     fontSize: 14,
     fontWeight: '700',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    backgroundColor: 'rgba(22, 33, 28, 0.45)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     paddingTop: 20,
     paddingHorizontal: 16,
     paddingBottom: 40,
@@ -555,7 +564,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   modalTitle: {
-    color: '#0F172A',
+    color: colors.textPrimary,
     fontSize: 17,
     fontWeight: '800',
   },
@@ -564,20 +573,20 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   modalLabel: {
-    color: '#475569',
+    color: colors.textSecondary,
     fontSize: 13,
     fontWeight: '700',
     marginBottom: 8,
     alignSelf: 'flex-start',
   },
   pinInput: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
+    borderColor: colors.border,
     borderRadius: 14,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    color: '#0F172A',
+    color: colors.textPrimary,
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: 8,
@@ -586,8 +595,8 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   savePinBtn: {
-    backgroundColor: '#0284C7',
-    borderRadius: 16,
+    backgroundColor: colors.primary,
+    borderRadius: 28,
     paddingVertical: 14,
     width: '100%',
     alignItems: 'center',
@@ -600,17 +609,17 @@ const styles = StyleSheet.create({
   },
   photoSheetOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    backgroundColor: 'rgba(22, 33, 28, 0.45)',
     justifyContent: 'flex-end',
   },
   photoSheetContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     padding: 24,
   },
   photoSheetTitle: {
-    color: '#0F172A',
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '800',
     textAlign: 'center',
@@ -621,11 +630,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: colors.border,
     gap: 12,
   },
   photoSheetOptionText: {
-    color: '#0F172A',
+    color: colors.textPrimary,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -635,7 +644,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   photoSheetCancelText: {
-    color: '#64748B',
+    color: colors.textSecondary,
     fontSize: 14,
     fontWeight: '800',
   },
