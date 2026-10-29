@@ -13,6 +13,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { getNotifications, markRead, markAllRead, subscribe } from '../notifications/notificationStore';
 import { colors } from '../theme/colors';
 
@@ -51,6 +52,7 @@ const formatTypeLabel = (type?: string | null): string => {
 };
 
 export default function NotificationsScreen() {
+  const router = useRouter();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -188,6 +190,14 @@ export default function NotificationsScreen() {
     }
   };
 
+  const handleNotificationPress = async (notification: NotificationItem) => {
+    await markNotificationAsRead(notification.id);
+    const certTypes = ['CERTIFICATE_APPROVED', 'CERTIFICATE_REJECTED', 'CERTIFICATE_UPDATE'];
+    if (certTypes.includes(notification.type)) {
+      router.push('/academic-submission?tab=certificates' as any);
+    }
+  };
+
   const markAllAsRead = async () => {
     const unreadNotifications = notifications.filter((notification) => !notification.is_read);
 
@@ -293,7 +303,7 @@ export default function NotificationsScreen() {
                     key={notification.id}
                     style={[styles.notificationCard, isUnread ? styles.unreadCard : styles.readCard]}
                     activeOpacity={0.88}
-                    onPress={() => markNotificationAsRead(notification.id)}
+                    onPress={() => handleNotificationPress(notification)}
                   >
                     <View style={styles.cardHeaderRow}>
                       <View style={[styles.iconBubble, isUnread ? styles.unreadIconBubble : styles.readIconBubble]}>

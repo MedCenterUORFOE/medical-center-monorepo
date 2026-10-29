@@ -14,7 +14,7 @@ import {
   Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, MaterialIcons, FontAwesome5, Feather } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons, FontAwesome5, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { colors } from '../theme/colors';
 import * as Location from 'expo-location';
@@ -482,9 +482,9 @@ export default function PatientDashboard() {
 
                 <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/academic-submission' as any)}>
                   <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: colors.badges.submission.background }]}>
-                    <Feather name="book-open" size={20} color={colors.badges.submission.icon} />
+                    <MaterialCommunityIcons name="certificate-outline" size={22} color={colors.badges.submission.icon} />
                   </View>
-                  <Text style={styles.actionCardLabelContentString}>Submit to Lecturer</Text>
+                  <Text style={styles.actionCardLabelContentString}>Medical Certificate</Text>
                 </TouchableOpacity>
               </View>
             </View>
