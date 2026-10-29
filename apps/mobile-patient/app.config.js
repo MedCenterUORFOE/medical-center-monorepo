@@ -6,14 +6,14 @@ module.exports = {
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "mobilepatient",
-    userInterfaceStyle: "automatic",
+    userInterfaceStyle: "light",
     newArchEnabled: true,
     ios: {
       supportsTablet: true
     },
     android: {
       adaptiveIcon: {
-        backgroundColor: "#E6F4FE",
+        backgroundColor: "#EEF8F2",
         foregroundImage: "./assets/images/android-icon-foreground.png",
         backgroundImage: "./assets/images/android-icon-background.png",
         monochromeImage: "./assets/images/android-icon-monochrome.png"
@@ -41,10 +41,7 @@ module.exports = {
           image: "./assets/images/splash-icon.png",
           imageWidth: 200,
           resizeMode: "contain",
-          backgroundColor: "#ffffff",
-          dark: {
-            backgroundColor: "#000000"
-          }
+          backgroundColor: "#ffffff"
         }
       ],
       "expo-font",
@@ -55,14 +52,7 @@ module.exports = {
           colors: {
             cropToolbarColor: "#000000",
             cropToolbarWidgetColor: "#FFFFFF",
-            cropImageActiveWidgetColor: "#1B5E55"
-          },
-          dark: {
-            colors: {
-              cropToolbarColor: "#000000",
-              cropToolbarWidgetColor: "#FFFFFF",
-              cropImageActiveWidgetColor: "#1B5E55"
-            }
+            cropImageActiveWidgetColor: "#2A8567"
           }
         }
       ],

@@ -6,7 +6,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // Security Token එක යැවීමට
+import { colors } from '../theme/colors';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // To send Security Token
 
 // Define rigid data type contracts matching the backend validation expectations
 interface StudentDetails {
@@ -26,7 +27,7 @@ interface AcademicStaffDetails {
 }
 
 interface CompleteProfilePayload {
-  name: string; // ✅ අලුතින් එකතු කළා: Backend එක බලාපොරොත්තු වන අනිවාර්ය Name field එක
+  name: string; // ✅ Newly added: Mandatory Name field expected by the Backend
   role: 'STUDENT' | 'ACADEMIC_STAFF';
   nic: string;
   phone: string;
@@ -108,7 +109,7 @@ export default function CompleteProfileScreen() {
       const validatedPhone = formatPhoneNumber(studentPhone);
 
       payload = {
-        name: studentFullName.trim(), // ✅ අලුතින් එකතු කළා: Student Name
+        name: studentFullName.trim(), // ✅ Newly added: Student Name
         role: "STUDENT",
         nic: nic.trim(), 
         phone: validatedPhone, 
@@ -135,7 +136,7 @@ export default function CompleteProfileScreen() {
       const finalEmail = staffEmail.trim() || `${universityStaffId.toLowerCase().replace(/[^a-z0-9]/g, "")}@eng.ruh.ac.lk`;
 
       payload = {
-        name: staffFullName.trim(), // ✅ අලුතින් එකතු කළා: Staff Name
+        name: staffFullName.trim(), // ✅ Newly added: Staff Name
         role: "ACADEMIC_STAFF",
         nic: nic.trim(), 
         phone: validatedPhone,
@@ -154,7 +155,7 @@ export default function CompleteProfileScreen() {
     setIsLoading(true);
     try {
       const endpoint = `${API_URL}/api/users/complete-profile`; 
-      const token = await AsyncStorage.getItem('userToken'); // යූසර්ගේ ටෝකන් එක ලබා ගැනීම
+      const token = await AsyncStorage.getItem('userToken'); // Retrieving user token
       
       console.log("🚀 Sending Patch Request to:", endpoint);
       console.log("📦 Payload:", JSON.stringify(payload, null, 2));
@@ -164,7 +165,7 @@ export default function CompleteProfileScreen() {
         headers: { 
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          // Token එක තිබේනම් Headers වලට Authorization යැවීම
+          // Send Authorization in Headers if Token exists
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}) 
         },
         body: JSON.stringify(payload),
@@ -205,7 +206,7 @@ export default function CompleteProfileScreen() {
         {/* HEADER */}
         <View style={styles.headerSection}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
+            <Ionicons name="arrow-back" size={28} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Complete Registration</Text>
           <Text style={styles.headerSubtitle}>Account Detected: {role === 'STUDENT' ? 'Student' : 'Academic Staff'}</Text>
@@ -217,18 +218,18 @@ export default function CompleteProfileScreen() {
             <View style={styles.innerWhiteBox}>
 
               {/* TEST TOGGLE BUTTONS */}
-              <View style={{flexDirection: 'row', justifyContent: 'space-around', marginBottom: 15, backgroundColor: '#E8ECEC', padding: 5, borderRadius: 10}}>
-                <TouchableOpacity onPress={() => setRole('STUDENT')} style={{padding: 8, backgroundColor: role === 'STUDENT' ? '#1D666A' : 'transparent', borderRadius: 8}}>
-                  <Text style={{color: role === 'STUDENT' ? '#FFF' : '#000', fontSize: 12}}>Test Student Form</Text>
+              <View style={{flexDirection: 'row', justifyContent: 'space-around', marginBottom: 15, backgroundColor: colors.softSurface, padding: 5, borderRadius: 10}}>
+                <TouchableOpacity onPress={() => setRole('STUDENT')} style={{padding: 8, backgroundColor: role === 'STUDENT' ? colors.primary : 'transparent', borderRadius: 8}}>
+                  <Text style={{color: role === 'STUDENT' ? colors.textOnPrimary : colors.textPrimary, fontSize: 12}}>Test Student Form</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => setRole('ACADEMIC_STAFF')} style={{padding: 8, backgroundColor: role === 'ACADEMIC_STAFF' ? '#1D666A' : 'transparent', borderRadius: 8}}>
-                  <Text style={{color: role === 'ACADEMIC_STAFF' ? '#FFF' : '#000', fontSize: 12}}>Test Staff Form</Text>
+                <TouchableOpacity onPress={() => setRole('ACADEMIC_STAFF')} style={{padding: 8, backgroundColor: role === 'ACADEMIC_STAFF' ? colors.primary : 'transparent', borderRadius: 8}}>
+                  <Text style={{color: role === 'ACADEMIC_STAFF' ? colors.textOnPrimary : colors.textPrimary, fontSize: 12}}>Test Staff Form</Text>
                 </TouchableOpacity>
               </View>
 
               {/* NIC FIELD */}
               <Text style={styles.inputLabel}>National Identity Card (NIC) *</Text>
-              <TextInput style={styles.inputBox} value={nic} onChangeText={setNic} placeholder="Enter at least 10 character NIC (e.g. 200112345678)" />
+              <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={nic} onChangeText={setNic} placeholder="Enter at least 10 character NIC (e.g. 200112345678)" />
 
               {/* ── STUDENT FIELDS ─────────────────────────────────────── */}
               {role === 'STUDENT' && (
@@ -236,15 +237,15 @@ export default function CompleteProfileScreen() {
                   <Text style={styles.sectionHeading}>Student Details</Text>
 
                   <Text style={styles.inputLabel}>Full Name *</Text>
-                  <TextInput style={styles.inputBox} value={studentFullName} onChangeText={setStudentFullName} placeholder="Enter your full name" />
+                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={studentFullName} onChangeText={setStudentFullName} placeholder="Enter your full name" />
 
                   <Text style={styles.inputLabel}>Phone Number *</Text>
-                  <TextInput style={styles.inputBox} value={studentPhone} onChangeText={setStudentPhone} keyboardType="phone-pad" placeholder="Enter phone number" />
+                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={studentPhone} onChangeText={setStudentPhone} keyboardType="phone-pad" placeholder="Enter phone number" />
 
                   <Text style={styles.inputLabel}>Department *</Text>
                   <TouchableOpacity style={styles.dropdownSelector} onPress={() => setShowStudentDeptDropdown(!showStudentDeptDropdown)}>
                     <Text style={studentDepartment ? styles.selectedText : styles.placeholderText}>{studentDepartment || 'Choose Department'}</Text>
-                    <Ionicons name={showStudentDeptDropdown ? 'chevron-up' : 'chevron-down'} size={20} color="#757575" />
+                    <Ionicons name={showStudentDeptDropdown ? 'chevron-up' : 'chevron-down'} size={20} color={colors.placeholder} />
                   </TouchableOpacity>
                   {showStudentDeptDropdown && (
                     <View style={styles.dropdownMenuBox}>
@@ -257,21 +258,21 @@ export default function CompleteProfileScreen() {
                   )}
 
                   <Text style={styles.inputLabel}>Faculty *</Text>
-                  <TextInput style={styles.inputBox} value={faculty} onChangeText={setFaculty} placeholder="e.g., Engineering" />
+                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={faculty} onChangeText={setFaculty} placeholder="e.g., Engineering" />
 
                   <Text style={styles.inputLabel}>University Email</Text>
-                  <TextInput style={styles.inputBox} value={studentEmail} onChangeText={setStudentEmail} keyboardType="email-address" autoCapitalize="none" placeholder="student@uni.edu (optional)" />
+                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={studentEmail} onChangeText={setStudentEmail} keyboardType="email-address" autoCapitalize="none" placeholder="student@uni.edu (optional)" />
 
                   <Text style={styles.inputLabel}>University Reg Number *</Text>
-                  <TextInput style={styles.inputBox} value={universityRegNumber} onChangeText={setUniversityRegNumber} autoCapitalize="characters" placeholder="e.g., EG/2023/5503" />
+                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={universityRegNumber} onChangeText={setUniversityRegNumber} autoCapitalize="characters" placeholder="e.g., EG/2023/5503" />
 
                   <Text style={styles.inputLabel}>Batch *</Text>
-                  <TextInput style={styles.inputBox} value={batch} onChangeText={setBatch} placeholder="e.g., DEIE-Batch-23" />
+                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={batch} onChangeText={setBatch} placeholder="e.g., DEIE-Batch-23" />
 
                   <Text style={styles.inputLabel}>Year of Studying *</Text>
                   <TouchableOpacity style={styles.dropdownSelector} onPress={() => setShowYearDropdown(!showYearDropdown)}>
                     <Text style={yearOfStudy ? styles.selectedText : styles.placeholderText}>{yearOfStudy || 'Choose Year'}</Text>
-                    <Ionicons name={showYearDropdown ? 'chevron-up' : 'chevron-down'} size={20} color="#757575" />
+                    <Ionicons name={showYearDropdown ? 'chevron-up' : 'chevron-down'} size={20} color={colors.placeholder} />
                   </TouchableOpacity>
                   {showYearDropdown && (
                     <View style={styles.dropdownMenuBox}>
@@ -291,18 +292,18 @@ export default function CompleteProfileScreen() {
                   <Text style={styles.sectionHeading}>Academic Staff Details</Text>
 
                   <Text style={styles.inputLabel}>Full Name *</Text>
-                  <TextInput style={styles.inputBox} value={staffFullName} onChangeText={setStaffFullName} placeholder="Enter your full name" />
+                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={staffFullName} onChangeText={setStaffFullName} placeholder="Enter your full name" />
 
                   <Text style={styles.inputLabel}>Phone Number *</Text>
-                  <TextInput style={styles.inputBox} value={staffPhone} onChangeText={setStaffPhone} keyboardType="phone-pad" placeholder="Enter phone number" />
+                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={staffPhone} onChangeText={setStaffPhone} keyboardType="phone-pad" placeholder="Enter phone number" />
 
                   <Text style={styles.inputLabel}>University Staff ID *</Text>
-                  <TextInput style={styles.inputBox} value={universityStaffId} onChangeText={setUniversityStaffId} placeholder="e.g., ACAD-ENG-078" />
+                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={universityStaffId} onChangeText={setUniversityStaffId} placeholder="e.g., ACAD-ENG-078" />
 
                   <Text style={styles.inputLabel}>Department *</Text>
                   <TouchableOpacity style={styles.dropdownSelector} onPress={() => setShowStaffDeptDropdown(!showStaffDeptDropdown)}>
                     <Text style={staffDepartment ? styles.selectedText : styles.placeholderText}>{staffDepartment || 'Choose Department'}</Text>
-                    <Ionicons name={showStaffDeptDropdown ? 'chevron-up' : 'chevron-down'} size={20} color="#757575" />
+                    <Ionicons name={showStaffDeptDropdown ? 'chevron-up' : 'chevron-down'} size={20} color={colors.placeholder} />
                   </TouchableOpacity>
                   {showStaffDeptDropdown && (
                     <View style={styles.dropdownMenuBox}>
@@ -317,7 +318,7 @@ export default function CompleteProfileScreen() {
                   <Text style={styles.inputLabel}>Position *</Text>
                   <TouchableOpacity style={styles.dropdownSelector} onPress={() => setShowPosDropdown(!showPosDropdown)}>
                     <Text style={position ? styles.selectedText : styles.placeholderText}>{position || 'Choose Position'}</Text>
-                    <Ionicons name={showPosDropdown ? 'chevron-up' : 'chevron-down'} size={20} color="#757575" />
+                    <Ionicons name={showPosDropdown ? 'chevron-up' : 'chevron-down'} size={20} color={colors.placeholder} />
                   </TouchableOpacity>
                   {showPosDropdown && (
                     <View style={styles.dropdownMenuBox}>
@@ -330,10 +331,10 @@ export default function CompleteProfileScreen() {
                   )}
 
                   <Text style={styles.inputLabel}>University Email</Text>
-                  <TextInput style={styles.inputBox} value={staffEmail} onChangeText={setStaffEmail} keyboardType="email-address" autoCapitalize="none" placeholder="staff@uni.edu (optional)" />
+                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={staffEmail} onChangeText={setStaffEmail} keyboardType="email-address" autoCapitalize="none" placeholder="staff@uni.edu (optional)" />
 
                   <Text style={styles.inputLabel}>Extra Certificate</Text>
-                  <TextInput style={styles.inputBox} value={extraCertificate} onChangeText={setExtraCertificate} placeholder="e.g., PhD, MSc (optional)" />
+                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={extraCertificate} onChangeText={setExtraCertificate} placeholder="e.g., PhD, MSc (optional)" />
                 </View>
               )}
 
@@ -341,7 +342,7 @@ export default function CompleteProfileScreen() {
 
               {/* SAVE BUTTON */}
               <TouchableOpacity style={styles.primaryButton} onPress={handleSaveProfile} disabled={isLoading}>
-                {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save & Complete</Text>}
+                {isLoading ? <ActivityIndicator color={colors.textOnPrimary} /> : <Text style={styles.primaryButtonText}>Save & Complete</Text>}
               </TouchableOpacity>
 
             </View>
@@ -354,24 +355,24 @@ export default function CompleteProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1D666A' },
+  container: { flex: 1, backgroundColor: colors.softSurface },
   headerSection: { paddingHorizontal: 30, paddingTop: 10, paddingBottom: 20 },
   backButton: { marginBottom: 15, width: 40 },
-  headerTitle: { color: '#FFFFFF', fontSize: 28, fontWeight: 'bold', marginBottom: 6 },
-  headerSubtitle: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 14 },
-  bottomCard: { flex: 1, backgroundColor: '#E8ECEC', borderTopLeftRadius: 40, borderTopRightRadius: 40 },
-  scrollContent: { padding: 30 },
-  innerWhiteBox: { backgroundColor: '#FFFFFF', borderRadius: 30, padding: 20 },
-  inputLabel: { fontSize: 13, color: '#000000', fontWeight: '600', marginBottom: 8, marginTop: 12 },
-  inputBox: { height: 48, backgroundColor: '#E0E0E0', borderRadius: 12, paddingHorizontal: 15, fontSize: 15, color: '#000000', marginBottom: 10 },
-  dropdownSelector: { height: 48, backgroundColor: '#E0E0E0', borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15, marginBottom: 10 },
-  placeholderText: { color: '#757575', fontSize: 15 },
-  selectedText: { color: '#000000', fontSize: 15, fontWeight: '500' },
-  dropdownMenuBox: { backgroundColor: '#F5F5F5', borderRadius: 12, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#E0E0E0' },
-  dropdownOption: { paddingVertical: 12, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },
-  dropdownOptionText: { fontSize: 15, color: '#000000' },
-  primaryButton: { height: 50, backgroundColor: '#1D666A', borderRadius: 15, justifyContent: 'center', alignItems: 'center', width: '100%' },
-  primaryButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
-  conditionalSection: { marginTop: 20, paddingTop: 15, borderTopWidth: 1, borderTopColor: '#E0E0E0' },
-  sectionHeading: { fontSize: 18, fontWeight: 'bold', color: '#1D666A', marginBottom: 10 },
+  headerTitle: { color: colors.textPrimary, fontSize: 28, fontWeight: 'bold', marginBottom: 6 },
+  headerSubtitle: { color: colors.textSecondary, fontSize: 14 },
+  bottomCard: { flex: 1, backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  scrollContent: { padding: 24 },
+  innerWhiteBox: { backgroundColor: colors.surface, borderRadius: 16, padding: 20, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6 },
+  inputLabel: { fontSize: 13, color: colors.textPrimary, fontWeight: '600', marginBottom: 8, marginTop: 12 },
+  inputBox: { height: 48, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 15, fontSize: 15, color: colors.textPrimary, marginBottom: 10 },
+  dropdownSelector: { height: 48, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15, marginBottom: 10 },
+  placeholderText: { color: colors.placeholder, fontSize: 15 },
+  selectedText: { color: colors.textPrimary, fontSize: 15, fontWeight: '500' },
+  dropdownMenuBox: { backgroundColor: colors.surface, borderRadius: 12, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: colors.border },
+  dropdownOption: { paddingVertical: 12, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
+  dropdownOptionText: { fontSize: 15, color: colors.textPrimary },
+  primaryButton: { height: 52, backgroundColor: colors.primary, borderRadius: 28, justifyContent: 'center', alignItems: 'center', width: '100%', elevation: 2, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 },
+  primaryButtonText: { color: colors.textOnPrimary, fontSize: 16, fontWeight: 'bold' },
+  conditionalSection: { marginTop: 20, paddingTop: 15, borderTopWidth: 1, borderTopColor: colors.border },
+  sectionHeading: { fontSize: 18, fontWeight: 'bold', color: colors.primaryText, marginBottom: 10 },
 });

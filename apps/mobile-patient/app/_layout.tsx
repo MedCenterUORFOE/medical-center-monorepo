@@ -8,6 +8,19 @@ import { ThemeProvider as NavigationThemeProvider, DarkTheme, DefaultTheme } fro
 import { getMessaging, setBackgroundMessageHandler } from '@react-native-firebase/messaging';
 import * as SecureStore from 'expo-secure-store';
 import { setupNotificationHandlers, startTokenRefreshListener, registerDeviceToken } from '../src/notifications/pushNotifications';
+import { colors } from '../src/theme/colors';
+
+const customNavigationTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: colors.background,
+    card: colors.surface,
+    text: colors.textPrimary,
+    border: colors.border,
+    primary: colors.primary,
+  },
+};
 
 const messaging = getMessaging();
 setBackgroundMessageHandler(messaging, async () => {});
@@ -43,7 +56,7 @@ function AppContent() {
     };
   }, [router]);
 
-  const navTheme = isDark ? DarkTheme : DefaultTheme;
+  const navTheme = customNavigationTheme;
 
   return (
     <NavigationThemeProvider value={navTheme}>

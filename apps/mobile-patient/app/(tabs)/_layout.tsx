@@ -3,6 +3,7 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform, Pressable } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { colors } from '../../src/theme/colors';
 
 export default function TabLayout() {
   const triggerHaptic = () => {
@@ -13,20 +14,20 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#16A34A', // Brighter medical green
-        tabBarInactiveTintColor: '#8E8E93', // Muted neutral gray inactive state
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.tabInactive,
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
+          backgroundColor: colors.surface,
           borderTopWidth: 1,
-          borderTopColor: '#E5E7EB',
+          borderTopColor: colors.border,
           height: Platform.OS === 'ios' ? 95 : 75,
           paddingBottom: Platform.OS === 'ios' ? 30 : 12,
           paddingTop: 8,
           shadowColor: '#000000',
           shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.05,
-          shadowRadius: 3.84,
-          elevation: 5,
+          shadowOpacity: 0.04,
+          shadowRadius: 4,
+          elevation: 4,
         },
         tabBarLabelStyle: {
           fontSize: 12,

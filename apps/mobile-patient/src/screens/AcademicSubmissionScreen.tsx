@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { colors } from '../theme/colors';
 
 type MedicalRecordItem = {
   id: string;
@@ -166,12 +167,12 @@ export default function AcademicSubmissionScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
 
       {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={24} color="#0F172A" />
+          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Academic Submission</Text>
         <View style={{ width: 40 }} />
@@ -193,7 +194,7 @@ export default function AcademicSubmissionScreen() {
             activeOpacity={0.8}
           >
             <View style={styles.selectorContent}>
-              <MaterialCommunityIcons name="clipboard-text-outline" size={20} color="#0284C7" />
+              <MaterialCommunityIcons name="clipboard-text-outline" size={20} color={colors.primary} />
               <Text style={[styles.selectorText, !selectedRecord && styles.placeholderText]}>
                 {selectedRecord ? `${formatDate(selectedRecord.visit_date_time)} - ${selectedRecord.diagnosis}` : 'Choose from your record history'}
               </Text>
@@ -209,7 +210,7 @@ export default function AcademicSubmissionScreen() {
             activeOpacity={0.8}
           >
             <View style={styles.selectorContent}>
-              <MaterialCommunityIcons name="account-school-outline" size={20} color="#0284C7" />
+              <MaterialCommunityIcons name="account-school-outline" size={20} color={colors.primary} />
               <Text style={[styles.selectorText, !selectedLecturer && styles.placeholderText]}>
                 {selectedLecturer ? `${selectedLecturer.name} (${selectedLecturer.course})` : 'Select academic recipient'}
               </Text>
@@ -221,7 +222,7 @@ export default function AcademicSubmissionScreen() {
           {selectedRecord ? (
             <View style={styles.previewContainer}>
               <View style={styles.previewHeader}>
-                <MaterialCommunityIcons name="badge-account-horizontal-outline" size={18} color="#0369A1" />
+                <MaterialCommunityIcons name="badge-account-horizontal-outline" size={18} color={colors.badges.submission.icon} />
                 <Text style={styles.previewTitle}>Official Medical Summary</Text>
               </View>
 
@@ -260,7 +261,7 @@ export default function AcademicSubmissionScreen() {
             value={studentNotes}
             onChangeText={setStudentNotes}
             placeholder="Provide optional details for your lecturer (e.g. 'Requesting leave approval for the morning session lecture on Software Architecture.')"
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor={colors.placeholder}
           />
 
           <TouchableOpacity
@@ -273,7 +274,7 @@ export default function AcademicSubmissionScreen() {
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <>
-                <Ionicons name="mail-unread-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Ionicons name="mail-unread-outline" size={20} color={colors.textOnPrimary} style={{ marginRight: 8 }} />
                 <Text style={styles.submitButtonText}>Submit Official Medical</Text>
               </>
             )}
@@ -293,12 +294,12 @@ export default function AcademicSubmissionScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Choose Medical Record</Text>
               <TouchableOpacity onPress={() => setIsRecordModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#0F172A" />
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
               </TouchableOpacity>
             </View>
             {isLoading ? (
               <View style={styles.modalLoader}>
-                <ActivityIndicator size="large" color="#0284C7" />
+                <ActivityIndicator size="large" color={colors.primary} />
               </View>
             ) : records.length === 0 ? (
               <View style={styles.modalEmpty}>
@@ -317,13 +318,13 @@ export default function AcademicSubmissionScreen() {
                     activeOpacity={0.7}
                   >
                     <View style={styles.modalItemLeft}>
-                      <MaterialCommunityIcons name="clipboard-pulse-outline" size={20} color="#0284C7" style={{ marginRight: 10 }} />
+                      <MaterialCommunityIcons name="clipboard-pulse-outline" size={20} color={colors.primary} style={{ marginRight: 10 }} />
                       <View>
                         <Text style={styles.modalRecordText}>{rec.diagnosis}</Text>
                         <Text style={styles.modalRecordSubText}>{formatDate(rec.visit_date_time)} • Dr. {rec.doctor_name}</Text>
                       </View>
                     </View>
-                    {selectedRecord?.id === rec.id && <Ionicons name="checkmark-circle" size={20} color="#0284C7" />}
+                    {selectedRecord?.id === rec.id && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -344,7 +345,7 @@ export default function AcademicSubmissionScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Choose Recipient Lecturer</Text>
               <TouchableOpacity onPress={() => setIsLecturerModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#0F172A" />
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalScroll}>
@@ -359,13 +360,13 @@ export default function AcademicSubmissionScreen() {
                   activeOpacity={0.7}
                 >
                   <View style={styles.modalItemLeft}>
-                    <MaterialCommunityIcons name="account-tie-outline" size={20} color="#0284C7" style={{ marginRight: 10 }} />
+                    <MaterialCommunityIcons name="account-tie-outline" size={20} color={colors.primary} style={{ marginRight: 10 }} />
                     <View>
                       <Text style={styles.modalRecordText}>{lec.name}</Text>
                       <Text style={styles.modalRecordSubText}>{lec.course} • {lec.department}</Text>
                     </View>
                   </View>
-                  {selectedLecturer?.id === lec.id && <Ionicons name="checkmark-circle" size={20} color="#0284C7" />}
+                  {selectedLecturer?.id === lec.id && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -407,17 +408,18 @@ export default function AcademicSubmissionScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.headerBanner,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#F8FAFC',
-    borderBottomWidth: 1,
-    borderColor: '#E2E8F0',
+    paddingTop: 16,
+    paddingBottom: 20,
+    backgroundColor: colors.headerBanner,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
   backButton: {
     width: 40,
@@ -425,41 +427,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.65)',
   },
   headerTitle: {
-    color: '#0F172A',
+    color: colors.textPrimary,
     fontSize: 18,
     fontWeight: '800',
   },
   scrollContent: {
     padding: 16,
     paddingBottom: 40,
+    backgroundColor: colors.background,
   },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.05,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
   cardInfoText: {
-    color: '#475569',
+    color: colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
   },
   divider: {
     height: 1,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: colors.border,
     marginVertical: 18,
   },
   fieldLabel: {
-    color: '#334155',
+    color: colors.textPrimary,
     fontSize: 13,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -471,10 +475,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: 16,
+    borderColor: colors.border,
+    borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 14,
     marginBottom: 20,
@@ -486,19 +490,19 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   selectorText: {
-    color: '#0F172A',
+    color: colors.textPrimary,
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 10,
   },
   placeholderText: {
-    color: '#94A3B8',
+    color: colors.placeholder,
   },
   previewContainer: {
-    backgroundColor: '#F0F9FF',
+    backgroundColor: colors.badges.submission.background,
     borderWidth: 1,
-    borderColor: '#BAE6FD',
-    borderRadius: 18,
+    borderColor: colors.border,
+    borderRadius: 16,
     padding: 14,
     marginBottom: 20,
   },
@@ -508,13 +512,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   previewTitle: {
-    color: '#0369A1',
+    color: colors.badges.submission.icon,
     fontSize: 13,
     fontWeight: '800',
   },
   previewDivider: {
     height: 1,
-    backgroundColor: '#BAE6FD',
+    backgroundColor: colors.border,
     marginVertical: 10,
   },
   previewGrid: {
@@ -526,12 +530,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   previewLabel: {
-    color: '#0369A1',
+    color: colors.badges.submission.icon,
     fontSize: 12,
     fontWeight: '700',
   },
   previewValue: {
-    color: '#0F172A',
+    color: colors.textPrimary,
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'right',
@@ -540,16 +544,16 @@ const styles = StyleSheet.create({
   },
   previewValueBold: {
     fontWeight: '800',
-    color: '#0369A1',
+    color: colors.badges.submission.icon,
   },
   notesInput: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: 16,
+    borderColor: colors.border,
+    borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    color: '#0F172A',
+    color: colors.textPrimary,
     fontSize: 14,
     minHeight: 100,
     textAlignVertical: 'top',
@@ -559,17 +563,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0284C7',
-    borderRadius: 16,
+    backgroundColor: colors.primary,
+    borderRadius: 28,
     paddingVertical: 15,
-    shadowColor: '#0284C7',
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   submitButtonDisabled: {
-    backgroundColor: '#93C5FD',
+    backgroundColor: colors.disabled,
   },
   submitButtonText: {
     color: '#FFFFFF',
@@ -578,13 +582,13 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    backgroundColor: 'rgba(22, 33, 28, 0.45)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     paddingTop: 20,
     paddingHorizontal: 16,
     paddingBottom: 32,
@@ -598,7 +602,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   modalTitle: {
-    color: '#0F172A',
+    color: colors.textPrimary,
     fontSize: 17,
     fontWeight: '800',
   },
@@ -611,14 +615,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 14,
     paddingHorizontal: 12,
-    borderRadius: 16,
+    borderRadius: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
   modalItemSelected: {
-    backgroundColor: '#F0F9FF',
-    borderColor: '#BAE6FD',
+    backgroundColor: colors.badges.submission.background,
+    borderColor: colors.badges.submission.icon,
   },
   modalItemLeft: {
     flexDirection: 'row',
@@ -627,13 +632,13 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   modalRecordText: {
-    color: '#0F172A',
+    color: colors.textPrimary,
     fontSize: 14,
     fontWeight: '700',
     marginBottom: 2,
   },
   modalRecordSubText: {
-    color: '#64748B',
+    color: colors.textSecondary,
     fontSize: 12,
     fontWeight: '500',
   },
@@ -645,59 +650,59 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalEmptyText: {
-    color: '#64748B',
+    color: colors.textSecondary,
     fontSize: 14,
     textAlign: 'center',
   },
   popupOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    backgroundColor: 'rgba(22, 33, 28, 0.45)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
   popupContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 28,
+    backgroundColor: colors.surface,
+    borderRadius: 20,
     padding: 24,
     alignItems: 'center',
     width: '100%',
     maxWidth: 340,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 8,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
   },
   popupIconWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#10B981',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.badges.records.icon,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
-    shadowColor: '#10B981',
+    shadowColor: colors.badges.records.icon,
     shadowOpacity: 0.2,
-    shadowRadius: 10,
+    shadowRadius: 8,
   },
   popupTitle: {
-    color: '#0F172A',
+    color: colors.textPrimary,
     fontSize: 20,
     fontWeight: '900',
     marginBottom: 8,
   },
   popupBody: {
-    color: '#475569',
+    color: colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
     marginBottom: 24,
   },
   popupButton: {
-    backgroundColor: '#0284C7',
-    borderRadius: 16,
+    backgroundColor: colors.primary,
+    borderRadius: 28,
     paddingVertical: 14,
     paddingHorizontal: 24,
     width: '100%',

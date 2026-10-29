@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'; 
 import { Ionicons } from '@expo/vector-icons'; 
 import { useRouter } from 'expo-router';
+import { colors } from '../theme/colors';
 
 // Define strict type boundaries for the input field properties
 interface InputFieldProps {
@@ -120,7 +121,7 @@ export default function CreateAccountScreen() {
         {/* Header Section */}
         <View style={styles.headerSection}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
+            <Ionicons name="arrow-back" size={28} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Create Account</Text>
           <Text style={styles.headerSubtitle}>join UniMed Community</Text>
@@ -141,7 +142,7 @@ export default function CreateAccountScreen() {
                   <Text style={role ? styles.selectedText : styles.placeholderText}>
                     {role === 'ACADEMIC_STAFF' ? 'Academic Staff' : role === 'STUDENT' ? 'Student' : 'Choose Role'}
                   </Text>
-                  <Ionicons name={showRoleDropdown ? 'chevron-up' : 'chevron-down'} size={18} color="#757575" />
+                  <Ionicons name={showRoleDropdown ? 'chevron-up' : 'chevron-down'} size={18} color={colors.placeholder} />
                 </TouchableOpacity>
                 {showRoleDropdown && (
                   <View style={styles.dropdownMenuBox}>
@@ -160,7 +161,7 @@ export default function CreateAccountScreen() {
               <View style={{ height: 20 }} />
 
               <TouchableOpacity style={styles.primaryButton} onPress={handleCreateAccount} disabled={isLoading}>
-                {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Create Account</Text>}
+                {isLoading ? <ActivityIndicator color={colors.textOnPrimary} /> : <Text style={styles.primaryButtonText}>Create Account</Text>}
               </TouchableOpacity>
 
             </View>
@@ -182,27 +183,27 @@ export default function CreateAccountScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1D666A' },
+  container: { flex: 1, backgroundColor: colors.softSurface },
   headerSection: { paddingHorizontal: 30, paddingTop: 10, paddingBottom: 20 },
   backButton: { marginBottom: 15, width: 40 },
-  headerTitle: { color: '#FFFFFF', fontSize: 32, fontWeight: 'bold', marginBottom: 10 },
-  headerSubtitle: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 16 },
-  bottomCard: { flex: 1, backgroundColor: '#E8ECEC', borderTopLeftRadius: 40, borderTopRightRadius: 40 },
-  scrollContent: { padding: 30 },
-  innerWhiteBox: { backgroundColor: '#FFFFFF', borderRadius: 30, padding: 20 },
+  headerTitle: { color: colors.textPrimary, fontSize: 32, fontWeight: 'bold', marginBottom: 10 },
+  headerSubtitle: { color: colors.textSecondary, fontSize: 16 },
+  bottomCard: { flex: 1, backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  scrollContent: { padding: 24 },
+  innerWhiteBox: { backgroundColor: colors.surface, borderRadius: 16, padding: 20, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6 },
   inputContainer: { marginBottom: 15 },
-  inputLabel: { fontSize: 12, color: '#000000', fontWeight: '500' },
-  inputBox: { height: 45, backgroundColor: '#E0E0E0', borderRadius: 10, justifyContent: 'center', paddingHorizontal: 15 },
-  textInput: { flex: 1, fontSize: 14, color: '#000000' },
-  dropdownSelector: { height: 45, backgroundColor: '#E0E0E0', borderRadius: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15 },
-  placeholderText: { color: '#757575', fontSize: 14 },
-  selectedText: { color: '#000000', fontSize: 14, fontWeight: '500' },
-  dropdownMenuBox: { backgroundColor: '#F5F5F5', borderRadius: 10, padding: 5, marginTop: 5, borderWidth: 1, borderColor: '#E0E0E0' },
-  dropdownOption: { paddingVertical: 10, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },
-  dropdownOptionText: { fontSize: 14, color: '#000000' },
-  primaryButton: { height: 50, backgroundColor: '#1D666A', borderRadius: 15, justifyContent: 'center', alignItems: 'center', width: '100%' },
-  primaryButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  inputLabel: { fontSize: 12, color: colors.textPrimary, fontWeight: '500' },
+  inputBox: { height: 48, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, justifyContent: 'center', paddingHorizontal: 15 },
+  textInput: { flex: 1, fontSize: 14, color: colors.textPrimary },
+  dropdownSelector: { height: 48, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15 },
+  placeholderText: { color: colors.placeholder, fontSize: 14 },
+  selectedText: { color: colors.textPrimary, fontSize: 14, fontWeight: '500' },
+  dropdownMenuBox: { backgroundColor: colors.surface, borderRadius: 12, padding: 5, marginTop: 5, borderWidth: 1, borderColor: colors.border },
+  dropdownOption: { paddingVertical: 10, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
+  dropdownOptionText: { fontSize: 14, color: colors.textPrimary },
+  primaryButton: { height: 52, backgroundColor: colors.primary, borderRadius: 28, justifyContent: 'center', alignItems: 'center', width: '100%', elevation: 2, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 },
+  primaryButtonText: { color: colors.textOnPrimary, fontSize: 16, fontWeight: 'bold' },
   footerContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-  footerText: { color: 'rgba(0, 0, 0, 0.87)', fontSize: 15 },
-  footerLink: { color: '#1D666A', fontWeight: 'bold', fontSize: 15 },
+  footerText: { color: colors.textSecondary, fontSize: 15 },
+  footerLink: { color: colors.primaryText, fontWeight: 'bold', fontSize: 15 },
 });

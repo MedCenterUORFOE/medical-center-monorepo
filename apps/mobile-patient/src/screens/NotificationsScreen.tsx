@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getNotifications, markRead, markAllRead, subscribe } from '../notifications/notificationStore';
+import { colors } from '../theme/colors';
 
 type NotificationItem = {
   id: string;
@@ -217,7 +218,7 @@ export default function NotificationsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="light-content" backgroundColor="#154C5B" />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.softSurface} />
 
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
@@ -226,7 +227,7 @@ export default function NotificationsScreen() {
             <Text style={styles.headerTitle}>Notifications</Text>
           </View>
           <View style={styles.badgePill}>
-            <Ionicons name="notifications-outline" size={16} color="#154C5B" />
+            <Ionicons name="notifications-outline" size={16} color={colors.primaryText} />
             <Text style={styles.badgePillText}>{unreadCount} unread</Text>
           </View>
         </View>
@@ -243,10 +244,10 @@ export default function NotificationsScreen() {
             activeOpacity={0.85}
           >
             {isBulkUpdating ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={colors.textOnPrimary} />
             ) : (
               <>
-                <Ionicons name="checkmark-done-outline" size={18} color="#FFFFFF" />
+                <Ionicons name="checkmark-done-outline" size={18} color={colors.textOnPrimary} />
                 <Text style={styles.markAllButtonText}>Mark all as read</Text>
               </>
             )}
@@ -258,11 +259,11 @@ export default function NotificationsScreen() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
-          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshNotifications} tintColor="#154C5B" colors={['#154C5B']} />}
+          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshNotifications} tintColor={colors.primary} colors={[colors.primary]} />}
         >
           {isLoading ? (
             <View style={styles.loadingWrap}>
-              <ActivityIndicator size="large" color="#0F766E" />
+              <ActivityIndicator size="large" color={colors.primary} />
               <Text style={styles.loadingText}>Loading notifications...</Text>
             </View>
           ) : errorMessage ? (
@@ -276,7 +277,7 @@ export default function NotificationsScreen() {
             </View>
           ) : notifications.length === 0 ? (
             <View style={styles.stateCard}>
-              <Ionicons name="notifications-off-outline" size={28} color="#0F766E" />
+              <Ionicons name="notifications-off-outline" size={28} color={colors.primary} />
               <Text style={styles.stateTitle}>No notifications yet</Text>
               <Text style={styles.stateBody}>
                 You’ll see appointment updates, reminders, and medical alerts here.
@@ -296,7 +297,7 @@ export default function NotificationsScreen() {
                   >
                     <View style={styles.cardHeaderRow}>
                       <View style={[styles.iconBubble, isUnread ? styles.unreadIconBubble : styles.readIconBubble]}>
-                        <Ionicons name={isUnread ? 'mail-unread-outline' : 'mail-open-outline'} size={18} color={isUnread ? '#1D4ED8' : '#155E75'} />
+                        <Ionicons name={isUnread ? 'mail-unread-outline' : 'mail-open-outline'} size={18} color={isUnread ? colors.primary : colors.primaryText} />
                       </View>
 
                       <View style={styles.cardHeaderText}>
@@ -336,13 +337,13 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#154C5B',
+    backgroundColor: colors.softSurface,
   },
   header: {
     paddingHorizontal: 24,
     paddingTop: 18,
     paddingBottom: 22,
-    backgroundColor: '#154C5B',
+    backgroundColor: colors.softSurface,
   },
   headerTopRow: {
     flexDirection: 'row',
@@ -351,7 +352,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   headerEyebrow: {
-    color: 'rgba(255,255,255,0.75)',
+    color: colors.primaryText,
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -359,13 +360,13 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   headerTitle: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     fontSize: 34,
     fontWeight: '800',
     letterSpacing: -0.6,
   },
   headerSubtitle: {
-    color: 'rgba(255,255,255,0.78)',
+    color: colors.textSecondary,
     fontSize: 15,
     lineHeight: 22,
     marginTop: 10,
@@ -375,14 +376,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#D8F3F0',
+    backgroundColor: colors.surface,
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
     marginTop: 2,
   },
   badgePillText: {
-    color: '#154C5B',
+    color: colors.primaryText,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -392,18 +393,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#0F766E',
+    backgroundColor: colors.primary,
     borderRadius: 14,
     paddingVertical: 12,
   },
   markAllButtonText: {
-    color: '#FFFFFF',
+    color: colors.textOnPrimary,
     fontSize: 14,
     fontWeight: '800',
   },
   surface: {
     flex: 1,
-    backgroundColor: '#EEF7F6',
+    backgroundColor: colors.background,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     marginTop: -8,
@@ -420,43 +421,43 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    color: '#0F3D47',
+    color: colors.textPrimary,
     fontSize: 15,
     fontWeight: '600',
   },
   stateCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 24,
     padding: 24,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#D8EAE7',
+    borderColor: colors.border,
     minHeight: 240,
   },
   stateTitle: {
     marginTop: 12,
-    color: '#0F3D47',
+    color: colors.textPrimary,
     fontSize: 18,
     fontWeight: '800',
     textAlign: 'center',
   },
   stateBody: {
     marginTop: 8,
-    color: '#4B6470',
+    color: colors.textSecondary,
     fontSize: 14,
     lineHeight: 21,
     textAlign: 'center',
   },
   primaryButton: {
     marginTop: 18,
-    backgroundColor: '#0F766E',
+    backgroundColor: colors.primary,
     paddingHorizontal: 18,
     paddingVertical: 12,
     borderRadius: 14,
   },
   primaryButtonText: {
-    color: '#FFFFFF',
+    color: colors.textOnPrimary,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -469,12 +470,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   unreadCard: {
-    backgroundColor: '#EAF3FF',
-    borderColor: '#C7DBFF',
+    backgroundColor: colors.softSurface,
+    borderColor: colors.primary,
   },
   readCard: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D6EAE6',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -489,17 +490,17 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   unreadIconBubble: {
-    backgroundColor: '#D8EAFE',
+    backgroundColor: colors.surface,
   },
   readIconBubble: {
-    backgroundColor: '#E8F6F4',
+    backgroundColor: colors.softSurface,
   },
   cardHeaderText: {
     flex: 1,
     paddingRight: 10,
   },
   notificationType: {
-    color: '#0F3D47',
+    color: colors.textPrimary,
     fontSize: 15,
     fontWeight: '700',
   },
@@ -508,7 +509,7 @@ const styles = StyleSheet.create({
   },
   notificationTime: {
     marginTop: 3,
-    color: '#5D7280',
+    color: colors.textSecondary,
     fontSize: 12,
     fontWeight: '500',
   },
@@ -519,14 +520,14 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   unreadDot: {
-    backgroundColor: '#1D4ED8',
+    backgroundColor: colors.primary,
   },
   readDotMuted: {
-    backgroundColor: '#B8C9D4',
+    backgroundColor: colors.border,
   },
   notificationMessage: {
     marginTop: 10,
-    color: '#23424B',
+    color: colors.textPrimary,
     fontSize: 14,
     lineHeight: 21,
   },
@@ -536,13 +537,13 @@ const styles = StyleSheet.create({
   actionUrlPill: {
     marginTop: 12,
     alignSelf: 'flex-start',
-    backgroundColor: '#F0FAF8',
+    backgroundColor: colors.softSurface,
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
   actionUrlText: {
-    color: '#136F63',
+    color: colors.primaryText,
     fontSize: 12,
     fontWeight: '600',
   },

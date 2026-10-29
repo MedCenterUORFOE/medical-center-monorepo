@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { colors } from '../theme/colors';
 import { useAppSettings } from '../context/AppSettingsContext';
 import { GoogleSignin, isSuccessResponse, isErrorWithCode, statusCodes } from '@react-native-google-signin/google-signin';
 import { registerDeviceToken } from '../notifications/pushNotifications';
@@ -75,7 +76,7 @@ export default function LoginScreen() {
 
       if (response.ok || response.status === 200 || response.status === 201) {
 
-        // ✅ නිවැරදි කිරීම: 'data.data' ඇතුළෙන් අදාළ තොරතුරු ඇදගැනීම
+        // ✅ Fix: Extracting relevant details from inside 'data.data'
         const activeUserId = data.data?.user?.id;
         const activeToken = data.data?.token;
 
@@ -86,7 +87,7 @@ export default function LoginScreen() {
           console.warn("⚠️ Warning: User ID not found in data.data.user.id");
         }
 
-        // ✅ නිවැරදි කිරීම: Token එක Save කිරීම
+        // ✅ Fix: Saving the Token
         if (activeToken) {
           await SecureStore.setItemAsync('userToken', String(activeToken));
           await AsyncStorage.setItem('userToken', String(activeToken));
@@ -227,7 +228,7 @@ export default function LoginScreen() {
               />
 
               <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={isLoading}>
-                {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Sign In</Text>}
+                {isLoading ? <ActivityIndicator color={colors.textOnPrimary} /> : <Text style={styles.primaryButtonText}>Sign In</Text>}
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/create-account' as any)}>
@@ -270,36 +271,36 @@ export default function LoginScreen() {
 
 // --- Design Layout Core Styling Configuration Mapping Rules ---
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1D666A' },
+  container: { flex: 1, backgroundColor: colors.softSurface },
   headerSection: { paddingHorizontal: 30, paddingTop: 40, paddingBottom: 20 },
-  headerTitle: { color: '#FFFFFF', fontSize: 32, fontWeight: 'bold', marginBottom: 10 },
-  headerSubtitle: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 16 },
-  bottomCard: { flex: 1, backgroundColor: '#E8ECEC', borderTopLeftRadius: 40, borderTopRightRadius: 40 },
-  scrollContent: { padding: 30 },
-  innerWhiteBox: { backgroundColor: '#FFFFFF', borderRadius: 30, padding: 20 },
-  label: { fontSize: 14, color: '#000000', marginBottom: 8, fontWeight: '500' },
-  input: { backgroundColor: '#E0E0E0', borderRadius: 15, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16, marginBottom: 20 },
-  primaryButton: { backgroundColor: '#1D666A', borderRadius: 15, height: 50, justifyContent: 'center', alignItems: 'center', marginBottom: 15, marginTop: 10 },
-  primaryButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-  outlineButton: { borderWidth: 1, borderColor: '#1D666A', borderRadius: 15, height: 50, justifyContent: 'center', alignItems: 'center' },
-  outlineButtonText: { color: '#1D666A', fontSize: 16, fontWeight: '600' },
-  dividerContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 30 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: 'rgba(0, 0, 0, 0.54)' },
-  dividerText: { marginHorizontal: 10, color: 'rgba(0, 0, 0, 0.54)', fontSize: 14 },
+  headerTitle: { color: colors.textPrimary, fontSize: 32, fontWeight: 'bold', marginBottom: 10 },
+  headerSubtitle: { color: colors.textSecondary, fontSize: 16 },
+  bottomCard: { flex: 1, backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  scrollContent: { padding: 24 },
+  innerWhiteBox: { backgroundColor: colors.surface, borderRadius: 16, padding: 20, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6 },
+  label: { fontSize: 14, color: colors.textPrimary, marginBottom: 8, fontWeight: '500' },
+  input: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, color: colors.textPrimary, borderRadius: 12, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16, marginBottom: 20 },
+  primaryButton: { backgroundColor: colors.primary, borderRadius: 28, height: 52, justifyContent: 'center', alignItems: 'center', marginBottom: 15, marginTop: 10, elevation: 2, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 },
+  primaryButtonText: { color: colors.textOnPrimary, fontSize: 16, fontWeight: '600' },
+  outlineButton: { borderWidth: 1.5, borderColor: colors.primary, borderRadius: 28, height: 52, justifyContent: 'center', alignItems: 'center' },
+  outlineButtonText: { color: colors.primaryText, fontSize: 16, fontWeight: '600' },
+  dividerContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 24 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { marginHorizontal: 10, color: colors.textSecondary, fontSize: 14 },
   googleButton: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    borderRadius: 15,
-    height: 55,
+    borderRadius: 28,
+    height: 52,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 24,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: colors.border,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.04,
     shadowRadius: 3
   },
   googleIconImage: {
@@ -313,6 +314,6 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
   footerContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-  footerText: { color: 'rgba(0, 0, 0, 0.87)', fontSize: 15 },
-  footerLink: { color: '#1D666A', fontWeight: 'bold', fontSize: 15 },
+  footerText: { color: colors.textSecondary, fontSize: 15 },
+  footerLink: { color: colors.primaryText, fontWeight: 'bold', fontSize: 15 },
 });
