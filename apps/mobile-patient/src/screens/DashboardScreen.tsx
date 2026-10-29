@@ -53,7 +53,8 @@ interface AppointmentSchema {
 
 interface MedicalRecordSchema {
   id: string;
-  visit_date: string;
+  visit_date_time?: string;
+  visit_date?: string;
   diagnosis: string;
   symptoms?: string | null;
   treatment_plan?: string | null;
@@ -172,7 +173,7 @@ export default function PatientDashboard() {
     queryFn: async () => {
       const API_URL = process.env.EXPO_PUBLIC_API_URL;
       const token = await SecureStore.getItemAsync('userToken');
-      const response = await fetch(`${API_URL}/api/records/history?userId=${patientId}`, {
+      const response = await fetch(`${API_URL}/api/records/history/${patientId}`, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -180,7 +181,7 @@ export default function PatientDashboard() {
       });
       if (!response.ok) throw new Error('Failed to fetch history');
       const historyData = await response.json();
-      return historyData.data || historyData || [];
+      return historyData.data?.history || historyData.data || historyData || [];
     },
     enabled: !!patientId,
   });
@@ -476,7 +477,7 @@ export default function PatientDashboard() {
                   <View style={[styles.iconBackgroundCircleWrapperFrame, { backgroundColor: colors.badges.records.background }]}>
                     <Ionicons name="document-text-outline" size={22} color={colors.badges.records.icon} />
                   </View>
-                  <Text style={styles.actionCardLabelContentString}>Medical Reports</Text>
+                  <Text style={styles.actionCardLabelContentString}>Medical Records</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.gridActionCardElement} onPress={() => router.push('/academic-submission' as any)}>
@@ -576,7 +577,7 @@ export default function PatientDashboard() {
                     ) : (
                       medicalRecordsList.map((record) => (
                         <View key={record.id} style={styles.timelineClinicalLogCard}>
-                          <Text style={styles.timelineDateTextHeadingLabel}>{formatDisplayDate(record.visit_date)}</Text>
+                          <Text style={styles.timelineDateTextHeadingLabel}>{formatDisplayDate(record.visit_date_time || record.visit_date)}</Text>
                           <Text style={styles.clinicalDiagnosisValueTextString}>{record.diagnosis}</Text>
                           {/* Timeline details... */}
                         </View>
