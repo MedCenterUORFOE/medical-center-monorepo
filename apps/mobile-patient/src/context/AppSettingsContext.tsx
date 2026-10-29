@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 export type ThemeType = 'light' | 'dark' | 'system';
 
@@ -123,6 +124,9 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
       await AsyncStorage.removeItem('userToken');
       await AsyncStorage.removeItem('userId');
       setIsAppLocked(false);
+      try {
+        await GoogleSignin.signOut();
+      } catch (e) {}
       // Wait for navigation stack to be ready and clear history
       setTimeout(() => {
         router.replace('/login');

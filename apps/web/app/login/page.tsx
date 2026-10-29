@@ -43,6 +43,7 @@ function LoginContent() {
       if (data && data.data) {
         const { token, user } = data.data;
         localStorage.setItem('session_token', token);
+        localStorage.setItem('session_user', JSON.stringify(user));
 
         setSuccess('Authentication successful! Redirecting...');
 

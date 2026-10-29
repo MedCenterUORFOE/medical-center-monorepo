@@ -7,16 +7,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { colors } from '../theme/colors';
 import { useAppSettings } from '../context/AppSettingsContext';
+import { GoogleSignin, isSuccessResponse, isErrorWithCode, statusCodes } from '@react-native-google-signin/google-signin';
+import { registerDeviceToken } from '../notifications/pushNotifications';
 
-// Import libraries for Google Login Web Overlays
-import * as WebBrowser from 'expo-web-browser';
-// NOTE: 'expo-linking' is only needed by the disabled redirect-based Google login
-// (see handleGoogleLogin below). Re-enable this import together with that code.
-// import * as Linking from 'expo-linking';
-
-// Completes the auth session context if the app was closed during login redirect flows
-WebBrowser.maybeCompleteAuthSession();
+GoogleSignin.configure({ webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID });
 
 export default function LoginScreen() {
   const [email, setEmail] = useState<string>('');
@@ -39,7 +35,7 @@ export default function LoginScreen() {
         if (hasLoggedInOnce === 'true' && token && biometricsEnabled) {
           const success = await authenticateWithBiometrics();
           if (success) {
-            router.replace('/dashboard' as any);
+            router.replace('/(tabs)' as any);
           }
         }
       } catch (e) {
@@ -51,6 +47,11 @@ export default function LoginScreen() {
 
   // --- Function to handle standard Email/Password Login Navigation Flow ---
   const handleLogin = async () => {
+    if (!API_URL) {
+      Alert.alert('Configuration Error', 'API URL is not configured.');
+      return;
+    }
+
     if (!email || !password) {
       Alert.alert('Validation Error', 'Please enter both your email address and secure password.');
       return;
@@ -75,7 +76,7 @@ export default function LoginScreen() {
 
       if (response.ok || response.status === 200 || response.status === 201) {
 
-        // ✅ නිවැරදි කිරීම: 'data.data' ඇතුළෙන් අදාළ තොරතුරු ඇදගැනීම
+        // ✅ Fix: Extracting relevant details from inside 'data.data'
         const activeUserId = data.data?.user?.id;
         const activeToken = data.data?.token;
 
@@ -86,7 +87,7 @@ export default function LoginScreen() {
           console.warn("⚠️ Warning: User ID not found in data.data.user.id");
         }
 
-        // ✅ නිවැරදි කිරීම: Token එක Save කිරීම
+        // ✅ Fix: Saving the Token
         if (activeToken) {
           await SecureStore.setItemAsync('userToken', String(activeToken));
           await AsyncStorage.setItem('userToken', String(activeToken));
@@ -101,15 +102,16 @@ export default function LoginScreen() {
           }
         }
 
+        await registerDeviceToken();
         router.push('/(tabs)' as any);
 
       } else {
         Alert.alert('Login Failed', data.message || 'Incorrect Email or Password combination!');
       }
-    } catch (error: any) {
-      console.error("Login Error:", error?.message, "| URL:", `${API_URL}/api/auth/login`);
+    } catch (error) {
+      console.error("Login Error:", error);
       if (error instanceof SyntaxError) {
-        Alert.alert('Server Error', 'The server returned an unexpected response. Please try again later.');
+        Alert.alert('Server Error', 'The server returned an unexpected response.');
       } else {
         Alert.alert('Network Error', 'Could not connect to the server.');
       }
@@ -120,33 +122,76 @@ export default function LoginScreen() {
 
   // --- Function to handle Google SSO Login Cloud Handshake ---
   const handleGoogleLogin = async () => {
-    // TODO: Google sign-in is temporarily disabled on the app side.
-    // The backend has moved from the browser-redirect (code) flow to the
-    // ID-token flow, so the redirect-based implementation below no longer
-    // matches the API. Re-implement using the ID-token flow (see the
-    // frontend implementation guide) before re-enabling.
-    Alert.alert(
-      'Coming soon',
-      'Google sign-in will be available in an upcoming update. Please sign in with your email and password.'
-    );
-
-    /* Previous redirect-based implementation (kept for reference):
-    try {
-      const redirectUrl = Linking.createURL('/dashboard');
-      const authUrl = `${API_URL}/api/auth/google?redirect=${encodeURIComponent(redirectUrl)}`;
-
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
-
-      if (result.type === 'success') {
-         router.push('/(tabs)' as any);
-      } else if (result.type === 'cancel') {
-         console.log("Google Login sequence intentionally aborted by the user constraint.");
-      }
-    } catch (error) {
-      console.log("Google Login Compilation Error: ", error);
-      Alert.alert("Authentication Error", "Something went critically wrong attempting to link your Google Workspace identity.");
+    if (!API_URL) {
+      Alert.alert('Configuration Error', 'API URL is not configured.');
+      return;
     }
-    */
+
+    setIsLoading(true);
+    try {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      // Force the account picker
+      try { await GoogleSignin.signOut(); } catch (e) { }
+      const response = await GoogleSignin.signIn();
+      if (!isSuccessResponse(response)) return;
+
+      const idToken = response.data.idToken;
+      if (!idToken) {
+        Alert.alert('Login Failed', 'Unable to verify Google Account.');
+        return;
+      }
+
+      const res = await fetch(`${API_URL}/api/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        Alert.alert('Login Failed', data.message || 'Authentication failed on server.');
+        return;
+      }
+
+      const activeUserId = data.data?.user?.id;
+      const activeToken = data.data?.token;
+
+      if (activeUserId) {
+        await SecureStore.setItemAsync('userId', String(activeUserId));
+        await AsyncStorage.setItem('userId', String(activeUserId));
+      } else {
+        console.warn("⚠️ Warning: User ID not found in data.data.user.id");
+      }
+
+      if (activeToken) {
+        await SecureStore.setItemAsync('userToken', String(activeToken));
+        await AsyncStorage.setItem('userToken', String(activeToken));
+      }
+
+      if (activeUserId && activeToken) {
+        await AsyncStorage.setItem('hasLoggedInOnce', 'true');
+        const savedBio = await AsyncStorage.getItem('biometricsEnabled');
+        if (savedBio === null) {
+          await setBiometricsEnabled(true);
+        }
+      }
+
+      await registerDeviceToken();
+      router.push('/(tabs)' as any);
+
+    } catch (error: any) {
+      if (isErrorWithCode(error)) {
+        if (error.code === statusCodes.IN_PROGRESS) return;
+        if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+          Alert.alert('Error', 'Google Play Services are not available on this device.');
+          return;
+        }
+      }
+      console.error(error.message);
+      Alert.alert('Authentication Error', 'An error occurred during Google Sign-In.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -183,7 +228,7 @@ export default function LoginScreen() {
               />
 
               <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={isLoading}>
-                {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Sign In</Text>}
+                {isLoading ? <ActivityIndicator color={colors.textOnPrimary} /> : <Text style={styles.primaryButtonText}>Sign In</Text>}
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/create-account' as any)}>
@@ -226,36 +271,36 @@ export default function LoginScreen() {
 
 // --- Design Layout Core Styling Configuration Mapping Rules ---
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1D666A' },
+  container: { flex: 1, backgroundColor: colors.softSurface },
   headerSection: { paddingHorizontal: 30, paddingTop: 40, paddingBottom: 20 },
-  headerTitle: { color: '#FFFFFF', fontSize: 32, fontWeight: 'bold', marginBottom: 10 },
-  headerSubtitle: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 16 },
-  bottomCard: { flex: 1, backgroundColor: '#E8ECEC', borderTopLeftRadius: 40, borderTopRightRadius: 40 },
-  scrollContent: { padding: 30 },
-  innerWhiteBox: { backgroundColor: '#FFFFFF', borderRadius: 30, padding: 20 },
-  label: { fontSize: 14, color: '#000000', marginBottom: 8, fontWeight: '500' },
-  input: { backgroundColor: '#E0E0E0', borderRadius: 15, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16, marginBottom: 20 },
-  primaryButton: { backgroundColor: '#1D666A', borderRadius: 15, height: 50, justifyContent: 'center', alignItems: 'center', marginBottom: 15, marginTop: 10 },
-  primaryButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-  outlineButton: { borderWidth: 1, borderColor: '#1D666A', borderRadius: 15, height: 50, justifyContent: 'center', alignItems: 'center' },
-  outlineButtonText: { color: '#1D666A', fontSize: 16, fontWeight: '600' },
-  dividerContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 30 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: 'rgba(0, 0, 0, 0.54)' },
-  dividerText: { marginHorizontal: 10, color: 'rgba(0, 0, 0, 0.54)', fontSize: 14 },
+  headerTitle: { color: colors.textPrimary, fontSize: 32, fontWeight: 'bold', marginBottom: 10 },
+  headerSubtitle: { color: colors.textSecondary, fontSize: 16 },
+  bottomCard: { flex: 1, backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  scrollContent: { padding: 24 },
+  innerWhiteBox: { backgroundColor: colors.surface, borderRadius: 16, padding: 20, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6 },
+  label: { fontSize: 14, color: colors.textPrimary, marginBottom: 8, fontWeight: '500' },
+  input: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, color: colors.textPrimary, borderRadius: 12, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16, marginBottom: 20 },
+  primaryButton: { backgroundColor: colors.primary, borderRadius: 28, height: 52, justifyContent: 'center', alignItems: 'center', marginBottom: 15, marginTop: 10, elevation: 2, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 },
+  primaryButtonText: { color: colors.textOnPrimary, fontSize: 16, fontWeight: '600' },
+  outlineButton: { borderWidth: 1.5, borderColor: colors.primary, borderRadius: 28, height: 52, justifyContent: 'center', alignItems: 'center' },
+  outlineButtonText: { color: colors.primaryText, fontSize: 16, fontWeight: '600' },
+  dividerContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 24 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { marginHorizontal: 10, color: colors.textSecondary, fontSize: 14 },
   googleButton: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    borderRadius: 15,
-    height: 55,
+    borderRadius: 28,
+    height: 52,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 24,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: colors.border,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.04,
     shadowRadius: 3
   },
   googleIconImage: {
@@ -269,6 +314,6 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
   footerContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-  footerText: { color: 'rgba(0, 0, 0, 0.87)', fontSize: 15 },
-  footerLink: { color: '#1D666A', fontWeight: 'bold', fontSize: 15 },
+  footerText: { color: colors.textSecondary, fontSize: 15 },
+  footerLink: { color: colors.primaryText, fontWeight: 'bold', fontSize: 15 },
 });

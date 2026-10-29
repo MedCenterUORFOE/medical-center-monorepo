@@ -131,7 +131,38 @@ export async function PUT(request: Request) {
     return apiErrors.internal();
   }
 }
+// ============================================================================
+// GET: Read Weekly Availability Schedule for the Authenticated Doctor
+// ============================================================================
+export async function GET() {
+  try {
+    const session = await getUserSession();
+    if (!session?.id) return apiErrors.unauthorized();
 
+    if (session.role !== 'DOCTOR') {
+      return apiErrors.forbidden('Only doctors can view doctor availability.');
+    }
 
+    const schedule = await prisma.doctorAvailability.findMany({
+      where: { doctor_id: session.id },
+      orderBy: { day_of_week: 'asc' },
+      select: {
+        day_of_week: true,
+        start_time: true,
+        end_time: true,
+        is_available: true,
+      },
+    });
 
+    return successResponse(
+      { schedule },
+      schedule.length > 0
+        ? 'Doctor availability schedule retrieved successfully.'
+        : 'No availability schedule has been configured.'
+    );
+  } catch (error) {
+    console.error('Doctor Availability Fetch Error:', error);
+    return apiErrors.internal();
+  }
+}
 

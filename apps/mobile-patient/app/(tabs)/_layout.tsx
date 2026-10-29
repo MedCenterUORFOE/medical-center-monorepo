@@ -3,6 +3,7 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform, Pressable } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { colors } from '../../src/theme/colors';
 
 export default function TabLayout() {
   const triggerHaptic = () => {
@@ -13,20 +14,20 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#1B5E55', // Professional medical primary
-        tabBarInactiveTintColor: '#8E8E93', // Muted neutral gray inactive state
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.tabInactive,
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
+          backgroundColor: colors.surface,
           borderTopWidth: 1,
-          borderTopColor: '#E5E7EB',
-          height: Platform.OS === 'ios' ? 88 : 68,
+          borderTopColor: colors.border,
+          height: Platform.OS === 'ios' ? 95 : 75,
           paddingBottom: Platform.OS === 'ios' ? 30 : 12,
-          paddingTop: 12,
+          paddingTop: 8,
           shadowColor: '#000000',
           shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.05,
-          shadowRadius: 3.84,
-          elevation: 5,
+          shadowOpacity: 0.04,
+          shadowRadius: 4,
+          elevation: 4,
         },
         tabBarLabelStyle: {
           fontSize: 12,
@@ -41,7 +42,7 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} size={22} color={color} />
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={28} color={color} />
           ),
           tabBarButton: (props) => (
             <Pressable
@@ -59,7 +60,7 @@ export default function TabLayout() {
         options={{
           title: 'Messages',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'chatbubbles' : 'chatbubbles-outline'} size={22} color={color} />
+            <Ionicons name={focused ? 'chatbubbles' : 'chatbubbles-outline'} size={28} color={color} />
           ),
           tabBarButton: (props) => (
             <Pressable
@@ -77,7 +78,7 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'person-circle' : 'person-circle-outline'} size={24} color={color} />
+            <Ionicons name={focused ? 'person-circle' : 'person-circle-outline'} size={30} color={color} />
           ),
           tabBarButton: (props) => (
             <Pressable
@@ -95,7 +96,7 @@ export default function TabLayout() {
         options={{
           title: 'App Settings',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'settings' : 'settings-outline'} size={22} color={color} />
+            <Ionicons name={focused ? 'settings' : 'settings-outline'} size={28} color={color} />
           ),
           tabBarButton: (props) => (
             <Pressable

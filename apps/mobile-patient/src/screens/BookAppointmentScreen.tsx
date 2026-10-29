@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { colors } from '../theme/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
@@ -25,20 +26,20 @@ interface Doctor {
 
 export default function BookAppointmentScreen() {
   const router = useRouter();
-  
+
   // --- States ---
   const [doctorsList, setDoctorsList] = useState<Doctor[]>([]);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
-  
+
   const [appointmentDate, setAppointmentDate] = useState<Date>(new Date());
   const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
   const [hasSelectedDate, setHasSelectedDate] = useState<boolean>(false);
-  
+
   // New States for Dynamic Time Slots
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('');
   const [isLoadingSlots, setIsLoadingSlots] = useState<boolean>(false);
-  
+
   const [reason, setReason] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isFetchingDoctors, setIsFetchingDoctors] = useState<boolean>(true);
@@ -70,12 +71,12 @@ export default function BookAppointmentScreen() {
 
       if (response.ok) {
         const data = await response.json();
-        const doctors = data.doctors || data.data || []; 
-        
+        const doctors = data.doctors || data.data || [];
+
         if (Array.isArray(doctors) && doctors.length > 0) {
-            setDoctorsList(doctors);
+          setDoctorsList(doctors);
         } else {
-            Alert.alert("Notice", "Currently, there are no doctors available.");
+          Alert.alert("Notice", "Currently, there are no doctors available.");
         }
       }
     } catch (error) {
@@ -85,8 +86,8 @@ export default function BookAppointmentScreen() {
     }
   };
 
-  
-  // ✅ අලුත් Function එක: තෝරපු දවසට අදාළව ඩොක්ටර්ගේ වෙලාවල් ගෙනීම
+
+  // ✅ New function: Fetch doctor's available times for the selected date
   const fetchAvailableTimeSlots = async (doctorId: string, date: Date) => {
     setIsLoadingSlots(true);
     setAvailableSlots([]);
@@ -95,8 +96,8 @@ export default function BookAppointmentScreen() {
     try {
       const token = await AsyncStorage.getItem('userToken');
       const dateString = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
-      
-      // Backend එකේ Availability Route එකට කතා කිරීම
+
+      // Calling the backend Availability Route
       const response = await fetch(`${API_URL}/api/doctors/${doctorId}/slots?date=${dateString}`, {
         method: 'GET',
         headers: {
@@ -121,8 +122,8 @@ export default function BookAppointmentScreen() {
     }
   };
 
-  
- 
+
+
 
   const onChangeDate = (event: any, selectedDate?: Date) => {
     setShowDatePicker(Platform.OS === 'ios');
@@ -147,7 +148,7 @@ export default function BookAppointmentScreen() {
     try {
       const payload = {
         doctor_id: selectedDoctorId,
-        scheduled_time: selectedTimeSlot, // ✅ App එකෙන් තෝරපු Slot එක (ISO String)
+        scheduled_time: selectedTimeSlot, // ✅ Slot selected from the App (ISO String)
         reason: reason.trim()
       };
 
@@ -161,7 +162,7 @@ export default function BookAppointmentScreen() {
         body: JSON.stringify(payload)
       });
 
-      // ✅ JSON Parse Error එක හැදීම (Crash වෙන්නේ නැති වෙන්න)
+      // ✅ Handling JSON Parse Error (to prevent crashing)
       const responseText = await response.text();
       let responseData;
       try {
@@ -196,10 +197,10 @@ export default function BookAppointmentScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        
+
         <View style={styles.headerSection}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
+            <Ionicons name="arrow-back" size={28} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Book Appointment</Text>
         </View>
@@ -207,21 +208,21 @@ export default function BookAppointmentScreen() {
         <View style={styles.bottomCard}>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
             <View style={styles.innerWhiteBox}>
-              
+
               {/* Select Doctor */}
               <Text style={styles.inputLabel}>Select Doctor *</Text>
               {isFetchingDoctors ? (
-                <ActivityIndicator color="#1D666A" style={{ alignSelf: 'flex-start' }} />
+                <ActivityIndicator color={colors.primary} style={{ alignSelf: 'flex-start' }} />
               ) : (
                 <View style={styles.doctorListContainer}>
                   {doctorsList.map((doc) => (
-                    <TouchableOpacity 
-                      key={doc.id} 
+                    <TouchableOpacity
+                      key={doc.id}
                       style={[styles.doctorCard, selectedDoctorId === doc.id && styles.selectedDoctorCard]}
                       onPress={() => setSelectedDoctorId(doc.id)}
                     >
-                      <Ionicons name="person" size={20} color={selectedDoctorId === doc.id ? "#FFFFFF" : "#1D666A"} />
-                      <Text style={[styles.doctorName, selectedDoctorId === doc.id && { color: '#FFF' }]}> {doc.name}</Text>
+                      <Ionicons name="person" size={20} color={selectedDoctorId === doc.id ? colors.textOnPrimary : colors.primaryText} />
+                      <Text style={[styles.doctorName, selectedDoctorId === doc.id && { color: colors.textOnPrimary }]}> {doc.name}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -233,9 +234,9 @@ export default function BookAppointmentScreen() {
                 <Text style={hasSelectedDate ? styles.selectedText : styles.placeholderText}>
                   {hasSelectedDate ? appointmentDate.toISOString().split('T')[0] : 'Choose a Date'}
                 </Text>
-                <Ionicons name="calendar-outline" size={22} color="#1D666A" />
+                <Ionicons name="calendar-outline" size={22} color={colors.primaryText} />
               </TouchableOpacity>
-              
+
               {showDatePicker && (
                 <DateTimePicker
                   value={appointmentDate}
@@ -246,12 +247,12 @@ export default function BookAppointmentScreen() {
                 />
               )}
 
-              {/* ✅ Dynamic Time Slots (ඔරලෝසුව වෙනුවට බටන්ස්) */}
+              {/* ✅ Dynamic Time Slots (buttons instead of clock) */}
               <Text style={styles.inputLabel}>Available Time Slots *</Text>
               {!selectedDoctorId || !hasSelectedDate ? (
                 <Text style={{ color: '#888', fontSize: 13, fontStyle: 'italic' }}>Please select a doctor and date first.</Text>
               ) : isLoadingSlots ? (
-                <ActivityIndicator color="#1D666A" style={{ alignSelf: 'flex-start' }} />
+                <ActivityIndicator color={colors.primary} style={{ alignSelf: 'flex-start' }} />
               ) : availableSlots.length === 0 ? (
                 <Text style={{ color: 'red', fontSize: 13 }}>No available slots for this date.</Text>
               ) : (
@@ -272,11 +273,12 @@ export default function BookAppointmentScreen() {
 
               {/* Reason */}
               <Text style={styles.inputLabel}>Reason for Visit *</Text>
-              <TextInput 
-                style={[styles.inputBox, styles.textArea]} 
-                value={reason} 
-                onChangeText={setReason} 
-                placeholder="Describe your symptoms" 
+              <TextInput
+                style={[styles.inputBox, styles.textArea]}
+                value={reason}
+                onChangeText={setReason}
+                placeholder="Describe your symptoms"
+                placeholderTextColor={colors.placeholder}
                 multiline
                 numberOfLines={3}
                 textAlignVertical="top"
@@ -285,7 +287,7 @@ export default function BookAppointmentScreen() {
               <View style={{ height: 20 }} />
 
               <TouchableOpacity style={styles.primaryButton} onPress={handleBookAppointment} disabled={isLoading}>
-                {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Confirm Appointment</Text>}
+                {isLoading ? <ActivityIndicator color={colors.textOnPrimary} /> : <Text style={styles.primaryButtonText}>Confirm Appointment</Text>}
               </TouchableOpacity>
 
             </View>
@@ -298,31 +300,31 @@ export default function BookAppointmentScreen() {
 
 // ── STYLESHEET ──
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1D666A' },
+  container: { flex: 1, backgroundColor: colors.softSurface },
   headerSection: { paddingHorizontal: 30, paddingTop: 10, paddingBottom: 20 },
   backButton: { marginBottom: 15, width: 40 },
-  headerTitle: { color: '#FFFFFF', fontSize: 28, fontWeight: 'bold' },
-  bottomCard: { flex: 1, backgroundColor: '#E8ECEC', borderTopLeftRadius: 40, borderTopRightRadius: 40 },
-  scrollContent: { padding: 30 },
-  innerWhiteBox: { backgroundColor: '#FFFFFF', borderRadius: 30, padding: 20 },
-  inputLabel: { fontSize: 14, color: '#000000', fontWeight: '600', marginBottom: 8, marginTop: 15 },
-  inputBox: { backgroundColor: '#E0E0E0', borderRadius: 12, paddingHorizontal: 15, height: 50, fontSize: 15, color: '#000000' },
+  headerTitle: { color: colors.textPrimary, fontSize: 28, fontWeight: 'bold' },
+  bottomCard: { flex: 1, backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  scrollContent: { padding: 24 },
+  innerWhiteBox: { backgroundColor: colors.surface, borderRadius: 16, padding: 20, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6 },
+  inputLabel: { fontSize: 14, color: colors.textPrimary, fontWeight: '600', marginBottom: 8, marginTop: 15 },
+  inputBox: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 15, height: 50, fontSize: 15, color: colors.textPrimary },
   textArea: { height: 80, paddingTop: 15 },
-  pickerSelector: { height: 50, backgroundColor: '#E0E0E0', borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15 },
-  placeholderText: { color: '#757575', fontSize: 15 },
-  selectedText: { color: '#000000', fontSize: 15, fontWeight: '500' },
+  pickerSelector: { height: 50, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15 },
+  placeholderText: { color: colors.placeholder, fontSize: 15 },
+  selectedText: { color: colors.textPrimary, fontSize: 15, fontWeight: '500' },
   doctorListContainer: { marginTop: 5 },
-  doctorCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', padding: 12, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E0E0E0' },
-  selectedDoctorCard: { backgroundColor: '#1D666A', borderColor: '#1D666A' },
-  doctorName: { fontSize: 15, fontWeight: 'bold', marginLeft: 10 },
-  
+  doctorCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, padding: 12, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: colors.border },
+  selectedDoctorCard: { backgroundColor: colors.primary, borderColor: colors.primary },
+  doctorName: { fontSize: 15, fontWeight: 'bold', marginLeft: 10, color: colors.textPrimary },
+
   // New Styles for Time Slots
   slotsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 5 },
-  slotButton: { backgroundColor: '#E0E0E0', paddingVertical: 10, paddingHorizontal: 15, borderRadius: 8, borderWidth: 1, borderColor: '#CCC' },
-  selectedSlotButton: { backgroundColor: '#1D666A', borderColor: '#1D666A' },
-  slotText: { color: '#333', fontSize: 14, fontWeight: '600' },
-  selectedSlotText: { color: '#FFF' },
+  slotButton: { backgroundColor: colors.surface, paddingVertical: 10, paddingHorizontal: 15, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
+  selectedSlotButton: { backgroundColor: colors.primary, borderColor: colors.primary },
+  slotText: { color: colors.textPrimary, fontSize: 14, fontWeight: '600' },
+  selectedSlotText: { color: colors.textOnPrimary },
 
-  primaryButton: { height: 55, backgroundColor: '#1D666A', borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
-  primaryButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  primaryButton: { height: 52, backgroundColor: colors.primary, borderRadius: 28, justifyContent: 'center', alignItems: 'center', marginTop: 15, elevation: 2, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 },
+  primaryButtonText: { color: colors.textOnPrimary, fontSize: 16, fontWeight: 'bold' },
 });

@@ -1,0 +1,90 @@
+module.exports = {
+  expo: {
+    name: "mobile-patient",
+    slug: "mobile-patient",
+    version: "1.0.0",
+    orientation: "portrait",
+    icon: "./assets/images/icon.png",
+    scheme: "mobilepatient",
+    userInterfaceStyle: "light",
+    newArchEnabled: true,
+    ios: {
+      supportsTablet: true
+    },
+    android: {
+      adaptiveIcon: {
+        backgroundColor: "#EEF8F2",
+        foregroundImage: "./assets/images/android-icon-foreground.png",
+        backgroundImage: "./assets/images/android-icon-background.png",
+        monochromeImage: "./assets/images/android-icon-monochrome.png"
+      },
+      edgeToEdgeEnabled: true,
+      predictiveBackGestureEnabled: false,
+      permissions: [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      package: "com.risitha.mobilepatientv2",
+      googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './google-services.json'
+    },
+    web: {
+      output: "static",
+      favicon: "./assets/images/favicon.png"
+    },
+    plugins: [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          image: "./assets/images/splash-icon.png",
+          imageWidth: 200,
+          resizeMode: "contain",
+          backgroundColor: "#ffffff"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          colors: {
+            cropToolbarColor: "#000000",
+            cropToolbarWidgetColor: "#FFFFFF",
+            cropImageActiveWidgetColor: "#2A8567"
+          }
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      [
+        "expo-location",
+        {
+          locationAlwaysAndWhenInUsePermission: "Allow $(PRODUCT_NAME) to use your location to send ambulances.",
+          locationWhenInUsePermission: "Allow $(PRODUCT_NAME) to use your location to send ambulances."
+        }
+      ],
+      "expo-secure-store",
+      "@react-native-firebase/app",
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-build-properties",
+        {
+          android: {
+            usesCleartextTraffic: true
+          }
+        }
+      ]
+    ],
+    experiments: {
+      typedRoutes: true,
+      reactCompiler: true
+    },
+    extra: {
+      router: {},
+      eas: {
+        projectId: "e504073e-949c-424e-a9d6-204779e7ce01"
+      }
+    }
+  }
+};

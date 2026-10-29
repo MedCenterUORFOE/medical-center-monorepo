@@ -7,17 +7,21 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "environment": "development",
       "env": {
         "DATABASE_URL": "postgresql://dummy:dummy@localhost/dummy",
-        "EXPO_PUBLIC_API_URL": "https://medical-center-monorepo.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://medical-center-monorepo.vercel.app",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "320206360728-mpmi9l8ehq673jsah63ppa2hb1pdlte0.apps.googleusercontent.com"
       }
     },
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk" },
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
         "DATABASE_URL": "postgresql://dummy:dummy@localhost/dummy",
-        "EXPO_PUBLIC_API_URL": "http://10.57.151.119:3000"
+        "EXPO_PUBLIC_API_URL": "https://medical-center-monorepo.vercel.app"
       }
     },
     "production": {
