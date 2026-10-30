@@ -34,6 +34,7 @@ export default function CertificateDrawer({ isOpen, onClose, onProcessed }: Cert
   const [requests, setRequests] = useState<CertificateRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [processingMessage, setProcessingMessage] = useState<string | null>(null);
   const [notes, setNotes] = useState<{ [key: string]: string }>({});
   
   // Feedback
@@ -71,6 +72,7 @@ export default function CertificateDrawer({ isOpen, onClose, onProcessed }: Cert
     }
 
     setProcessingId(id);
+    setProcessingMessage(status === 'APPROVED' ? 'Approving request...' : 'Rejecting request...');
     setErrorMsg(null);
     setSuccessMsg(null);
 
@@ -80,7 +82,25 @@ export default function CertificateDrawer({ isOpen, onClose, onProcessed }: Cert
         doctor_notes: doctorNotes || undefined
       });
 
-      setSuccessMsg(response.data.message || `Certificate request successfully ${status.toLowerCase()}!`);
+      if (status === 'APPROVED') {
+        setProcessingMessage('Generating PDF & sending emails...');
+
+        try {
+          const generateResponse = await api.post(`/certificates/${id}/generate`, {});
+          setSuccessMsg(
+            generateResponse.data.message || 'Certificate generated and dispatched successfully.'
+          );
+        } catch (err: any) {
+          console.error('Error generating certificate:', err);
+          setErrorMsg(
+            err.response?.data?.message ||
+              'Request was approved, but PDF generation or email dispatch failed. Please check the logs or retry.'
+          );
+          return;
+        }
+      } else {
+        setSuccessMsg(response.data.message || 'Certificate request successfully rejected!');
+      }
       
       // Clean notes for this request
       const updatedNotes = { ...notes };
@@ -95,6 +115,7 @@ export default function CertificateDrawer({ isOpen, onClose, onProcessed }: Cert
       setErrorMsg(err.response?.data?.message || 'Failed to update certificate request status.');
     } finally {
       setProcessingId(null);
+      setProcessingMessage(null);
     }
   };
 
@@ -190,6 +211,12 @@ export default function CertificateDrawer({ isOpen, onClose, onProcessed }: Cert
 
                   {/* Processing Actions */}
                   <div className="grid grid-cols-2 gap-3 pt-1">
+                    {processingId === req.id && processingMessage && (
+                      <div className="col-span-2 flex items-center justify-center gap-2 text-[10px] text-slate-400">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-500" />
+                        <span>{processingMessage}</span>
+                      </div>
+                    )}
                     <button
                       type="button"
                       disabled={processingId === req.id}

@@ -96,6 +96,7 @@ interface MedicalRecordItem {
     items: {
       id: string;
       medicine_id: string | null;
+      medicine_name?: string | null;
       external_medicine_name: string | null;
       dosage: string;
       quantity: number;
@@ -435,7 +436,35 @@ export default function DoctorDashboard() {
       }
 
       if (historyRes.data && historyRes.data.data) {
-        setMedicalHistory(historyRes.data.data.history || []);
+        const history = historyRes.data.data.history || [];
+
+        try {
+          const catalogResponse = await api.get('/medicines/catalog?search=');
+          const catalog = catalogResponse.data?.data?.catalog || [];
+          const medicineNames = new Map<string, string>(
+            catalog.map((medicine: Medicine) => [medicine.id, medicine.name])
+          );
+
+          setMedicalHistory(
+            history.map((record: MedicalRecordItem) => ({
+              ...record,
+              prescription: record.prescription
+                ? {
+                    ...record.prescription,
+                    items: record.prescription.items.map((item) => ({
+                      ...item,
+                      medicine_name:
+                        item.medicine_name ||
+                        (item.medicine_id ? medicineNames.get(item.medicine_id) || null : null),
+                    })),
+                  }
+                : null,
+            }))
+          );
+        } catch (err) {
+          console.error('Error resolving prescription medicine names:', err);
+          setMedicalHistory(history);
+        }
       }
     } catch (err: any) {
       console.error('Error loading patient data:', err);
@@ -1124,7 +1153,9 @@ export default function DoctorDashboard() {
                                       <div key={item.id} className="text-xs flex items-center justify-between bg-slate-900/60 p-1.5 rounded border border-slate-850">
                                         <div>
                                           <span className="font-semibold text-white">{item.medicine_id ? 'Internal' : 'External'}: </span>
-                                          <span className="text-slate-300">{item.external_medicine_name || 'Stock Medicine'}</span>
+                                          <span className="text-slate-300">
+                                            {item.medicine_name || item.external_medicine_name || 'Stock Medicine'}
+                                          </span>
                                           <span className="text-[10px] text-slate-500 block">{item.dosage}</span>
                                         </div>
                                         <span className="text-emerald-400 font-bold">Qty: {item.quantity}</span>
