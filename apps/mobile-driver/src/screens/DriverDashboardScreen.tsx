@@ -930,7 +930,7 @@ export default function DriverDashboardScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F2FAF6',
+    backgroundColor: '#D9EEEA',
   },
   scroll: {
     flex: 1,
@@ -943,14 +943,14 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F2FAF6',
+    backgroundColor: '#D9EEEA',
   },
   headerCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 28,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#D2E8DC',
+    borderColor: '#B9D9D3',
   },
   kicker: {
     color: '#2F8F72',
@@ -976,7 +976,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#E8F3ED',
+    backgroundColor: '#CFE7E3',
     borderRadius: 999,
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -998,7 +998,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   alertCard: {
-    backgroundColor: '#DDEFE6',
+    backgroundColor: '#C9E4DF',
     borderRadius: 22,
     padding: 16,
   },
@@ -1043,7 +1043,7 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: '#E8F3ED',
+    backgroundColor: '#CFE7E3',
     borderRadius: 18,
     padding: 6,
     gap: 6,
@@ -1088,7 +1088,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   tripCard: {
-    backgroundColor: '#E8F3ED',
+    backgroundColor: '#CFE7E3',
     borderRadius: 20,
     padding: 16,
     gap: 6,
@@ -1104,7 +1104,7 @@ const styles = StyleSheet.create({
   },
   requestCard: {
     borderRadius: 18,
-    backgroundColor: '#E8F3ED',
+    backgroundColor: '#CFE7E3',
     padding: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1162,7 +1162,7 @@ const styles = StyleSheet.create({
   },
   notificationCard: {
     borderRadius: 18,
-    backgroundColor: '#E8F3ED',
+    backgroundColor: '#CFE7E3',
     padding: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1206,7 +1206,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   input: {
-    backgroundColor: '#E8F3ED',
+    backgroundColor: '#CFE7E3',
     borderRadius: 18,
     paddingHorizontal: 16,
     paddingVertical: 15,
@@ -1279,7 +1279,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   readOnlyCard: {
-    backgroundColor: '#E8F3ED',
+    backgroundColor: '#CFE7E3',
     borderRadius: 16,
     padding: 14,
     marginTop: 6,
