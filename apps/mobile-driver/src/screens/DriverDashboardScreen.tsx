@@ -690,16 +690,17 @@ export default function DriverDashboardScreen() {
         {isTabOverview ? (
           <>
             <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Shift controls</Text>
-              <Text style={styles.sectionCopy}>
-                Toggle your availability before, during, or after a run. This updates the driver status.
-              </Text>
+    
+              
               <Pressable
                 style={[styles.primaryButton, busyAction === 'availability' && styles.buttonDisabled]}
                 onPress={handleToggleAvailability}
                 disabled={busyAction === 'availability'}>
                 <Text style={styles.primaryButtonText}>{payload?.availability?.is_available ? 'Not Available' : 'Available'}</Text>
               </Pressable>
+              <Text style={styles.sectionCopy}>
+                Toggle your availability. This updates the driver status.
+              </Text>
             </View>
 
             {notificationText ? (
@@ -835,9 +836,7 @@ export default function DriverDashboardScreen() {
                       <Text style={styles.notificationMessage}>Phone: {ride.requester.phone}</Text>
                     ) : null}
                     <Text style={styles.notificationMessage}>Status: {ride.status}</Text>
-                    <Text style={styles.notificationMeta}>
-                      Lat {ride.patient_location_lat.toFixed(5)}, Lng {ride.patient_location_lng.toFixed(5)}
-                    </Text>
+                    
                     <Text style={styles.notificationMeta}>
                       Completed: {new Date(ride.completed_at ?? ride.created_at).toLocaleString([], {
                         month: 'short',
@@ -878,7 +877,7 @@ export default function DriverDashboardScreen() {
               <Text style={styles.readOnlyValue}>{payload?.driver.vehicle_registration ?? 'Not set'}</Text>
             </View>
 
-            <Text style={[styles.label, { marginTop: 14 }]}>Username (Handle)</Text>
+            <Text style={[styles.label, { marginTop: 14 }]}>Username</Text>
             <TextInput
               value={profileName}
               onChangeText={setProfileName}
@@ -887,7 +886,7 @@ export default function DriverDashboardScreen() {
               placeholderTextColor="#78958B"
               style={styles.input}
             />
-            <Text style={styles.hintText}>Username should be lowercase, 3-20 characters, using only letters, numbers, and underscores.</Text>
+            <Text style={styles.hintText}>Username should be lowercase, using only letters, numbers, and underscores.</Text>
 
             <Text style={styles.label}>Phone Number</Text>
             <TextInput
