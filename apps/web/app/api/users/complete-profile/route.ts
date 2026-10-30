@@ -40,6 +40,7 @@ const buildProfileSchema = (secureRole: string) => {
     
     // These are optional because Medical Staff and Drivers don't have these fields in the DB schema
     emergency_contact_name: z.string().optional(),
+    emergency_contact_relationship: z.string().optional(),
     emergency_contact_number: z.string().optional(),
     university_email: z.string().email().optional(),
 
@@ -169,6 +170,7 @@ export async function PATCH(request: Request) {
             year_of_study: sd.year_of_study,
             batch: sd.batch,
             emergency_contact_name: validatedData.emergency_contact_name,
+            emergency_contact_relationship: validatedData.emergency_contact_relationship,
             emergency_contact_number: validatedData.emergency_contact_number,
           },
           create: {
@@ -180,6 +182,7 @@ export async function PATCH(request: Request) {
             year_of_study: sd.year_of_study,
             batch: sd.batch,
             emergency_contact_name: validatedData.emergency_contact_name || "",
+            emergency_contact_relationship: validatedData.emergency_contact_relationship,
             emergency_contact_number: validatedData.emergency_contact_number || "",
           }
         });
@@ -193,6 +196,7 @@ export async function PATCH(request: Request) {
             department: ad.department,
             position: ad.position,
             emergency_contact_name: validatedData.emergency_contact_name,
+            emergency_contact_relationship: validatedData.emergency_contact_relationship,
             emergency_contact_number: validatedData.emergency_contact_number,
           },
           create: {
@@ -202,6 +206,7 @@ export async function PATCH(request: Request) {
             department: ad.department,
             position: ad.position,
             emergency_contact_name: validatedData.emergency_contact_name || "",
+            emergency_contact_relationship: validatedData.emergency_contact_relationship,
             emergency_contact_number: validatedData.emergency_contact_number || "",
           }
         });
@@ -316,6 +321,7 @@ const buildSelfRegistrationSchema = (secureRole: string) => {
     nic: z.string().min(10, "NIC is required"),
 
     emergency_contact_name: z.string().optional(),
+    emergency_contact_relationship: z.string().optional(),
     emergency_contact_number: z.string().optional(),
     university_email: z.string().email().optional(),
 
@@ -536,6 +542,7 @@ export async function PATCH(request: Request) {
             year_of_study: sd.year_of_study,
             batch: sd.batch,
             emergency_contact_name: validatedData.emergency_contact_name,
+            emergency_contact_relationship: validatedData.emergency_contact_relationship,
             emergency_contact_number: validatedData.emergency_contact_number,
           },
           create: {
@@ -547,6 +554,7 @@ export async function PATCH(request: Request) {
             year_of_study: sd.year_of_study,
             batch: sd.batch,
             emergency_contact_name: validatedData.emergency_contact_name || "",
+            emergency_contact_relationship: validatedData.emergency_contact_relationship,
             emergency_contact_number: validatedData.emergency_contact_number || "",
           }
         });
@@ -560,6 +568,7 @@ export async function PATCH(request: Request) {
             department: ad.department,
             position: ad.position,
             emergency_contact_name: validatedData.emergency_contact_name,
+            emergency_contact_relationship: validatedData.emergency_contact_relationship,
             emergency_contact_number: validatedData.emergency_contact_number,
           },
           create: {
@@ -569,6 +578,7 @@ export async function PATCH(request: Request) {
             department: ad.department,
             position: ad.position,
             emergency_contact_name: validatedData.emergency_contact_name || "",
+            emergency_contact_relationship: validatedData.emergency_contact_relationship,
             emergency_contact_number: validatedData.emergency_contact_number || "",
           }
         });

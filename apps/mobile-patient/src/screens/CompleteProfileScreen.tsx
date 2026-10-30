@@ -94,12 +94,18 @@ export default function CompleteProfileScreen() {
             AsyncStorage.getItem(`patientProfile_${id}`),
           ]);
           const overrides = rawOverrides ? JSON.parse(rawOverrides) : null;
-          const userData = rawUserData ? JSON.parse(rawUserData) : null;
+          const rawUserParsed = rawUserData ? JSON.parse(rawUserData) : null;
+          const userData = (rawUserParsed && (!rawUserParsed.id || rawUserParsed.id === id)) ? rawUserParsed : null;
           const patientProfile = rawPatientProfile ? JSON.parse(rawPatientProfile) : null;
 
-          const existingName = overrides?.surname || overrides?.name || userData?.surname || userData?.name || '';
-          const existingPhone = overrides?.phone || userData?.phone || patientProfile?.phone || '';
-          const existingNic = userData?.nic || patientProfile?.nic || '';
+          const rawName = overrides?.surname || overrides?.name || userData?.surname || userData?.name || '';
+          const existingName = (rawName && rawName !== 'New User' && rawName !== 'Unknown User') ? rawName : '';
+
+          const rawPhone = overrides?.phone || userData?.phone || patientProfile?.phone || '';
+          const existingPhone = (rawPhone && rawPhone !== '0000000000') ? rawPhone : '';
+
+          const rawNic = userData?.nic || patientProfile?.nic || '';
+          const existingNic = (rawNic && rawNic !== 'Not Provided') ? rawNic : '';
 
           if (existingName) {
             setStudentFullName((prev) => prev || existingName);
@@ -267,6 +273,7 @@ export default function CompleteProfileScreen() {
           'userData',
           JSON.stringify({
             ...parsedUserData,
+            id: resolvedUserId,
             name: surnameValue,
             surname: surnameValue,
             phone: phoneValue,

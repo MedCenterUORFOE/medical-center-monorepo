@@ -11,7 +11,8 @@ import {
   Alert,
   Animated,
   Modal,
-  Linking
+  Linking,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons, FontAwesome5, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -86,6 +87,7 @@ export default function PatientDashboard() {
   const [greeting, setGreeting] = useState<string>('');
   const [isMutating, setIsMutating] = useState<boolean>(false);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [imageError, setImageError] = useState<boolean>(false);
 
   const loadUnreadCount = async () => {
     const count = await getUnreadCount();
@@ -95,10 +97,18 @@ export default function PatientDashboard() {
   useFocusEffect(
     React.useCallback(() => {
       loadUnreadCount();
-      void fetchDashboardDataFromBackend();
+      async function syncSessionAndData() {
+        const id =
+          (await SecureStore.getItemAsync('userId')) ||
+          (await AsyncStorage.getItem('userId'));
+        setPatientId(id);
+        setImageError(false);
+        void fetchDashboardDataFromBackend();
+      }
+      void syncSessionAndData();
       const unsubscribe = subscribe(loadUnreadCount);
       return () => unsubscribe();
-    }, [patientId])
+    }, [])
   );
   const [isConfirmEmergencyModalVisible, setIsConfirmEmergencyModalVisible] = useState<boolean>(false);
 
@@ -135,26 +145,33 @@ export default function PatientDashboard() {
         (await SecureStore.getItemAsync('userToken')) ||
         (await AsyncStorage.getItem('userToken'));
 
-      // 1. Read local cache / overrides first
+      // 1. Read local cache / overrides scoped to CURRENT patientId
       let localOverrides: any = null;
       let localProfile: any = null;
       let localUserData: any = null;
       let completedFlag: string | null = null;
-      let isCompleteFlag: string | null = null;
+      let localAvatarUrl: string | null = null;
+      let isAvatarReset = false;
 
       if (patientId) {
-        const [rawOverrides, rawProfile, rawUser, rawCompleted, rawIsComplete] = await Promise.all([
+        const [rawOverrides, rawProfile, rawUser, rawCompleted, rawAvatar, rawReset] = await Promise.all([
           AsyncStorage.getItem(`patient_profile_overrides_${patientId}`),
           AsyncStorage.getItem(`patientProfile_${patientId}`),
           AsyncStorage.getItem('userData'),
           AsyncStorage.getItem(`profileCompleted_${patientId}`),
-          AsyncStorage.getItem('is_profile_complete'),
+          AsyncStorage.getItem(`patient_avatar_${patientId}`),
+          AsyncStorage.getItem(`patient_avatar_reset_${patientId}`),
         ]);
         localOverrides = rawOverrides ? JSON.parse(rawOverrides) : null;
         localProfile = rawProfile ? JSON.parse(rawProfile) : null;
-        localUserData = rawUser ? JSON.parse(rawUser) : null;
+        const parsedUser = rawUser ? JSON.parse(rawUser) : null;
+        // Verify localUserData belongs to THIS patientId to prevent cross-user leakage
+        if (parsedUser && (!parsedUser.id || parsedUser.id === patientId)) {
+          localUserData = parsedUser;
+        }
         completedFlag = rawCompleted;
-        isCompleteFlag = rawIsComplete;
+        localAvatarUrl = rawAvatar || null;
+        isAvatarReset = rawReset === 'true';
       }
 
       // 2. Fetch remote profile
@@ -174,65 +191,95 @@ export default function PatientDashboard() {
         console.warn('Dashboard profile fetch failed:', err);
       }
 
-      // 3. Determine completion status
-      const isLocallyComplete =
+      // 3. Determine completion status strictly per instructions:
+      // A user's profile must ONLY be considered complete (isProfileComplete = true) for the currently logged-in userId if:
+      // (a) The backend GET /api/profiles response for this userId returns a valid PatientProfile that actually has
+      //     core baseline fields populated (specifically checking that blood_group AND (date_of_birth OR height OR weight)
+      //     are non-null/non-empty), OR
+      // (b) The user-scoped key profileCompleted_${userId} in AsyncStorage is explicitly 'true' for this exact userId
+      //     (set only when this user submits the Complete Profile / Edit Profile form), OR
+      // (c) localProfile?.is_profile_complete === true for this exact patientId
+      const clinicalProfile = patientData?.patientProfile;
+      const hasBaselineClinicalFields = Boolean(
+        clinicalProfile &&
+        clinicalProfile.blood_group &&
+        String(clinicalProfile.blood_group).trim() !== '' &&
+        (
+          (clinicalProfile.date_of_birth && String(clinicalProfile.date_of_birth).trim() !== '') ||
+          (clinicalProfile.height !== null && clinicalProfile.height !== undefined && Number(clinicalProfile.height) > 0) ||
+          (clinicalProfile.weight !== null && clinicalProfile.weight !== undefined && Number(clinicalProfile.weight) > 0)
+        )
+      );
+
+      const hasUserCompletedLocally =
         completedFlag === 'true' ||
-        isCompleteFlag === 'true' ||
         localProfile?.is_profile_complete === true ||
-        localUserData?.is_profile_complete === true ||
-        localUserData?.profileCompleted === true ||
-        !!localOverrides?.phone ||
-        !!localProfile?.phone;
+        (localUserData?.is_profile_complete === true && localUserData?.id === patientId);
 
-      const isServerComplete =
-        !!patientData?.student ||
-        !!patientData?.academicStaff ||
-        !!patientData?.is_profile_complete ||
-        !!patientData?.patientProfile?.blood_group ||
-        !!patientData?.patientProfile?.date_of_birth ||
-        Boolean(patientData?.nic && patientData?.phone);
+      const isProfileComplete = Boolean(hasBaselineClinicalFields || hasUserCompletedLocally);
 
-      const isProfileComplete = Boolean(isServerComplete || isLocallyComplete);
+      // 4. Resolve full name & surname accurately:
+      // Saved custom surname from user profile edits:
+      const savedSurname = localOverrides?.surname || localProfile?.surname;
 
-      // 4. Resolve full name & surname
+      // Real account name from fresh Google Login / registration or backend:
+      const accountName = patientData?.name || localUserData?.name;
+      const isValidAccountName =
+        accountName &&
+        accountName.trim() !== '' &&
+        accountName !== 'New User' &&
+        accountName !== 'Unknown User';
+
+      let resolvedSurname = '';
+      if (savedSurname && isProfileComplete) {
+        resolvedSurname = savedSurname;
+      } else if (isValidAccountName) {
+        resolvedSurname = accountName.trim();
+      } else if (savedSurname) {
+        resolvedSurname = savedSurname;
+      } else if (patientData?.student?.full_name && patientData.student.full_name !== 'New User') {
+        resolvedSurname = patientData.student.full_name;
+      } else if (accountName && accountName.trim() !== '') {
+        resolvedSurname = accountName.trim();
+      } else {
+        resolvedSurname = 'Patient';
+      }
+
       const rawFullName =
-        localOverrides?.surname ||
-        localOverrides?.name ||
-        localProfile?.surname ||
-        localProfile?.name ||
-        localUserData?.surname ||
-        localUserData?.name ||
-        patientData?.student?.full_name ||
-        patientData?.student?.name ||
         patientData?.name ||
-        'Patient';
-
-      const resolvedSurname =
-        localOverrides?.surname ||
-        localProfile?.surname ||
-        localUserData?.surname ||
-        extractSurname(rawFullName) ||
-        rawFullName;
+        localUserData?.name ||
+        savedSurname ||
+        resolvedSurname;
 
       const studentId =
-        patientData?.student?.university_reg_number ||
-        patientData?.academicStaff?.university_staff_id ||
-        localUserData?.reg_number ||
-        localUserData?.student_id ||
-        '';
+        patientData?.student?.university_reg_number && patientData.student.university_reg_number !== 'PENDING'
+          ? patientData.student.university_reg_number
+          : patientData?.academicStaff?.university_staff_id ||
+            (localUserData?.id === patientId && localUserData?.reg_number !== 'PENDING' ? localUserData?.reg_number : '') ||
+            '';
 
       const faculty =
-        patientData?.student?.faculty ||
-        patientData?.academicStaff?.department ||
-        localUserData?.faculty ||
-        localUserData?.department ||
-        '';
+        patientData?.student?.faculty && patientData.student.faculty !== 'Pending'
+          ? patientData.student.faculty
+          : patientData?.academicStaff?.department ||
+            (localUserData?.id === patientId && localUserData?.faculty !== 'Pending' ? localUserData?.faculty : '') ||
+            '';
+
+      let resolvedAvatarUrl: string | null = null;
+      if (!isAvatarReset) {
+        resolvedAvatarUrl =
+          localAvatarUrl ||
+          patientData?.profile_picture ||
+          (localUserData?.id === patientId ? (localUserData?.profile_picture || localUserData?.picture) : null) ||
+          null;
+      }
 
       return {
         full_name: rawFullName,
         surname: resolvedSurname,
         student_id: studentId,
         faculty: faculty,
+        avatar_url: resolvedAvatarUrl,
         is_profile_complete: isProfileComplete,
       };
     },
@@ -285,8 +332,8 @@ export default function PatientDashboard() {
 
   const upcomingConsultations = appointmentsList.filter(isUpcoming);
 
-  // Derived state mappings for template compatibility
-  const hasVerifiedProfile = profile ? profile.is_profile_complete : true;
+  // Derived state mappings: strictly Boolean, defaults to false if uncompleted or loading
+  const hasVerifiedProfile = Boolean(profile?.is_profile_complete);
   const nextAppointment = upcomingConsultations.length > 0 ? upcomingConsultations[0] : null;
   const isLoading = isProfileLoading || isAppointmentsLoading || isHistoryLoading || isMutating;
 
@@ -364,16 +411,14 @@ export default function PatientDashboard() {
     ]).start();
   };
 
-  const callHotline = async () => {
+  const callHotline = async (rawNumber: string = '0123456789') => {
+    const cleanedNumber = rawNumber.replace(/[^\d+]/g, '');
+    if (!cleanedNumber) return;
     try {
-      const canOpen = await Linking.canOpenURL('tel:0123456789');
-      if (canOpen) {
-        await Linking.openURL('tel:0123456789');
-      } else {
-        Alert.alert('Emergency Hotline', 'Please dial 0123456789 directly. (This device cannot auto-dial.)');
-      }
+      await Linking.openURL(`tel:${cleanedNumber}`);
     } catch (e) {
       console.error('Failed to open dialer:', e);
+      Alert.alert('Unable to Open Dialer', `Please dial ${rawNumber} manually.`);
     }
   };
 
@@ -491,14 +536,36 @@ export default function PatientDashboard() {
             ) : null}
           </View>
 
-          <TouchableOpacity style={styles.bellWrap} onPress={() => router.push('/notifications' as any)} activeOpacity={0.7}>
-            <Ionicons name="notifications-outline" size={26} color={colors.textPrimary} />
-            {unreadNotifCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{unreadNotifCount > 9 ? '9+' : unreadNotifCount}</Text>
+          <View style={styles.headerRightActions}>
+            <TouchableOpacity style={styles.bellWrap} onPress={() => router.push('/notifications' as any)} activeOpacity={0.7}>
+              <Ionicons name="notifications-outline" size={24} color={colors.textPrimary} />
+              {unreadNotifCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{unreadNotifCount > 9 ? '9+' : unreadNotifCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.avatarBadgeOuter}
+              onPress={() => router.push('/(tabs)/profile' as any)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.avatarBadgeInner}>
+                {profile?.avatar_url && !imageError ? (
+                  <Image
+                    source={{ uri: profile.avatar_url }}
+                    style={styles.avatarImage}
+                    onError={() => setImageError(true)}
+                  />
+                ) : (
+                  <Text style={styles.avatarInitialText}>
+                    {(profile?.surname || profile?.full_name || 'U').trim().charAt(0).toUpperCase()}
+                  </Text>
+                )}
               </View>
-            )}
-          </TouchableOpacity>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -758,7 +825,58 @@ const styles = StyleSheet.create({
   greetingText: { color: colors.textSecondary, fontSize: 14, fontWeight: '500' },
   userName: { color: colors.textPrimary, fontSize: 26, fontWeight: 'bold', marginTop: 3 },
   studentIdSubTitleText: { color: colors.textSecondary, fontSize: 13, marginTop: 4, fontWeight: '500' },
-  bellWrap: { padding: 8, backgroundColor: 'rgba(255, 255, 255, 0.65)', borderRadius: 12 },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 2,
+  },
+  bellWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#DCECE2',
+  },
+  avatarBadgeOuter: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#3B6E5C',
+    padding: 1.5,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#1B5E4B',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  avatarBadgeInner: {
+    width: 37,
+    height: 37,
+    borderRadius: 18.5,
+    backgroundColor: '#1B5E4B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 37,
+    height: 37,
+    borderRadius: 18.5,
+  },
+  avatarInitialText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
   badge: {
     position: 'absolute',
     top: -4,
