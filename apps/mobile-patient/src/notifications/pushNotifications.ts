@@ -1,6 +1,7 @@
 import { getMessaging, getToken, requestPermission, onMessage, onNotificationOpenedApp, getInitialNotification, onTokenRefresh, AuthorizationStatus } from '@react-native-firebase/messaging';
 import type { RemoteMessage } from '@react-native-firebase/messaging';
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addNotification } from './notificationStore';
 import { PermissionsAndroid, Platform } from 'react-native';
 
@@ -49,12 +50,44 @@ export const startTokenRefreshListener = () => {
   });
 };
 
+const updateLocalCertificateStatus = async (requestId: string, status: string) => {
+  try {
+    const userId = (await AsyncStorage.getItem('userId')) || (await SecureStore.getItemAsync('userId'));
+    if (!userId || !requestId) return;
+    const storageKey = `patient_certificate_requests_${userId}`;
+    const raw = await AsyncStorage.getItem(storageKey);
+    if (!raw) return;
+    const requests = JSON.parse(raw);
+    const updated = requests.map((r: any) => {
+      if (r.requestId === requestId || r.id === requestId) {
+        return {
+          ...r,
+          status,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return r;
+    });
+    await AsyncStorage.setItem(storageKey, JSON.stringify(updated));
+  } catch (err) {
+    console.warn('Failed to update local certificate status:', err);
+  }
+};
+
 export const routeFromNotification = (data: any, router: any) => {
   const type = data?.type;
   if (['NEW_EMERGENCY', 'EMERGENCY_UPDATE', 'EMERGENCY_CANCELLED'].includes(type)) {
     router.push('/emergency');
   } else if (type === 'CERTIFICATE_UPDATE') {
-    router.push('/(tabs)/records');
+    const requestId = data?.request_id || '';
+    const status = data?.status;
+    if (requestId && status) {
+      void updateLocalCertificateStatus(requestId, status);
+    }
+    const targetUrl = requestId
+      ? `/academic-submission?tab=certificates&requestId=${requestId}`
+      : '/academic-submission?tab=certificates';
+    router.push(targetUrl as any);
   } else {
     router.push('/notifications');
   }

@@ -1048,6 +1048,24 @@ export default function MedicalRecordsScreen() {
             <Text style={styles.visitUploadReportBtnText}>Attach Report</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Medical Certificate Request Action */}
+        <TouchableOpacity
+          style={styles.visitCertificateBtn}
+          onPress={() => {
+            router.push({
+              pathname: '/academic-submission',
+              params: { recordId: item.id },
+            } as any);
+          }}
+          activeOpacity={0.8}
+        >
+          <View style={styles.visitCertificateBtnContent}>
+            <MaterialCommunityIcons name="certificate-outline" size={16} color="#3B6E5C" style={{ marginRight: 6 }} />
+            <Text style={styles.visitCertificateBtnText}>Request Medical Certificate</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={14} color="#3B6E5C" />
+        </TouchableOpacity>
       </View>
     );
   };
@@ -2218,6 +2236,27 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
+  },
+  visitCertificateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#EAF3ED',
+    borderWidth: 1,
+    borderColor: '#DCECE2',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginTop: 10,
+  },
+  visitCertificateBtnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  visitCertificateBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#3B6E5C',
   },
   // ── Diagnostic Reports Styles ──
   filterBarWrapper: {
