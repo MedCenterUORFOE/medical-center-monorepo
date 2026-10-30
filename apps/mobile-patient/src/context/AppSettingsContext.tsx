@@ -119,10 +119,22 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
 
   const logout = async () => {
     try {
-      await SecureStore.deleteItemAsync('userToken');
-      await SecureStore.deleteItemAsync('userId');
+      await SecureStore.deleteItemAsync('userToken').catch(() => {});
+      await SecureStore.deleteItemAsync('userId').catch(() => {});
       await AsyncStorage.removeItem('userToken');
       await AsyncStorage.removeItem('userId');
+
+      // Purge unscoped legacy keys so no state leaks to any new user
+      await AsyncStorage.multiRemove([
+        'userData',
+        'user_profile',
+        'is_profile_complete',
+        'profileCompleted',
+        'patientProfile',
+        'activeEmergencyRequestId',
+        'activeEmergencyStatus',
+      ]);
+
       setIsAppLocked(false);
       try {
         await GoogleSignin.signOut();

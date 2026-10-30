@@ -45,6 +45,72 @@ export default function LoginScreen() {
     checkAutoLogin();
   }, [biometricsEnabled]);
 
+  // --- Secure Session Establishment & Clean Cache Isolation ---
+  const establishUserSession = async (
+    userId: string,
+    token: string,
+    rawUserObj: any,
+    fallbackEmail: string
+  ) => {
+    try {
+      const prevUserId =
+        (await SecureStore.getItemAsync('userId')) ||
+        (await AsyncStorage.getItem('userId'));
+
+      // If user changed or a previous session was active, purge unscoped legacy cache
+      if (prevUserId && prevUserId !== String(userId)) {
+        await AsyncStorage.multiRemove([
+          'userData',
+          'user_profile',
+          'is_profile_complete',
+          'profileCompleted',
+          'patientProfile',
+          'activeEmergencyRequestId',
+          'activeEmergencyStatus',
+          'hasLoggedInOnce',
+        ]);
+        await SecureStore.deleteItemAsync('app_pin_code').catch(() => {});
+      }
+
+      // Store active credentials
+      await SecureStore.setItemAsync('userId', String(userId));
+      await AsyncStorage.setItem('userId', String(userId));
+      await SecureStore.setItemAsync('userToken', String(token));
+      await AsyncStorage.setItem('userToken', String(token));
+
+      const isProfileComplete = Boolean(rawUserObj?.is_profile_complete);
+
+      // Cleanly store normalized userData for this newly authenticated user
+      const userPayload = {
+        id: String(userId),
+        name: rawUserObj?.name || '',
+        email: rawUserObj?.email || fallbackEmail.trim(),
+        role: rawUserObj?.role || 'STUDENT',
+        is_profile_complete: isProfileComplete,
+        phone: rawUserObj?.phone || null,
+      };
+      await AsyncStorage.setItem('userData', JSON.stringify(userPayload));
+
+      // Handle profile completion flag
+      if (isProfileComplete) {
+        await AsyncStorage.setItem(`profileCompleted_${userId}`, 'true');
+        await AsyncStorage.setItem('is_profile_complete', 'true');
+      } else {
+        // If profile is not complete, clear completion flags so the Action Required banner shows!
+        await AsyncStorage.removeItem(`profileCompleted_${userId}`);
+        await AsyncStorage.removeItem('is_profile_complete');
+      }
+
+      await AsyncStorage.setItem('hasLoggedInOnce', 'true');
+      const savedBio = await AsyncStorage.getItem('biometricsEnabled');
+      if (savedBio === null) {
+        await setBiometricsEnabled(true);
+      }
+    } catch (err) {
+      console.error('Error establishing user session:', err);
+    }
+  };
+
   // --- Function to handle standard Email/Password Login Navigation Flow ---
   const handleLogin = async () => {
     if (!API_URL) {
@@ -54,12 +120,6 @@ export default function LoginScreen() {
 
     if (!email || !password) {
       Alert.alert('Validation Error', 'Please enter both your email address and secure password.');
-      return;
-    }
-
-    if (!API_URL) {
-      console.error('EXPO_PUBLIC_API_URL is not set in this build');
-      Alert.alert('Configuration Error', 'The server address is not configured in this build.');
       return;
     }
 
@@ -75,36 +135,21 @@ export default function LoginScreen() {
       console.log("🟢 BACKEND LOGIN RESPONSE:", JSON.stringify(data, null, 2));
 
       if (response.ok || response.status === 200 || response.status === 201) {
-
-        // ✅ Fix: Extracting relevant details from inside 'data.data'
         const activeUserId = data.data?.user?.id;
         const activeToken = data.data?.token;
 
-        if (activeUserId) {
-          await SecureStore.setItemAsync('userId', String(activeUserId));
-          await AsyncStorage.setItem('userId', String(activeUserId));
-        } else {
-          console.warn("⚠️ Warning: User ID not found in data.data.user.id");
-        }
-
-        // ✅ Fix: Saving the Token
-        if (activeToken) {
-          await SecureStore.setItemAsync('userToken', String(activeToken));
-          await AsyncStorage.setItem('userToken', String(activeToken));
-        }
-
         if (activeUserId && activeToken) {
-          await AsyncStorage.setItem('hasLoggedInOnce', 'true');
-          // Enable biometrics by default on first successful login if not configured
-          const savedBio = await AsyncStorage.getItem('biometricsEnabled');
-          if (savedBio === null) {
-            await setBiometricsEnabled(true);
-          }
+          await establishUserSession(
+            String(activeUserId),
+            String(activeToken),
+            data.data?.user,
+            email
+          );
+          await registerDeviceToken();
+          router.replace('/(tabs)' as any);
+        } else {
+          Alert.alert('Login Error', 'User ID or session token missing in response.');
         }
-
-        await registerDeviceToken();
-        router.push('/(tabs)' as any);
-
       } else {
         Alert.alert('Login Failed', data.message || 'Incorrect Email or Password combination!');
       }
@@ -156,29 +201,18 @@ export default function LoginScreen() {
       const activeUserId = data.data?.user?.id;
       const activeToken = data.data?.token;
 
-      if (activeUserId) {
-        await SecureStore.setItemAsync('userId', String(activeUserId));
-        await AsyncStorage.setItem('userId', String(activeUserId));
-      } else {
-        console.warn("⚠️ Warning: User ID not found in data.data.user.id");
-      }
-
-      if (activeToken) {
-        await SecureStore.setItemAsync('userToken', String(activeToken));
-        await AsyncStorage.setItem('userToken', String(activeToken));
-      }
-
       if (activeUserId && activeToken) {
-        await AsyncStorage.setItem('hasLoggedInOnce', 'true');
-        const savedBio = await AsyncStorage.getItem('biometricsEnabled');
-        if (savedBio === null) {
-          await setBiometricsEnabled(true);
-        }
+        await establishUserSession(
+          String(activeUserId),
+          String(activeToken),
+          data.data?.user,
+          data.data?.user?.email || ''
+        );
+        await registerDeviceToken();
+        router.replace('/(tabs)' as any);
+      } else {
+        Alert.alert('Login Error', 'User ID or session token missing in Google response.');
       }
-
-      await registerDeviceToken();
-      router.push('/(tabs)' as any);
-
     } catch (error: any) {
       if (isErrorWithCode(error)) {
         if (error.code === statusCodes.IN_PROGRESS) return;

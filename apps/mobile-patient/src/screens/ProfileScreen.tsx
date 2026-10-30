@@ -34,9 +34,6 @@ import { useAppSettings } from '../context/AppSettingsContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const DEFAULT_AVATAR =
-  'https://ui-avatars.com/api/?name=Patient&background=3B6E5C&color=fff&size=256';
-
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 
 const MONTH_NAMES = [
@@ -95,6 +92,7 @@ export interface ClinicalProfileData {
 export interface PatientData {
   id: string;
   name: string;
+  surname?: string;
   email: string;
   username: string | null;
   nic: string | null;
@@ -135,6 +133,8 @@ export default function ProfileScreen() {
   const [cachedUserData, setCachedUserData] = useState<any>(null);
   const [cachedPatientProfile, setCachedPatientProfile] = useState<any>(null);
   const [localAvatarUri, setLocalAvatarUri] = useState<string | null>(null);
+  const [avatarImageError, setAvatarImageError] = useState<boolean>(false);
+  const [isAvatarReset, setIsAvatarReset] = useState<boolean>(false);
 
   // ── UI Modal & Loading States ──
   const [isPhotoSheetVisible, setIsPhotoSheetVisible] = useState(false);
@@ -185,21 +185,34 @@ export default function ProfileScreen() {
       setAuthToken(token);
 
       if (id) {
-        const [overridesRaw, avatarRaw, userDataRaw, patientProfileRaw] = await Promise.all([
+        const [overridesRaw, avatarRaw, userDataRaw, patientProfileRaw, avatarResetRaw] = await Promise.all([
           AsyncStorage.getItem(`patient_profile_overrides_${id}`),
           AsyncStorage.getItem(`patient_avatar_${id}`),
           AsyncStorage.getItem('userData'),
           AsyncStorage.getItem(`patientProfile_${id}`),
+          AsyncStorage.getItem(`patient_avatar_reset_${id}`),
         ]);
+
+        const hasResetAvatar = avatarResetRaw === 'true';
+        setIsAvatarReset(hasResetAvatar);
 
         if (overridesRaw) {
           setCachedOverrides(JSON.parse(overridesRaw));
         }
-        if (avatarRaw) {
+        if (avatarRaw && !hasResetAvatar) {
           setLocalAvatarUri(avatarRaw);
+        } else {
+          setLocalAvatarUri(null);
         }
         if (userDataRaw) {
-          setCachedUserData(JSON.parse(userDataRaw));
+          const parsed = JSON.parse(userDataRaw);
+          if (!parsed.id || parsed.id === id) {
+            setCachedUserData(parsed);
+          } else {
+            setCachedUserData(null);
+          }
+        } else {
+          setCachedUserData(null);
         }
         if (patientProfileRaw) {
           setCachedPatientProfile(JSON.parse(patientProfileRaw));
@@ -294,14 +307,15 @@ export default function ProfileScreen() {
       cachedOverrides?.name ||
       cachedPatientProfile?.surname ||
       cachedPatientProfile?.name ||
-      cachedUserData?.surname ||
-      cachedUserData?.name ||
+      (cachedUserData?.id === patientId ? (cachedUserData?.surname || cachedUserData?.name) : null) ||
+      (serverData?.name && serverData.name !== 'New User' && serverData.name !== 'Unknown User' ? serverData.name : null) ||
       serverData?.name ||
       'Patient User';
 
     return {
       id: serverData?.id || patientId || '',
       name: resolvedName,
+      surname: resolvedName,
       email: serverData?.email || cachedUserData?.email || '',
       username: serverData?.username || cachedUserData?.username || null,
       nic: serverData?.nic || cachedUserData?.nic || null,
@@ -657,6 +671,7 @@ export default function ProfileScreen() {
         'userData',
         JSON.stringify({
           ...parsedUserData,
+          id: patientId,
           name: surnameVal,
           surname: surnameVal,
           phone: phoneVal,
@@ -724,9 +739,12 @@ export default function ProfileScreen() {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
         setLocalAvatarUri(asset.uri);
+        setIsAvatarReset(false);
+        setAvatarImageError(false);
 
         if (patientId) {
           await AsyncStorage.setItem(`patient_avatar_${patientId}`, asset.uri);
+          await AsyncStorage.removeItem(`patient_avatar_reset_${patientId}`);
         }
 
         // Upload to backend endpoint: `POST /api/users/profile-picture`
@@ -758,6 +776,7 @@ export default function ProfileScreen() {
             setLocalAvatarUri(uploadData.data.url);
             if (patientId) {
               await AsyncStorage.setItem(`patient_avatar_${patientId}`, uploadData.data.url);
+              await AsyncStorage.removeItem(`patient_avatar_reset_${patientId}`);
             }
             await queryClient.invalidateQueries({ queryKey: ['profile', patientId] });
             Alert.alert('Success', 'Profile photo updated successfully!');
@@ -771,6 +790,27 @@ export default function ProfileScreen() {
     } catch (err) {
       console.error('Image picker error:', err);
       Alert.alert('Error', 'Unable to pick image. Please try again.');
+    }
+  };
+
+  // ── Reset to Initial Avatar Badge ──
+  const handleResetToInitialAvatar = async () => {
+    setIsPhotoSheetVisible(false);
+    try {
+      if (patientId) {
+        await AsyncStorage.removeItem(`patient_avatar_${patientId}`);
+        await AsyncStorage.setItem(`patient_avatar_reset_${patientId}`, 'true');
+      }
+      setLocalAvatarUri(null);
+      setIsAvatarReset(true);
+      setAvatarImageError(false);
+      await queryClient.invalidateQueries({ queryKey: ['profile'] });
+      if (patientId) {
+        await queryClient.invalidateQueries({ queryKey: ['profile', patientId] });
+      }
+      Alert.alert('Avatar Reset', 'Your avatar has been reset to your clean initial badge.');
+    } catch (err) {
+      console.warn('Error resetting avatar:', err);
     }
   };
 
@@ -797,8 +837,15 @@ export default function ProfileScreen() {
     );
   };
 
-  // Determine avatar to display
-  const displayAvatar = localAvatarUri || profile?.profile_picture || DEFAULT_AVATAR;
+  // Determine avatar to display (photo or single-letter initial fallback)
+  const displayAvatar = isAvatarReset ? null : (localAvatarUri || profile?.profile_picture || null);
+  const displayInitial = (
+    profile?.surname ||
+    profile?.name ||
+    cachedUserData?.surname ||
+    cachedUserData?.name ||
+    'U'
+  ).trim().charAt(0).toUpperCase();
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -838,7 +885,17 @@ export default function ProfileScreen() {
           {/* Avatar with Camera Badge */}
           <View style={styles.avatarContainer}>
             <View style={styles.avatarRing}>
-              <Image source={{ uri: displayAvatar }} style={styles.avatarImage} />
+              {displayAvatar && !avatarImageError ? (
+                <Image
+                  source={{ uri: displayAvatar }}
+                  style={styles.avatarImage}
+                  onError={() => setAvatarImageError(true)}
+                />
+              ) : (
+                <View style={styles.avatarInitialCircle}>
+                  <Text style={styles.avatarInitialText}>{displayInitial}</Text>
+                </View>
+              )}
               {isUploadingPhoto && (
                 <View style={styles.avatarLoadingOverlay}>
                   <ActivityIndicator size="small" color="#FFFFFF" />
@@ -1281,6 +1338,20 @@ export default function ProfileScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.photoSheetOptionTitle}>Choose from Photo Gallery</Text>
                 <Text style={styles.photoSheetOptionSub}>Upload from your saved device photos</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.photoSheetOption}
+              onPress={handleResetToInitialAvatar}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.photoOptionIconCircle, { backgroundColor: '#FEF3C7' }]}>
+                <Ionicons name="refresh-outline" size={20} color="#B45309" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.photoSheetOptionTitle}>Use Initial Avatar (Reset Photo)</Text>
+                <Text style={styles.photoSheetOptionSub}>Switch back to clean single-letter initial badge</Text>
               </View>
             </TouchableOpacity>
 
@@ -1904,19 +1975,38 @@ const styles = StyleSheet.create({
     width: 104,
     height: 104,
     borderRadius: 52,
-    borderWidth: 3.5,
+    borderWidth: 3,
     borderColor: '#3B6E5C',
-    padding: 3,
+    padding: 2.5,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    shadowColor: '#1B5E4B',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 6,
+    elevation: 3,
   },
   avatarImage: {
     width: 92,
     height: 92,
     borderRadius: 46,
-    backgroundColor: '#D5E6DC',
+    backgroundColor: '#1B5E4B',
+  },
+  avatarInitialCircle: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    backgroundColor: '#1B5E4B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitialText: {
+    color: '#FFFFFF',
+    fontSize: 40,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   avatarLoadingOverlay: {
     ...StyleSheet.absoluteFillObject,
