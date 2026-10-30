@@ -27,11 +27,20 @@ import { getUnreadCount, subscribe } from '../notifications/notificationStore';
 // ── TypeScript Data Interfaces ──
 interface ProfileSchema {
   full_name: string;
+  surname: string;
   student_id: string;
   faculty: string;
   avatar_url?: string | null;
   is_profile_complete: boolean;
 }
+
+const extractSurname = (nameStr?: string | null): string => {
+  if (!nameStr) return '';
+  const trimmed = nameStr.trim();
+  if (!trimmed) return '';
+  const parts = trimmed.split(/\s+/);
+  return parts[parts.length - 1] || '';
+};
 
 // ✅ Changed to match new Database Field names
 interface AppointmentSchema {
@@ -86,9 +95,10 @@ export default function PatientDashboard() {
   useFocusEffect(
     React.useCallback(() => {
       loadUnreadCount();
+      void fetchDashboardDataFromBackend();
       const unsubscribe = subscribe(loadUnreadCount);
       return () => unsubscribe();
-    }, [])
+    }, [patientId])
   );
   const [isConfirmEmergencyModalVisible, setIsConfirmEmergencyModalVisible] = useState<boolean>(false);
 
@@ -99,7 +109,9 @@ export default function PatientDashboard() {
   useEffect(() => {
     configureClockGreeting();
     async function loadAuth() {
-      const id = await SecureStore.getItemAsync('userId');
+      const id =
+        (await SecureStore.getItemAsync('userId')) ||
+        (await AsyncStorage.getItem('userId'));
       setPatientId(id);
     }
     loadAuth();
@@ -119,25 +131,110 @@ export default function PatientDashboard() {
     queryKey: ['profile', patientId],
     queryFn: async () => {
       const API_URL = process.env.EXPO_PUBLIC_API_URL;
-      const token = await SecureStore.getItemAsync('userToken');
-      const response = await fetch(`${API_URL}/api/profiles/${patientId}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (!response.ok) throw new Error('Failed to fetch profile');
-      const raw = await response.json();
-      const patientData = raw.data?.patient;
-      if (patientData) {
-        return {
-          full_name: patientData.student?.full_name || patientData.student?.name || patientData.name || 'Student',
-          student_id: patientData.student?.university_reg_number || '',
-          faculty: patientData.student?.faculty || '',
-          is_profile_complete: !!patientData.student
-        };
+      const token =
+        (await SecureStore.getItemAsync('userToken')) ||
+        (await AsyncStorage.getItem('userToken'));
+
+      // 1. Read local cache / overrides first
+      let localOverrides: any = null;
+      let localProfile: any = null;
+      let localUserData: any = null;
+      let completedFlag: string | null = null;
+      let isCompleteFlag: string | null = null;
+
+      if (patientId) {
+        const [rawOverrides, rawProfile, rawUser, rawCompleted, rawIsComplete] = await Promise.all([
+          AsyncStorage.getItem(`patient_profile_overrides_${patientId}`),
+          AsyncStorage.getItem(`patientProfile_${patientId}`),
+          AsyncStorage.getItem('userData'),
+          AsyncStorage.getItem(`profileCompleted_${patientId}`),
+          AsyncStorage.getItem('is_profile_complete'),
+        ]);
+        localOverrides = rawOverrides ? JSON.parse(rawOverrides) : null;
+        localProfile = rawProfile ? JSON.parse(rawProfile) : null;
+        localUserData = rawUser ? JSON.parse(rawUser) : null;
+        completedFlag = rawCompleted;
+        isCompleteFlag = rawIsComplete;
       }
-      return null;
+
+      // 2. Fetch remote profile
+      let patientData: any = null;
+      try {
+        const response = await fetch(`${API_URL}/api/profiles/${patientId}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (response.ok) {
+          const raw = await response.json();
+          patientData = raw.data?.patient;
+        }
+      } catch (err) {
+        console.warn('Dashboard profile fetch failed:', err);
+      }
+
+      // 3. Determine completion status
+      const isLocallyComplete =
+        completedFlag === 'true' ||
+        isCompleteFlag === 'true' ||
+        localProfile?.is_profile_complete === true ||
+        localUserData?.is_profile_complete === true ||
+        localUserData?.profileCompleted === true ||
+        !!localOverrides?.phone ||
+        !!localProfile?.phone;
+
+      const isServerComplete =
+        !!patientData?.student ||
+        !!patientData?.academicStaff ||
+        !!patientData?.is_profile_complete ||
+        !!patientData?.patientProfile?.blood_group ||
+        !!patientData?.patientProfile?.date_of_birth ||
+        Boolean(patientData?.nic && patientData?.phone);
+
+      const isProfileComplete = Boolean(isServerComplete || isLocallyComplete);
+
+      // 4. Resolve full name & surname
+      const rawFullName =
+        localOverrides?.surname ||
+        localOverrides?.name ||
+        localProfile?.surname ||
+        localProfile?.name ||
+        localUserData?.surname ||
+        localUserData?.name ||
+        patientData?.student?.full_name ||
+        patientData?.student?.name ||
+        patientData?.name ||
+        'Patient';
+
+      const resolvedSurname =
+        localOverrides?.surname ||
+        localProfile?.surname ||
+        localUserData?.surname ||
+        extractSurname(rawFullName) ||
+        rawFullName;
+
+      const studentId =
+        patientData?.student?.university_reg_number ||
+        patientData?.academicStaff?.university_staff_id ||
+        localUserData?.reg_number ||
+        localUserData?.student_id ||
+        '';
+
+      const faculty =
+        patientData?.student?.faculty ||
+        patientData?.academicStaff?.department ||
+        localUserData?.faculty ||
+        localUserData?.department ||
+        '';
+
+      return {
+        full_name: rawFullName,
+        surname: resolvedSurname,
+        student_id: studentId,
+        faculty: faculty,
+        is_profile_complete: isProfileComplete,
+      };
     },
     enabled: !!patientId,
   });
@@ -386,12 +483,12 @@ export default function PatientDashboard() {
         <View style={styles.headerRow}>
           <View style={styles.headerLeft}>
             <Text style={styles.greetingText}>{greeting},</Text>
-            <Text style={styles.userName}>{profile?.full_name || 'Loading...'}</Text>
-            {hasVerifiedProfile && profile?.student_id && (
+            <Text style={styles.userName}>{profile?.surname || profile?.full_name || 'Patient'}</Text>
+            {hasVerifiedProfile && (profile?.student_id || profile?.faculty) ? (
               <Text style={styles.studentIdSubTitleText}>
-                {profile.student_id}  •  {profile.faculty}
+                {profile.student_id ? `${profile.student_id}  •  ` : ''}{profile.faculty}
               </Text>
-            )}
+            ) : null}
           </View>
 
           <TouchableOpacity style={styles.bellWrap} onPress={() => router.push('/notifications' as any)} activeOpacity={0.7}>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, StatusBar
@@ -8,6 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors } from '../theme/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage'; // To send Security Token
+import * as SecureStore from 'expo-secure-store';
+import { useQueryClient } from '@tanstack/react-query';
 
 // Define rigid data type contracts matching the backend validation expectations
 interface StudentDetails {
@@ -40,6 +42,7 @@ interface CompleteProfilePayload {
 export default function CompleteProfileScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const queryClient = useQueryClient();
 
   // Enforce types safely from search parameters or fallback to student context
   const targetRole = (params.role as 'STUDENT' | 'ACADEMIC_STAFF') || 'STUDENT';
@@ -79,6 +82,44 @@ export default function CompleteProfileScreen() {
   // ✅ Extracted dynamically from centralized mobile system environment configs
   const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
+  // Pre-load any existing known session info
+  useEffect(() => {
+    async function loadExistingInfo() {
+      try {
+        const id = (await SecureStore.getItemAsync('userId')) || (await AsyncStorage.getItem('userId'));
+        if (id) {
+          const [rawOverrides, rawUserData, rawPatientProfile] = await Promise.all([
+            AsyncStorage.getItem(`patient_profile_overrides_${id}`),
+            AsyncStorage.getItem('userData'),
+            AsyncStorage.getItem(`patientProfile_${id}`),
+          ]);
+          const overrides = rawOverrides ? JSON.parse(rawOverrides) : null;
+          const userData = rawUserData ? JSON.parse(rawUserData) : null;
+          const patientProfile = rawPatientProfile ? JSON.parse(rawPatientProfile) : null;
+
+          const existingName = overrides?.surname || overrides?.name || userData?.surname || userData?.name || '';
+          const existingPhone = overrides?.phone || userData?.phone || patientProfile?.phone || '';
+          const existingNic = userData?.nic || patientProfile?.nic || '';
+
+          if (existingName) {
+            setStudentFullName((prev) => prev || existingName);
+            setStaffFullName((prev) => prev || existingName);
+          }
+          if (existingPhone) {
+            setStudentPhone((prev) => prev || existingPhone);
+            setStaffPhone((prev) => prev || existingPhone);
+          }
+          if (existingNic) {
+            setNic((prev) => prev || existingNic);
+          }
+        }
+      } catch (e) {
+        console.warn('Error pre-populating CompleteProfile form:', e);
+      }
+    }
+    void loadExistingInfo();
+  }, []);
+
   const yearStringToInt = (val: string): number => {
     const map: Record<string, number> = { '1st Year': 1, '2nd Year': 2, '3rd Year': 3, '4th Year': 4 };
     return map[val] ?? 1;
@@ -98,6 +139,8 @@ export default function CompleteProfileScreen() {
     }
 
     let payload: Partial<CompleteProfilePayload> = {};
+    const surnameValue = role === 'STUDENT' ? studentFullName.trim() : staffFullName.trim();
+    const phoneValue = role === 'STUDENT' ? formatPhoneNumber(studentPhone) : formatPhoneNumber(staffPhone);
 
     // 1. STUDENT Payload Structure mapping exactly to Postman Schema
     if (role === 'STUDENT') {
@@ -106,15 +149,13 @@ export default function CompleteProfileScreen() {
         return;
       }
 
-      const validatedPhone = formatPhoneNumber(studentPhone);
-
       payload = {
-        name: studentFullName.trim(), // ✅ Newly added: Student Name
+        name: surnameValue,
         role: "STUDENT",
         nic: nic.trim(), 
-        phone: validatedPhone, 
-        emergency_contact_name: studentFullName.trim(),
-        emergency_contact_number: validatedPhone, 
+        phone: phoneValue, 
+        emergency_contact_name: surnameValue,
+        emergency_contact_number: phoneValue, 
         student_details: {
           university_reg_number: universityRegNumber.trim(),
           faculty: faculty.trim(),
@@ -132,16 +173,15 @@ export default function CompleteProfileScreen() {
         return;
       }
 
-      const validatedPhone = formatPhoneNumber(staffPhone);
       const finalEmail = staffEmail.trim() || `${universityStaffId.toLowerCase().replace(/[^a-z0-9]/g, "")}@eng.ruh.ac.lk`;
 
       payload = {
-        name: staffFullName.trim(), // ✅ Newly added: Staff Name
+        name: surnameValue,
         role: "ACADEMIC_STAFF",
         nic: nic.trim(), 
-        phone: validatedPhone,
-        emergency_contact_name: staffFullName.trim(),
-        emergency_contact_number: validatedPhone,
+        phone: phoneValue,
+        emergency_contact_name: surnameValue,
+        emergency_contact_number: phoneValue,
         academic_staff_details: { 
           university_staff_id: universityStaffId.trim(),
           department: staffDepartment,
@@ -155,8 +195,13 @@ export default function CompleteProfileScreen() {
     setIsLoading(true);
     try {
       const endpoint = `${API_URL}/api/users/complete-profile`; 
-      const token = await AsyncStorage.getItem('userToken'); // Retrieving user token
-      
+      const token =
+        (await SecureStore.getItemAsync('userToken')) ||
+        (await AsyncStorage.getItem('userToken'));
+      const activeUserId =
+        (await SecureStore.getItemAsync('userId')) ||
+        (await AsyncStorage.getItem('userId'));
+
       console.log("🚀 Sending Patch Request to:", endpoint);
       console.log("📦 Payload:", JSON.stringify(payload, null, 2));
 
@@ -165,7 +210,6 @@ export default function CompleteProfileScreen() {
         headers: { 
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          // Send Authorization in Headers if Token exists
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}) 
         },
         body: JSON.stringify(payload),
@@ -173,7 +217,7 @@ export default function CompleteProfileScreen() {
 
       console.log("📥 Response Status:", response.status);
       const responseText = await response.text();
-      let responseData;
+      let responseData: any;
       
       try {
         responseData = JSON.parse(responseText);
@@ -185,8 +229,77 @@ export default function CompleteProfileScreen() {
       }
 
       if (response.ok) {
+        const resolvedUserId = responseData?.data?.user?.id || activeUserId;
+
+        // 1. Update AsyncStorage flags and cache
+        if (resolvedUserId) {
+          const existingOverrides = await AsyncStorage.getItem(`patient_profile_overrides_${resolvedUserId}`);
+          const parsedOverrides = existingOverrides ? JSON.parse(existingOverrides) : {};
+          await AsyncStorage.setItem(
+            `patient_profile_overrides_${resolvedUserId}`,
+            JSON.stringify({
+              ...parsedOverrides,
+              name: surnameValue,
+              surname: surnameValue,
+              phone: phoneValue,
+            })
+          );
+
+          const existingProfile = await AsyncStorage.getItem(`patientProfile_${resolvedUserId}`);
+          const parsedProfile = existingProfile ? JSON.parse(existingProfile) : {};
+          await AsyncStorage.setItem(
+            `patientProfile_${resolvedUserId}`,
+            JSON.stringify({
+              ...parsedProfile,
+              name: surnameValue,
+              surname: surnameValue,
+              phone: phoneValue,
+              is_profile_complete: true,
+            })
+          );
+
+          await AsyncStorage.setItem(`profileCompleted_${resolvedUserId}`, 'true');
+        }
+
+        const rawUserData = await AsyncStorage.getItem('userData');
+        const parsedUserData = rawUserData ? JSON.parse(rawUserData) : {};
+        await AsyncStorage.setItem(
+          'userData',
+          JSON.stringify({
+            ...parsedUserData,
+            name: surnameValue,
+            surname: surnameValue,
+            phone: phoneValue,
+            is_profile_complete: true,
+            profileCompleted: true,
+          })
+        );
+        await AsyncStorage.setItem('is_profile_complete', 'true');
+
+        // 2. Also patch settings endpoint with phone as fallback
+        if (phoneValue && token) {
+          try {
+            await fetch(`${API_URL}/api/users/settings`, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ phone: phoneValue }),
+            });
+          } catch (settingsErr) {
+            console.warn('Settings phone patch fallback error:', settingsErr);
+          }
+        }
+
+        // 3. Invalidate React Query caches so Dashboard & Profile update immediately
+        await queryClient.invalidateQueries({ queryKey: ['profile'] });
+        if (resolvedUserId) {
+          await queryClient.invalidateQueries({ queryKey: ['profile', resolvedUserId] });
+        }
+
         Alert.alert('Success', 'Profile completed successfully!', [
-          { text: 'OK', onPress: () => router.push('/(tabs)') }
+          { text: 'OK', onPress: () => router.replace('/(tabs)') }
         ]);
       } else {
         console.log("❌ Backend Validation Error Details:", responseData);
@@ -236,8 +349,8 @@ export default function CompleteProfileScreen() {
                 <View style={styles.conditionalSection}>
                   <Text style={styles.sectionHeading}>Student Details</Text>
 
-                  <Text style={styles.inputLabel}>Full Name *</Text>
-                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={studentFullName} onChangeText={setStudentFullName} placeholder="Enter your full name" />
+                  <Text style={styles.inputLabel}>Surname *</Text>
+                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={studentFullName} onChangeText={setStudentFullName} placeholder="Enter your surname" />
 
                   <Text style={styles.inputLabel}>Phone Number *</Text>
                   <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={studentPhone} onChangeText={setStudentPhone} keyboardType="phone-pad" placeholder="Enter phone number" />
@@ -291,8 +404,8 @@ export default function CompleteProfileScreen() {
                 <View style={styles.conditionalSection}>
                   <Text style={styles.sectionHeading}>Academic Staff Details</Text>
 
-                  <Text style={styles.inputLabel}>Full Name *</Text>
-                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={staffFullName} onChangeText={setStaffFullName} placeholder="Enter your full name" />
+                  <Text style={styles.inputLabel}>Surname *</Text>
+                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={staffFullName} onChangeText={setStaffFullName} placeholder="Enter your surname" />
 
                   <Text style={styles.inputLabel}>Phone Number *</Text>
                   <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={staffPhone} onChangeText={setStaffPhone} keyboardType="phone-pad" placeholder="Enter phone number" />
