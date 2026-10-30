@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Search, User, Calendar, Activity, Weight, FileText, PlusCircle, Save, Edit3, Loader2, CheckCircle2, AlertTriangle, ShieldAlert, Plus, Trash2, Clock, History, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Search, User, Calendar, Activity, Weight, FileText, FileHeart, PlusCircle, Save, Edit3, Loader2, CheckCircle2, AlertTriangle, ShieldAlert, Plus, Trash2, Clock, History, AlertCircle, ExternalLink, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import api from '@/lib/axios';
 import CertificateDrawer from './components/CertificateDrawer';
 import UserProfilePanel from '@/components/UserProfilePanel';
@@ -92,6 +92,7 @@ interface MedicalRecordItem {
   follow_up_date: string | null;
   notes: string | null;
   doctor_name: string;
+  reports: MedicalReport[];
   prescription?: {
     items: {
       id: string;
@@ -104,6 +105,26 @@ interface MedicalRecordItem {
       source: 'INTERNAL' | 'EXTERNAL';
     }[]
   } | null;
+}
+
+interface MedicalReport {
+  id: string;
+  record_id: string;
+  file_url: string;
+  type: string;
+  upload_time: string;
+}
+
+interface ClinicalReportNotification extends MedicalReport {
+  patient_id: string;
+  patient_name: string;
+  visit_date: string;
+  diagnosis: string;
+}
+
+interface PatientTimelineReport extends MedicalReport {
+  visit_date: string;
+  diagnosis: string;
 }
 
 type DoctorHistoryPeriod = 'today' | 'week' | 'month' | 'all';
@@ -169,6 +190,9 @@ export default function DoctorDashboard() {
     DEFAULT_AVAILABILITY_SCHEDULE
   );
   const [isDoctorHistoryOpen, setIsDoctorHistoryOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+  const [activeWorkspace, setActiveWorkspace] = useState<'schedule' | 'history' | 'certificates'>('schedule');
+  const [pendingCertificateCount, setPendingCertificateCount] = useState(0);
   const [doctorHistory, setDoctorHistory] = useState<DoctorHistoryRecord[]>([]);
   const [doctorHistoryPeriod, setDoctorHistoryPeriod] = useState<DoctorHistoryPeriod>('all');
   const [doctorHistoryPage, setDoctorHistoryPage] = useState(1);
@@ -189,6 +213,10 @@ export default function DoctorDashboard() {
   const [loadingPatient, setLoadingPatient] = useState(false);
   const [medicalHistory, setMedicalHistory] = useState<MedicalRecordItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [reportNotifications, setReportNotifications] = useState<ClinicalReportNotification[]>([]);
+  const [showReportNotifications, setShowReportNotifications] = useState(false);
+  const [loadingReportNotifications, setLoadingReportNotifications] = useState(false);
+  const [readReportIds, setReadReportIds] = useState<string[]>([]);
 
   // Form Fields
   const [symptoms, setSymptoms] = useState('');
@@ -200,6 +228,9 @@ export default function DoctorDashboard() {
 
   // Prescription Items
   const [prescriptionItems, setPrescriptionItems] = useState<PrescriptionFormItem[]>([]);
+  const [availableMedicines, setAvailableMedicines] = useState<Medicine[]>([]);
+  const [showMedicinePicker, setShowMedicinePicker] = useState(false);
+  const [loadingAvailableMedicines, setLoadingAvailableMedicines] = useState(false);
 
   // Feedback states
   const [submitting, setSubmitting] = useState(false);
@@ -211,6 +242,27 @@ export default function DoctorDashboard() {
       setToast(null);
     }, 5000);
   }, []);
+
+  const unreadReportCount = reportNotifications.filter(
+    (report) => !readReportIds.includes(report.id)
+  ).length;
+
+  const conflictingAppointmentIds = useMemo(() => {
+    const appointmentsByTime = new Map<number, string[]>();
+
+    appointments.forEach((appointment) => {
+      const timestamp = new Date(appointment.scheduled_time).getTime();
+      const appointmentIds = appointmentsByTime.get(timestamp) || [];
+      appointmentIds.push(appointment.id);
+      appointmentsByTime.set(timestamp, appointmentIds);
+    });
+
+    return new Set(
+      Array.from(appointmentsByTime.values())
+        .filter((appointmentIds) => appointmentIds.length > 1)
+        .flat()
+    );
+  }, [appointments]);
 
   const fetchAppointments = async () => {
     setLoadingAppointments(true);
@@ -303,12 +355,71 @@ export default function DoctorDashboard() {
     }
   }, [showToast]);
 
+  const fetchReportNotifications = useCallback(async () => {
+    setLoadingReportNotifications(true);
+    try {
+      const response = await api.get('/clinical/reports');
+      setReportNotifications(response.data?.data?.reports || []);
+    } catch (err: any) {
+      console.error('Error fetching clinical reports:', err);
+      showToast(
+        'error',
+        err.response?.data?.message || 'Failed to load uploaded medical reports.'
+      );
+    } finally {
+      setLoadingReportNotifications(false);
+    }
+  }, [showToast]);
+
+  const handleOpenReport = async (report: MedicalReport) => {
+    try {
+      const response = await api.get('/documents/sign-url', {
+        params: { file_path: report.file_url },
+      });
+      const signedUrl = response.data?.data?.signed_url;
+
+      if (!signedUrl) {
+        throw new Error('The report did not include a secure access URL.');
+      }
+
+      window.open(signedUrl, '_blank', 'noopener,noreferrer');
+    } catch (err: any) {
+      console.error('Error opening medical report:', err);
+      showToast(
+        'error',
+        err.response?.data?.message || 'Failed to open the medical report.'
+      );
+    }
+  };
+
+  const handleSelectReportNotification = (report: ClinicalReportNotification) => {
+    const updatedReadReportIds = Array.from(new Set([...readReportIds, report.id]));
+    setReadReportIds(updatedReadReportIds);
+    localStorage.setItem('doctor_read_report_ids', JSON.stringify(updatedReadReportIds));
+    setShowReportNotifications(false);
+    handleSelectPatient(report.patient_id);
+  };
+
+  useEffect(() => {
+    try {
+      const savedReadReportIds = JSON.parse(
+        localStorage.getItem('doctor_read_report_ids') || '[]'
+      );
+      if (Array.isArray(savedReadReportIds)) {
+        setReadReportIds(savedReadReportIds.filter((id): id is string => typeof id === 'string'));
+      }
+    } catch (err) {
+      console.error('Error loading report read state:', err);
+    }
+  }, []);
+
   // Fetch dashboard data on mount.
   useEffect(() => {
     fetchAppointments();
     fetchAvailability();
     fetchDoctorHistory('all', 1);
-  }, [fetchAvailability, fetchDoctorHistory]);
+    fetchReportNotifications();
+  }, [fetchAvailability, fetchDoctorHistory, fetchReportNotifications]);
 
   const handleAvailabilityChange = (
     dayOfWeek: number,
@@ -490,7 +601,9 @@ export default function DoctorDashboard() {
     try {
       const response = await api.get(`/medicines/catalog?search=${encodeURIComponent(query)}`);
       if (response.data && response.data.data) {
-        updated[index].suggestions = response.data.data.catalog || [];
+        updated[index].suggestions = (response.data.data.catalog || []).filter(
+          (medicine: Medicine) => medicine.total_available_stock > 0
+        );
         updated[index].show_dropdown = updated[index].suggestions.length > 0;
         setPrescriptionItems(updated);
       }
@@ -560,6 +673,46 @@ export default function DoctorDashboard() {
         show_dropdown: false,
       }
     ]);
+  };
+
+  const handleOpenMedicinePicker = async () => {
+    setShowMedicinePicker(true);
+    setLoadingAvailableMedicines(true);
+
+    try {
+      const response = await api.get('/medicines/catalog?search=');
+      setAvailableMedicines(
+        (response.data?.data?.catalog || []).filter(
+          (medicine: Medicine) => medicine.total_available_stock > 0
+        )
+      );
+    } catch (err) {
+      console.error('Medicine catalog loading error:', err);
+      showToast('error', 'Failed to load available medicines.');
+    } finally {
+      setLoadingAvailableMedicines(false);
+    }
+  };
+
+  const handleSelectAvailableMedicine = (medicine: Medicine) => {
+    setPrescriptionItems([
+      ...prescriptionItems,
+      {
+        key: String(Date.now()) + Math.random(),
+        medicine_id: medicine.id,
+        search_query: medicine.name,
+        external_medicine_name: null,
+        dosage: '',
+        quantity: 1,
+        instructions: '',
+        source: 'INTERNAL',
+        available_stock: medicine.total_available_stock,
+        unit: medicine.unit,
+        suggestions: [],
+        show_dropdown: false,
+      },
+    ]);
+    setShowMedicinePicker(false);
   };
 
   const handleRemovePrescriptionItem = (index: number) => {
@@ -656,10 +809,23 @@ export default function DoctorDashboard() {
     return patient.nic;
   };
 
+  const selectedPatientReports: PatientTimelineReport[] = medicalHistory
+    .flatMap((record) =>
+      record.reports.map((report) => ({
+        ...report,
+        visit_date: record.visit_date_time,
+        diagnosis: record.diagnosis,
+      }))
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.upload_time).getTime() - new Date(a.upload_time).getTime()
+    );
+
   return (
-    <div className="min-h-screen bg-[#07131a] text-slate-100 flex flex-col font-sans">
+    <div className={`doctor-dashboard min-h-screen bg-[#07131a] text-slate-100 flex flex-col font-sans ${isSidebarCollapsed ? 'sidebar-collapsed' : 'sidebar-expanded'}`}>
       {/* Header Bar */}
-      <header className="bg-[#0d1726]/85 border-b border-slate-700/80 px-6 py-4 flex items-center justify-between shrink-0 backdrop-blur-sm">
+      <header className="sticky top-0 z-50 bg-[#0d1726]/85 border-b border-slate-700/80 px-6 py-4 flex items-center justify-between shrink-0 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-emerald-500 rounded-lg text-white">
             <Activity className="w-6 h-6" />
@@ -671,23 +837,82 @@ export default function DoctorDashboard() {
         </div>
 
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => {
-              setIsDoctorHistoryOpen(true);
-              fetchDoctorHistory(doctorHistoryPeriod, doctorHistoryPage);
-            }}
-            className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-350 hover:text-white rounded-lg text-xs font-bold border border-slate-750 transition-all flex items-center gap-1.5"
-          >
-            <History className="w-4 h-4" />
-            <span>My Treatment History</span>
-          </button>
-          <button
-            onClick={() => setIsCertDrawerOpen(true)}
-            className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-350 hover:text-white rounded-lg text-xs font-bold border border-slate-750 transition-all flex items-center gap-1.5"
-          >
-            <FileText className="w-4 h-4" />
-            <span>Certificates Panel</span>
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setShowReportNotifications((current) => !current);
+                if (!showReportNotifications) {
+                  fetchReportNotifications();
+                }
+              }}
+              className={`relative rounded-lg border px-3 py-1.5 text-xs font-bold transition-all ${
+                unreadReportCount > 0
+                  ? 'border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
+                  : 'border-slate-750 bg-slate-800 text-slate-350 hover:bg-slate-700 hover:text-white'
+              }`}
+              aria-label="Uploaded medical reports"
+            >
+              <FileHeart className="h-4 w-4" />
+              {unreadReportCount > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-black text-slate-950">
+                  {unreadReportCount > 9 ? '9+' : unreadReportCount}
+                </span>
+              )}
+            </button>
+
+            {showReportNotifications && (
+              <div className="absolute right-0 top-full z-50 mt-2 w-[min(24rem,calc(100vw-2rem))] max-h-[calc(100vh-6rem)] overflow-hidden rounded-xl border border-slate-700 bg-[#111827] shadow-2xl">
+                <div className="border-b border-slate-800 px-4 py-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-white">
+                    Uploaded Medical Reports
+                  </h3>
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    Select a patient to review their clinical timeline.
+                  </p>
+                </div>
+                <div className="max-h-[calc(100vh-12rem)] overflow-y-auto p-2">
+                  {loadingReportNotifications ? (
+                    <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500">
+                      <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+                      Loading reports...
+                    </div>
+                  ) : reportNotifications.length > 0 ? (
+                    reportNotifications.map((report) => {
+                      const isRead = readReportIds.includes(report.id);
+                      return (
+                      <button
+                        key={report.id}
+                        type="button"
+                        onClick={() => handleSelectReportNotification(report)}
+                        className={`mb-1 flex w-full items-start justify-between rounded-lg p-3 text-left transition-colors hover:bg-slate-800 ${
+                          isRead ? 'opacity-60' : 'bg-amber-500/5'
+                        }`}
+                      >
+                        <span className="min-w-0">
+                          <span className="flex items-center gap-2 truncate text-xs font-bold text-white">
+                            {!isRead && <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />}
+                            {report.patient_name}
+                          </span>
+                          <span className="mt-1 block text-[10px] text-slate-400">
+                            {report.type.replace(/[_-]/g, ' ')} · {new Date(report.upload_time).toLocaleDateString()}
+                          </span>
+                          <span className="mt-1 block truncate text-[10px] text-slate-500">
+                            {report.diagnosis}
+                          </span>
+                        </span>
+                        <ExternalLink className="ml-3 h-3.5 w-3.5 shrink-0 text-amber-400" />
+                      </button>
+                      );
+                    })
+                  ) : (
+                    <p className="py-8 text-center text-xs text-slate-500">No uploaded reports.</p>
+                  )}
+                </div>
+
+              </div>
+            )}
+          </div>
           <UserProfilePanel />
         </div>
       </header>
@@ -709,12 +934,12 @@ export default function DoctorDashboard() {
         </div>
       )}
 
-      {isDoctorHistoryOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-6 backdrop-blur-sm">
-          <section className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-[#0d1726] shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
+      {isDoctorHistoryOpen && activeWorkspace === 'history' && (
+        <div className="doctor-history-workspace doctor-tab-workspace flex min-h-0 flex-1 items-stretch overflow-hidden bg-[#08131c] p-6">
+          <section className="doctor-tab-panel doctor-tab-content mx-auto flex h-full w-full max-w-5xl flex-col gap-5 overflow-hidden">
+            <div className="doctor-tab-header flex items-center justify-between">
               <div>
-                <h2 className="flex items-center gap-2 text-base font-extrabold text-white">
+                <h2 className="flex items-center gap-2 text-xl font-extrabold text-white">
                   <History className="h-5 w-5 text-emerald-400" />
                   My Treatment History
                 </h2>
@@ -724,14 +949,17 @@ export default function DoctorDashboard() {
               </div>
               <button
                 type="button"
-                onClick={() => setIsDoctorHistoryOpen(false)}
-                className="rounded-lg px-3 py-1.5 text-xs font-bold text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+                onClick={() => {
+                  setIsDoctorHistoryOpen(false);
+                  setActiveWorkspace('schedule');
+                }}
+                className="hidden"
               >
                 Close
               </button>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-6 py-3">
+            <div className="doctor-tab-toolbar flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-[#111827] p-5 shadow-xl">
               <div className="flex gap-1 rounded-lg bg-[#0b0f19] p-1">
                 {(['today', 'week', 'month', 'all'] as DoctorHistoryPeriod[]).map((period) => (
                   <button
@@ -762,7 +990,7 @@ export default function DoctorDashboard() {
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-6">
+            <div className="doctor-tab-body min-h-0 flex-1 overflow-y-auto">
               {loadingDoctorHistory ? (
                 <div className="flex min-h-56 flex-col items-center justify-center gap-3 text-slate-500">
                   <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
@@ -778,7 +1006,7 @@ export default function DoctorDashboard() {
                   {doctorHistory.map((record) => (
                     <article
                       key={record.id}
-                      className="rounded-xl border border-slate-800 bg-[#111827] p-4"
+                      className="doctor-history-card rounded-2xl border border-slate-800 bg-[#111827] p-5 shadow-xl"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-800 pb-3">
                         <div>
@@ -793,8 +1021,8 @@ export default function DoctorDashboard() {
                         </time>
                       </div>
 
-                      <div className="mt-3 grid gap-3 md:grid-cols-2">
-                        <div>
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        <div className="doctor-history-tile rounded-xl border border-slate-800 bg-[#151b2c] p-3">
                           <h4 className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
                             Symptoms
                           </h4>
@@ -802,7 +1030,7 @@ export default function DoctorDashboard() {
                             {record.symptoms}
                           </p>
                         </div>
-                        <div>
+                        <div className="doctor-history-tile rounded-xl border border-slate-800 bg-[#151b2c] p-3">
                           <h4 className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
                             Diagnosis
                           </h4>
@@ -813,7 +1041,7 @@ export default function DoctorDashboard() {
                       </div>
 
                       {record.treatment_plan && (
-                        <div className="mt-3">
+                        <div className="doctor-history-tile mt-3 rounded-xl border border-slate-800 bg-[#151b2c] p-3">
                           <h4 className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
                             Treatment Plan
                           </h4>
@@ -824,7 +1052,7 @@ export default function DoctorDashboard() {
                       )}
 
                       {record.prescription?.items.length ? (
-                        <div className="mt-3 border-t border-slate-800 pt-3">
+                        <div className="doctor-history-prescription mt-3 border-t border-slate-800 pt-3">
                           <h4 className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
                             Prescription
                           </h4>
@@ -832,7 +1060,7 @@ export default function DoctorDashboard() {
                             {record.prescription.items.map((item) => (
                               <span
                                 key={item.id}
-                                className="rounded-md border border-slate-700 bg-[#0b0f19] px-2 py-1 text-[10px] text-slate-300"
+                                className="rounded-lg border border-slate-700 bg-[#0b0f19] px-2.5 py-1.5 text-[10px] text-slate-300"
                               >
                                 {item.medicine_name || item.external_medicine_name || 'Unnamed medicine'} ·{' '}
                                 {item.dosage} · Qty {item.quantity}
@@ -847,7 +1075,7 @@ export default function DoctorDashboard() {
               )}
             </div>
 
-            <div className="flex items-center justify-between border-t border-slate-800 px-6 py-3">
+            <div className="flex items-center justify-between rounded-2xl border border-slate-800 bg-[#111827] px-5 py-3 shadow-xl">
               <span className="text-[10px] text-slate-500">
                 Page {doctorHistoryPage} of {Math.max(doctorHistoryTotalPages, 1)}
               </span>
@@ -881,7 +1109,27 @@ export default function DoctorDashboard() {
       {/* Main Workspace Layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar: Walk-in lookup + Scheduled Appointments */}
-        <aside className="w-80 border-r border-slate-700/80 bg-[#0b1520]/80 p-5 flex flex-col gap-6 shrink-0 overflow-y-auto backdrop-blur-sm">
+        <aside
+          className={`${
+            isSidebarCollapsed ? 'w-20' : 'w-64'
+          } doctor-workspace-sidebar border-r border-slate-700/80 bg-[#0d1726]/85 hidden md:flex flex-col p-4 shrink-0 overflow-y-auto backdrop-blur-sm transition-[width] duration-300`}
+        >
+          <div className={`mb-8 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-end'} gap-3`}>
+            {!isSidebarCollapsed && (
+              <button
+                type="button"
+                onClick={() => setIsSidebarCollapsed(true)}
+                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+                aria-label="Collapse doctor sidebar"
+                title="Collapse sidebar"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {false && (
+            <>
           {/* Walk-in Lookup */}
           <div>
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Walk-in Patient Lookup</h3>
@@ -914,10 +1162,36 @@ export default function DoctorDashboard() {
             </div>
           </div>
 
+          <div className="flex flex-col gap-2 border-b border-slate-800 pb-5">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveWorkspace('history');
+                setIsDoctorHistoryOpen(true);
+                fetchDoctorHistory(doctorHistoryPeriod, doctorHistoryPage);
+              }}
+              className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-bold text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
+            >
+              <History className="h-4 w-4" />
+              <span>My Treatment History</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveWorkspace('certificates');
+                setIsCertDrawerOpen(true);
+              }}
+              className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-bold text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
+            >
+              <FileText className="h-4 w-4" />
+              <span>Certificate Requests</span>
+            </button>
+          </div>
+
           {/* Weekly Availability */}
           <form
             onSubmit={handleAvailabilitySubmit}
-            className="order-2 border-y border-slate-800 py-5 space-y-3"
+            className="hidden"
           >
             <div className="flex items-center justify-between">
               <div>
@@ -1018,6 +1292,18 @@ export default function DoctorDashboard() {
               </span>
             </div>
 
+            {conflictingAppointmentIds.size > 0 && (
+              <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-amber-200">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                <div className="text-[11px] leading-4">
+                  <p className="font-bold text-amber-300">Overlapping appointments detected</p>
+                  <p className="mt-1 text-amber-200/80">
+                    {conflictingAppointmentIds.size} appointments share an exact time slot. Review the highlighted entries before starting a consultation.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {loadingAppointments ? (
               <div className="flex flex-col items-center justify-center py-8 gap-2 text-slate-500">
                 <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
@@ -1029,6 +1315,7 @@ export default function DoctorDashboard() {
                   const patientUser = appt.patient.user;
                   const displayId = patientUser.student?.university_reg_number || patientUser.academicStaff?.university_staff_id || patientUser.nic;
                   const time = new Date(appt.scheduled_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  const hasTimeConflict = conflictingAppointmentIds.has(appt.id);
                   
                   return (
                     <button
@@ -1037,14 +1324,17 @@ export default function DoctorDashboard() {
                       className={`w-full text-left p-3.5 rounded-xl border transition-all flex flex-col gap-2 relative overflow-hidden ${
                         selectedAppointmentId === appt.id
                           ? 'bg-slate-800/80 border-emerald-500/40 shadow-md shadow-emerald-950/10'
-                          : 'bg-[#151b2c] hover:bg-slate-800/40 border-slate-800'
+                          : hasTimeConflict
+                            ? 'bg-amber-500/10 hover:bg-amber-500/15 border-amber-500/40'
+                            : 'bg-[#151b2c] hover:bg-slate-800/40 border-slate-800'
                       }`}
                     >
                       <div className="flex items-center justify-between w-full">
                         <span className="font-bold text-xs text-white truncate max-w-[150px]">{patientUser.name}</span>
-                        <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold">
+                        <div className={`flex items-center gap-1 text-[10px] font-semibold ${hasTimeConflict ? 'text-amber-300' : 'text-emerald-400'}`}>
                           <Clock className="w-3 h-3" />
                           <span>{time}</span>
+                          {hasTimeConflict && <AlertTriangle className="ml-1 h-3 w-3" />}
                         </div>
                       </div>
                       
@@ -1063,19 +1353,80 @@ export default function DoctorDashboard() {
               </div>
             )}
           </div>
+            </>
+          )}
+          {true && (
+            <nav className="flex flex-1 flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveWorkspace('schedule')}
+                title={isSidebarCollapsed ? 'Schedule' : undefined}
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all ${isSidebarCollapsed ? 'justify-center px-2' : ''} ${activeWorkspace === 'schedule' ? 'bg-slate-800 text-emerald-400' : 'text-slate-400 hover:bg-slate-900/50 hover:text-slate-200'}`}
+                aria-label="Schedule"
+              >
+                <Calendar className="h-5 w-5" />
+                {!isSidebarCollapsed && <span className="text-xs font-semibold">Schedule</span>}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveWorkspace('history');
+                  setIsDoctorHistoryOpen(true);
+                  fetchDoctorHistory(doctorHistoryPeriod, doctorHistoryPage);
+                }}
+                title={isSidebarCollapsed ? 'Treatment history' : undefined}
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all ${isSidebarCollapsed ? 'justify-center px-2' : ''} ${activeWorkspace === 'history' ? 'bg-slate-800 text-emerald-400' : 'text-slate-400 hover:bg-slate-900/50 hover:text-slate-200'}`}
+                aria-label="Treatment history"
+              >
+                <History className="h-5 w-5" />
+                {!isSidebarCollapsed && <span className="text-xs font-semibold">Treatment History</span>}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveWorkspace('certificates');
+                  setIsCertDrawerOpen(true);
+                }}
+                title={isSidebarCollapsed ? 'Certificate Requests' : undefined}
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all ${isSidebarCollapsed ? 'justify-center px-2' : ''} ${activeWorkspace === 'certificates' ? 'bg-slate-800 text-emerald-400' : 'text-slate-400 hover:bg-slate-900/50 hover:text-slate-200'}`}
+                aria-label="Certificates"
+              >
+                <span className="relative">
+                  <FileText className="h-5 w-5" />
+                  {pendingCertificateCount > 0 && (
+                    <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-black text-slate-950">
+                      {pendingCertificateCount > 9 ? '9+' : pendingCertificateCount}
+                    </span>
+                  )}
+                </span>
+                {!isSidebarCollapsed && <span className="text-xs font-semibold">Certificate Requests</span>}
+              </button>
+            </nav>
+          )}
+          {isSidebarCollapsed && (
+            <button
+              type="button"
+              onClick={() => setIsSidebarCollapsed(false)}
+              className="mt-4 flex w-full items-center justify-center rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+              aria-label="Expand doctor sidebar"
+              title="Expand sidebar"
+            >
+              <PanelLeftOpen className="h-4 w-4" />
+            </button>
+          )}
         </aside>
 
         {/* Main Work Area: History timeline (left) + Clinical Interaction form (right) */}
-        <main className="flex-1 bg-[#08131c] p-6 overflow-hidden flex gap-6">
+        <main className={`min-w-0 flex-1 bg-[#08131c] p-6 overflow-hidden flex gap-6 ${activeWorkspace !== 'schedule' ? 'hidden' : ''}`}>
           {loadingPatient ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-400">
               <Loader2 className="w-10 h-10 animate-spin text-emerald-500" />
               <span className="text-sm">Fetching patient clinical history...</span>
             </div>
           ) : selectedPatient ? (
-            <div className="flex-1 flex gap-6 overflow-hidden">
+            <div className="min-w-0 flex-1 flex gap-6 overflow-hidden">
               {/* Left Column: Demographics + Historical Timeline */}
-              <div className="w-1/2 flex flex-col gap-4 overflow-hidden h-full">
+              <div className="min-w-0 w-1/2 flex flex-col gap-4 overflow-hidden h-full">
                 {/* Patient Profile Card */}
                 <div className="bg-[#111827] border border-slate-800 rounded-2xl p-5 shadow-xl shrink-0 relative overflow-hidden">
                   <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-3">Demographics & Clinical baseline</h3>
@@ -1098,6 +1449,43 @@ export default function DoctorDashboard() {
                         <span className="text-rose-200">{selectedPatient.patientProfile.allergies}</span>
                       </div>
                     </div>
+                  )}
+                </div>
+
+                <div className="shrink-0 rounded-2xl border border-slate-800 bg-[#111827] p-4 shadow-xl">
+                  <div className="mb-3 flex items-center gap-2 border-b border-slate-800 pb-2">
+                    <FileHeart className="h-4 w-4 text-amber-400" />
+                    <h3 className="text-sm font-bold text-slate-200">Medical Reports Timeline</h3>
+                  </div>
+
+                  {selectedPatientReports.length > 0 ? (
+                    <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
+                      {selectedPatientReports.map((report) => (
+                        <button
+                          key={report.id}
+                          type="button"
+                          onClick={() => handleOpenReport(report)}
+                          className="flex w-full items-center justify-between rounded-xl border border-slate-800 bg-[#151b2c]/80 p-2.5 text-left transition-colors hover:border-amber-500/30 hover:bg-slate-800"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-xs font-semibold text-slate-200">
+                              {report.type.replace(/[_-]/g, ' ')}
+                            </span>
+                            <span className="mt-1 block text-[10px] text-slate-500">
+                              Uploaded {new Date(report.upload_time).toLocaleDateString()} · Visit {new Date(report.visit_date).toLocaleDateString()}
+                            </span>
+                            <span className="mt-1 block truncate text-[10px] text-slate-400">
+                              {report.diagnosis}
+                            </span>
+                          </span>
+                          <ExternalLink className="ml-3 h-3.5 w-3.5 shrink-0 text-amber-400" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="py-2 text-center text-[10px] text-slate-500">
+                      No medical reports uploaded for this patient.
+                    </p>
                   )}
                 </div>
 
@@ -1164,6 +1552,7 @@ export default function DoctorDashboard() {
                                   </div>
                                 </div>
                               )}
+
                             </div>
                           </div>
                         );
@@ -1179,7 +1568,7 @@ export default function DoctorDashboard() {
               </div>
 
               {/* Right Column: New interaction form */}
-              <div className="w-1/2 bg-[#111827] border border-slate-800 rounded-2xl p-5 md:p-6 shadow-xl overflow-y-auto h-full flex flex-col">
+              <div className="min-w-0 w-1/2 bg-[#111827] border border-slate-800 rounded-2xl p-5 md:p-6 shadow-xl overflow-y-auto h-full flex flex-col">
                 <div className="border-b border-slate-800 pb-3 mb-4 shrink-0">
                   <h3 className="text-sm font-extrabold text-slate-200">New Clinical Interaction Log</h3>
                   <p className="text-xs text-slate-500">Record symptoms, diagnosis, and issue prescriptions</p>
@@ -1232,13 +1621,75 @@ export default function DoctorDashboard() {
                         <h4 className="text-xs font-bold text-slate-350 uppercase tracking-wider">Prescribe Medication</h4>
                         <button
                           type="button"
-                          onClick={handleAddPrescriptionItem}
+                          onClick={() => {
+                            if (showMedicinePicker) {
+                              setShowMedicinePicker(false);
+                            } else {
+                              handleOpenMedicinePicker();
+                            }
+                          }}
                           className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/20 text-emerald-400 hover:text-emerald-350 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>Add Medicine</span>
+                          <span>{showMedicinePicker ? 'Hide Medicines' : 'Prescribe Medicine'}</span>
                         </button>
                       </div>
+
+                      {showMedicinePicker && (
+                        <div className="available-medicine-picker mb-3 rounded-xl border border-emerald-500/20 bg-[#0f1b28] p-3">
+                          <div className="mb-2 flex items-center justify-between">
+                            <div>
+                              <h5 className="text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                                Available Medicines
+                              </h5>
+                              <p className="mt-1 text-[9px] text-slate-500">
+                                Select a medicine with valid stock.
+                              </p>
+                            </div>
+                            {loadingAvailableMedicines && (
+                              <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
+                            )}
+                          </div>
+
+                          {!loadingAvailableMedicines && availableMedicines.length > 0 ? (
+                            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                              {availableMedicines.map((medicine) => (
+                                <button
+                                  key={medicine.id}
+                                  type="button"
+                                  onClick={() => handleSelectAvailableMedicine(medicine)}
+                                  className="available-medicine-option flex items-center justify-between rounded-lg border border-slate-800 bg-[#151b2c] px-2.5 py-2 text-left transition-colors hover:border-emerald-500/40 hover:bg-slate-800"
+                                >
+                                  <span className="min-w-0">
+                                    <span className="block truncate text-[10px] font-bold text-white">{medicine.name}</span>
+                                    <span className="mt-0.5 block text-[9px] text-slate-500">
+                                      {medicine.category} · {medicine.unit}
+                                    </span>
+                                  </span>
+                                  <span className="ml-2 shrink-0 text-[9px] font-bold text-emerald-400">
+                                    {medicine.total_available_stock} available
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : !loadingAvailableMedicines ? (
+                            <p className="py-3 text-center text-[10px] text-slate-500">
+                              No non-expired medicines are currently available.
+                            </p>
+                          ) : null}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleAddPrescriptionItem();
+                              setShowMedicinePicker(false);
+                            }}
+                            className="mt-2 text-[10px] font-bold text-amber-400 transition-colors hover:text-amber-300"
+                          >
+                            Enter external medicine manually
+                          </button>
+                        </div>
+                      )}
 
                       {prescriptionItems.length > 0 ? (
                         <div className="space-y-3.5">
@@ -1437,22 +1888,149 @@ export default function DoctorDashboard() {
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-500 gap-3 text-center max-w-sm mx-auto h-full">
-              <div className="p-4 bg-slate-800/40 border border-slate-800 text-emerald-400 rounded-2xl shrink-0">
-                <Clock className="w-8 h-8" />
+            <div className="doctor-schedule-content mx-auto flex w-full max-w-5xl flex-col gap-5 overflow-y-auto">
+              <div>
+                <h2 className="text-xl font-extrabold text-white">Doctor Schedule</h2>
+                <p className="mt-1 text-xs text-slate-500">Start a walk-in consultation or select an appointment for today.</p>
               </div>
-              <h2 className="text-base font-bold text-white mt-2">No Active Case Loaded</h2>
-              <p className="text-xs leading-relaxed">
-                Select an appointment from the "Scheduled Today" list on the left, or query a patient via "Walk-in Patient Lookup" to start recording clinical entries.
-              </p>
+
+              <form
+                onSubmit={handleAvailabilitySubmit}
+                className="doctor-schedule-panel order-3 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4"
+              >
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div>
+                    <h3 className="flex items-center gap-2 text-sm font-bold text-slate-200">
+                      <Calendar className="h-4 w-4 text-emerald-400" />
+                      Weekly Availability
+                    </h3>
+                    <p className="mt-1 text-[10px] text-slate-500">Set the hours patients can book.</p>
+                  </div>
+                  {loadingAvailability && <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />}
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {availabilitySchedule.map((day) => (
+                    <div key={day.day_of_week} className="rounded-lg border border-slate-800 bg-[#0b0f19] p-3">
+                      <label className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-200">{day.label}</span>
+                        <input
+                          type="checkbox"
+                          checked={day.is_available}
+                          onChange={(e) => handleAvailabilityChange(day.day_of_week, 'is_available', e.target.checked)}
+                          className="h-4 w-4 accent-emerald-500"
+                        />
+                      </label>
+                      {day.is_available && (
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <label className="text-[10px] text-slate-500">
+                            Start
+                            <input
+                              type="time"
+                              value={day.start_time}
+                              onChange={(e) => handleAvailabilityChange(day.day_of_week, 'start_time', e.target.value)}
+                              className="mt-1 w-full rounded-md border border-slate-800 bg-[#151b2c] px-2 py-1.5 text-xs text-white"
+                            />
+                          </label>
+                          <label className="text-[10px] text-slate-500">
+                            End
+                            <input
+                              type="time"
+                              value={day.end_time}
+                              onChange={(e) => handleAvailabilityChange(day.day_of_week, 'end_time', e.target.value)}
+                              className="mt-1 w-full rounded-md border border-slate-800 bg-[#151b2c] px-2 py-1.5 text-xs text-white"
+                            />
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="submit"
+                  disabled={savingAvailability}
+                  className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-400 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingAvailability ? 'Saving Schedule...' : 'Save Availability'}
+                </button>
+              </form>
+
+              <section className="schedule-center-lookup order-1 rounded-2xl border border-slate-800 bg-[#111827] p-5 shadow-xl">
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-200">
+                  <Search className="h-4 w-4 text-emerald-400" />
+                  Walk-in Patient Lookup
+                </h3>
+                <div className="relative max-w-xl">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Lookup NIC, name, or university ID..."
+                    className="w-full rounded-xl border border-slate-800 bg-[#0b0f19] px-4 py-3 text-xs text-white outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                  />
+                  {showSearchDropdown && searchResults.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 max-h-48 overflow-y-auto rounded-xl border border-slate-800 bg-[#151c2c] p-1.5 shadow-2xl">
+                      {searchResults.map((patient) => (
+                        <button
+                          key={patient.id}
+                          type="button"
+                          onClick={() => handleSelectPatient(patient.id)}
+                          className="flex w-full flex-col gap-0.5 rounded-lg px-3 py-2 text-left text-xs transition hover:bg-slate-800"
+                        >
+                          <span className="font-semibold text-white">{patient.name}</span>
+                          <span className="text-[10px] text-slate-500">{getPatientDisplayId(patient)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="schedule-center-appointments order-2 rounded-2xl border border-slate-800 bg-[#111827] p-5 shadow-xl">
+                <div className="mb-4 flex items-center justify-between border-b border-slate-800 pb-3">
+                  <h3 className="flex items-center gap-2 text-sm font-bold text-slate-200">
+                    <Calendar className="h-4 w-4 text-emerald-400" />
+                    Scheduled Today
+                  </h3>
+                  <span className="rounded-full bg-[#0b0f19] px-2.5 py-1 text-[10px] font-bold text-slate-400">{appointments.length}</span>
+                </div>
+                {appointments.length > 0 ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {appointments.map((appt) => {
+                      const patientUser = appt.patient.user;
+                      const hasTimeConflict = conflictingAppointmentIds.has(appt.id);
+                      return (
+                        <button
+                          key={appt.id}
+                          type="button"
+                          onClick={() => handleSelectPatient(appt.patient_id, appt.id)}
+                          className={`rounded-xl border p-4 text-left transition-colors ${hasTimeConflict ? 'border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/15' : 'border-slate-800 bg-[#151b2c] hover:border-emerald-500/30 hover:bg-slate-800'}`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="truncate text-xs font-bold text-white">{patientUser.name}</span>
+                            <span className="shrink-0 text-[10px] font-bold text-emerald-400">{new Date(appt.scheduled_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                          <p className="mt-2 truncate text-[10px] text-slate-500">{appt.reason}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="py-10 text-center text-xs text-slate-500">No appointments scheduled today.</p>
+                )}
+              </section>
             </div>
           )}
         </main>
       </div>
       
       <CertificateDrawer
-        isOpen={isCertDrawerOpen}
-        onClose={() => setIsCertDrawerOpen(false)}
+        isOpen={isCertDrawerOpen && activeWorkspace === 'certificates'}
+        inline
+        onPendingCountChange={setPendingCertificateCount}
+        onClose={() => {
+          setIsCertDrawerOpen(false);
+          setActiveWorkspace('schedule');
+        }}
         onProcessed={() => {
           if (selectedPatientId) {
             handleSelectPatient(selectedPatientId, selectedAppointmentId || undefined);

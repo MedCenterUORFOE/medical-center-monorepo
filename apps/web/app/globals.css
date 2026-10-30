@@ -22,6 +22,10 @@ html {
   color-scheme: dark;
 }
 
+html.light-mode {
+  color-scheme: light;
+}
+
 body {
   color: var(--foreground);
   background:
@@ -31,6 +35,515 @@ body {
   font-family: var(--font-plus-jakarta-sans), Arial, Helvetica, sans-serif;
   letter-spacing: -0.02em;
   min-height: 100vh;
+}
+
+html.light-mode body {
+  color: #1e293b;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(20, 184, 166, 0.14), transparent 28%),
+    radial-gradient(circle at 100% 100%, rgba(14, 165, 233, 0.1), transparent 30%),
+    linear-gradient(135deg, #f8fafc 0%, #f0fdfa 45%, #f8fafc 100%);
+  background-attachment: fixed;
+}
+
+html.light-mode .theme-toggle {
+  border-color: #99f6e4;
+  background: rgba(255, 255, 255, 0.88);
+  color: #0f766e;
+  box-shadow: 0 10px 24px rgba(15, 118, 110, 0.18);
+}
+
+html.light-mode [class*="bg-[#08131c"],
+html.light-mode [class*="bg-[#07131a"],
+html.light-mode [class*="bg-slate-950"] {
+  background-color: #f1f5f9 !important;
+}
+
+html.light-mode [class*="bg-[#0b0f19"],
+html.light-mode [class*="bg-[#0d1726"],
+html.light-mode [class*="bg-[#111827"],
+html.light-mode [class*="bg-[#151b2c"],
+html.light-mode [class*="bg-[#151c2c"],
+html.light-mode [class*="bg-[#1a2336"],
+html.light-mode [class*="bg-slate-900"],
+html.light-mode [class*="bg-slate-800"],
+html.light-mode [class*="bg-slate-700"] {
+  background-color: rgba(255, 255, 255, 0.82) !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+html.light-mode [class*="hover:bg-slate-800"]:hover,
+html.light-mode [class*="hover:bg-slate-700"]:hover {
+  background-color: #ecfeff !important;
+}
+
+html.light-mode [class*="text-white"],
+html.light-mode [class*="text-slate-100"],
+html.light-mode [class*="text-slate-200"],
+html.light-mode [class*="text-slate-300"] {
+  color: #1e293b !important;
+}
+
+html.light-mode [class*="text-slate-400"],
+html.light-mode [class*="text-slate-500"],
+html.light-mode [class*="text-slate-600"] {
+  color: #64748b !important;
+}
+
+html.light-mode [class*="border-slate-"] {
+  border-color: #d7e2eb !important;
+}
+
+html.light-mode [class*="border-emerald-"] {
+  border-color: rgba(13, 148, 136, 0.32) !important;
+}
+
+html.light-mode [class*="shadow-"] {
+  --tw-shadow-color: rgba(15, 23, 42, 0.08) !important;
+}
+
+html.light-mode input,
+html.light-mode textarea,
+html.light-mode select {
+  color: #1e293b;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+}
+
+html.light-mode input:focus,
+html.light-mode textarea:focus,
+html.light-mode select:focus {
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.14);
+  outline: none;
+}
+
+html.light-mode input::placeholder,
+html.light-mode textarea::placeholder {
+  color: #94a3b8;
+}
+
+html.light-mode .auth-card {
+  border-color: rgba(148, 163, 184, 0.28);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(240, 253, 250, 0.9));
+  box-shadow: 0 30px 80px rgba(15, 118, 110, 0.14);
+}
+
+html.light-mode .login-success-alert {
+  border-color: #34d399 !important;
+  background: #ecfdf5 !important;
+  color: #065f46 !important;
+  box-shadow: 0 6px 18px rgba(5, 150, 105, 0.12);
+}
+
+html.light-mode .login-success-alert .login-success-icon {
+  color: #047857 !important;
+}
+
+html.light-mode .role-chip {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+}
+
+html.light-mode .role-chip-admin {
+  background: #eef2ff !important;
+  border-color: #c7d2fe !important;
+  color: #4338ca !important;
+}
+
+html.light-mode .role-chip-doctor {
+  background: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+  color: #047857 !important;
+}
+
+html.light-mode .role-chip-nurse {
+  background: #ecfeff !important;
+  border-color: #a5f3fc !important;
+  color: #0e7490 !important;
+}
+
+html.light-mode .role-chip-pharmacist {
+  background: #faf5ff !important;
+  border-color: #e9d5ff !important;
+  color: #7e22ce !important;
+}
+
+html.light-mode .role-chip-driver {
+  background: #fffbeb !important;
+  border-color: #fde68a !important;
+  color: #b45309 !important;
+}
+
+html.light-mode .credential-flow-notice {
+  background: linear-gradient(135deg, #ecfdf5, #f0fdfa) !important;
+  border-color: #6ee7b7 !important;
+  box-shadow: 0 8px 24px rgba(5, 150, 105, 0.1);
+}
+
+html.light-mode .credential-flow-icon {
+  color: #047857 !important;
+}
+
+html.light-mode .credential-flow-title {
+  color: #065f46 !important;
+}
+
+html.light-mode .credential-flow-description {
+  color: #365a54 !important;
+}
+
+html.light-mode .profile-trigger {
+  border-color: #cbd5e1 !important;
+  background: rgba(255, 255, 255, 0.86) !important;
+  color: #334155 !important;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+html.light-mode .profile-trigger:hover,
+html.light-mode .profile-close-button:hover {
+  background: #ecfeff !important;
+  border-color: #5eead4 !important;
+  color: #0f766e !important;
+}
+
+html.light-mode .profile-backdrop {
+  background: rgba(15, 23, 42, 0.24) !important;
+}
+
+html.light-mode .profile-drawer {
+  border-color: #cbd5e1 !important;
+  background: linear-gradient(180deg, #f8fafc 0%, #f0fdfa 100%) !important;
+  box-shadow: -20px 0 50px rgba(15, 23, 42, 0.14);
+}
+
+html.light-mode .profile-drawer-header {
+  border-color: #d7e2eb !important;
+}
+
+html.light-mode .profile-drawer-title,
+html.light-mode .profile-value {
+  color: #1e293b !important;
+}
+
+html.light-mode .profile-info-card,
+html.light-mode .profile-password-form {
+  border-color: #d7e2eb !important;
+  background: rgba(255, 255, 255, 0.78) !important;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+}
+
+html.light-mode .profile-password-toggle {
+  border-color: #99f6e4 !important;
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+}
+
+html.light-mode .profile-password-toggle:hover {
+  background: #d1fae5 !important;
+}
+
+html.light-mode .profile-password-input {
+  border-color: #cbd5e1 !important;
+  background: #ffffff !important;
+  color: #1e293b !important;
+}
+
+html.light-mode .profile-password-input:focus {
+  border-color: #14b8a6 !important;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.14);
+}
+
+html.light-mode .profile-signout {
+  border-color: #fecdd3 !important;
+  background: #fff1f2 !important;
+  color: #be123c !important;
+}
+
+html.light-mode .profile-signout:hover {
+  background: #ffe4e6 !important;
+}
+
+html.light-mode .doctor-workspace-sidebar {
+  border-color: #d7e2eb !important;
+  background: rgba(248, 250, 252, 0.78) !important;
+}
+
+html.light-mode .doctor-schedule-panel {
+  border-color: #cbd5e1 !important;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(240, 253, 250, 0.8)) !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+html.light-mode .available-medicine-picker {
+  border-color: #99f6e4 !important;
+  background: linear-gradient(145deg, #f0fdfa, #ffffff) !important;
+  box-shadow: 0 8px 20px rgba(15, 118, 110, 0.08);
+}
+
+html.light-mode .available-medicine-picker h5 {
+  color: #134e4a !important;
+}
+
+html.light-mode .available-medicine-option {
+  border-color: #d7e2eb !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+}
+
+html.light-mode .available-medicine-option:hover {
+  border-color: #5eead4 !important;
+  background: #ecfeff !important;
+}
+
+html.light-mode .available-medicine-option span:first-child span:first-child {
+  color: #1e293b !important;
+}
+
+html.light-mode .available-medicine-option span:first-child span:nth-child(2) {
+  color: #64748b !important;
+}
+
+html.light-mode .available-medicine-option > span:last-child {
+  color: #047857 !important;
+}
+
+html.light-mode .nurse-sidebar,
+html.light-mode .pharmacist-sidebar {
+  border-color: #d7e2eb !important;
+  background: rgba(248, 250, 252, 0.8) !important;
+}
+
+html.light-mode .dispense-detail-card,
+html.light-mode .dispense-items-card,
+html.light-mode .dispense-allocation-card {
+  border-color: #d7e2eb !important;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(240, 253, 250, 0.78)) !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+html.light-mode .dispense-lot-header {
+  border-color: #d7e2eb !important;
+}
+
+html.light-mode .dispense-lot-header h3 {
+  color: #0f172a !important;
+}
+
+html.light-mode .dispense-lot-header span {
+  color: #047857 !important;
+}
+
+html.light-mode .dispense-lot-summary {
+  background: #f0fdfa !important;
+  border-color: #99f6e4 !important;
+}
+
+html.light-mode .dispense-lot-summary .text-slate-500,
+html.light-mode .dispense-lot-summary .text-slate-400 {
+  color: #475569 !important;
+}
+
+html.light-mode .dispense-lot-summary .text-amber-400 {
+  color: #b45309 !important;
+}
+
+html.light-mode .dispense-lot-summary .text-emerald-400 {
+  color: #047857 !important;
+}
+
+html.light-mode .dispense-lot-split {
+  background: #f8fafc !important;
+  border-color: #d7e2eb !important;
+}
+
+html.light-mode .dispense-lot-split .text-slate-300,
+html.light-mode .dispense-lot-split .text-white {
+  color: #1e293b !important;
+}
+
+html.light-mode .dispense-lot-empty {
+  color: #64748b !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light-mode .dispense-lot-form {
+  background: #f8fafc !important;
+  border-color: #d7e2eb !important;
+}
+
+html.light-mode .dispense-lot-form .text-slate-500 {
+  color: #475569 !important;
+}
+
+html.light-mode .dispense-lot-input {
+  color: #0f172a !important;
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light-mode .dispense-medicine-item {
+  background: #ffffff !important;
+  border-color: #d7e2eb !important;
+}
+
+html.light-mode .dispense-medicine-item:hover {
+  border-color: #5eead4 !important;
+}
+
+html.light-mode .dispense-medicine-item-selected {
+  background: #ecfdf5 !important;
+  border-color: #34d399 !important;
+  box-shadow: 0 6px 16px rgba(5, 150, 105, 0.1);
+}
+
+html.light-mode .dispense-medicine-item h4 {
+  color: #1e293b !important;
+}
+
+html.light-mode .dispense-medicine-item p {
+  color: #64748b !important;
+}
+
+html.light-mode .dispense-medicine-item > div:last-child {
+  border-color: #d7e2eb !important;
+  color: #64748b !important;
+}
+
+html.light-mode .dispense-medicine-item > div:last-child .text-slate-300 {
+  color: #334155 !important;
+}
+
+html.light-mode .inventory-status {
+  font-weight: 800;
+}
+
+html.light-mode .inventory-status.text-rose-300 {
+  color: #be123c !important;
+  background: #fff1f2 !important;
+  border-color: #fda4af !important;
+}
+
+html.light-mode .inventory-status.text-amber-300 {
+  color: #b45309 !important;
+  background: #fffbeb !important;
+  border-color: #fcd34d !important;
+}
+
+html.light-mode .inventory-status.text-emerald-300 {
+  color: #047857 !important;
+  background: #ecfdf5 !important;
+  border-color: #6ee7b7 !important;
+}
+
+.doctor-history-workspace,
+.doctor-cert-workspace {
+  position: absolute;
+  left: 5rem;
+  right: 0;
+  top: 4.5rem;
+  bottom: 0;
+  z-index: 20;
+}
+
+.doctor-tab-workspace {
+  background: #08131c;
+}
+
+.doctor-tab-panel,
+.doctor-certificate-panel {
+  box-shadow: 0 20px 50px rgba(2, 6, 23, 0.24);
+}
+
+.doctor-tab-header {
+  flex-shrink: 0;
+}
+
+.doctor-history-workspace > section,
+.doctor-cert-workspace {
+  max-width: none !important;
+  width: 100% !important;
+}
+
+.doctor-certificate-panel {
+  max-width: none !important;
+}
+
+.doctor-cert-workspace.doctor-certificate-panel {
+  background: transparent;
+  box-shadow: none;
+}
+
+.doctor-tab-content {
+  min-height: 0;
+}
+
+.doctor-history-workspace .doctor-tab-panel,
+.doctor-history-card {
+  box-shadow: none !important;
+}
+
+.sidebar-expanded .doctor-history-workspace,
+.sidebar-expanded .doctor-cert-workspace {
+  left: 20rem;
+}
+
+html.light-mode .doctor-history-card,
+html.light-mode .doctor-certificate-card,
+html.light-mode .doctor-tab-toolbar {
+  background: #ffffff !important;
+  border-color: #d7e2eb !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+html.light-mode .doctor-history-tile,
+html.light-mode .doctor-certificate-summary {
+  background: #f8fafc !important;
+  border-color: #d7e2eb !important;
+}
+
+html.light-mode .doctor-history-card .text-white,
+html.light-mode .doctor-certificate-card .text-white {
+  color: #1e293b !important;
+}
+
+html.light-mode .doctor-history-card .text-slate-300,
+html.light-mode .doctor-certificate-card .text-slate-300,
+html.light-mode .doctor-certificate-card .text-slate-350 {
+  color: #334155 !important;
+}
+
+html.light-mode .doctor-history-card .border-slate-800,
+html.light-mode .doctor-certificate-card .border-slate-800 {
+  border-color: #d7e2eb !important;
+}
+
+html.light-mode .doctor-certificate-input {
+  color: #1e293b !important;
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light-mode .form-input,
+html.light-mode .form-input:focus {
+  color: #1e293b;
+  background: rgba(255, 255, 255, 0.9);
+  border-color: #cbd5e1;
+}
+
+html.light-mode .form-input:focus {
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.14);
+}
+
+html.light-mode .form-input:-webkit-autofill,
+html.light-mode .form-input:-webkit-autofill:hover,
+html.light-mode .form-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #1e293b;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+  box-shadow: 0 0 0 1000px #ffffff inset;
+  caret-color: #1e293b;
 }
 
 * {
