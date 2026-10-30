@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Alert, Modal, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppSettings } from '../src/context/AppSettingsContext';
+import { colors } from '../src/theme/colors';
 
 export default function PinLockOverlay() {
   const { isAppLocked, verifyPin, biometricsEnabled, authenticateWithBiometrics, logout, isDark } = useAppSettings();
@@ -52,7 +53,7 @@ export default function PinLockOverlay() {
     <Modal visible={isAppLocked} animationType="fade" transparent={false}>
       <SafeAreaView style={[styles.container, themeStyles.container]}>
         <View style={styles.header}>
-          <Ionicons name="shield-checkmark" size={60} color={isDark ? '#38BDF8' : '#0284C7'} />
+          <Ionicons name="shield-checkmark" size={60} color={isDark ? '#38BDF8' : colors.primary} />
           <Text style={[styles.title, themeStyles.text]}>UniMed Access Lock</Text>
           <Text style={[styles.subtitle, themeStyles.subtext]}>Please enter your 4-digit lock PIN</Text>
         </View>
@@ -117,7 +118,7 @@ export default function PinLockOverlay() {
                 onPress={handleBiometrics}
                 activeOpacity={0.7}
               >
-                <Ionicons name="finger-print" size={32} color={isDark ? '#38BDF8' : '#0284C7'} />
+                <Ionicons name="finger-print" size={32} color={isDark ? '#38BDF8' : colors.primary} />
               </TouchableOpacity>
             ) : (
               <View style={styles.keyButton} />
@@ -137,7 +138,7 @@ export default function PinLockOverlay() {
               onPress={handleDeletePress}
               activeOpacity={0.7}
             >
-              <Ionicons name="backspace-outline" size={26} color={isDark ? '#A1A1AA' : '#71717A'} />
+              <Ionicons name="backspace-outline" size={26} color={isDark ? '#A1A1AA' : colors.textSecondary} />
             </TouchableOpacity>
           </View>
         </View>
@@ -226,26 +227,26 @@ const styles = StyleSheet.create({
 
 const lightStyles = StyleSheet.create({
   container: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
   },
   text: {
-    color: '#0F172A',
+    color: colors.textPrimary,
   },
   subtext: {
-    color: '#64748B',
+    color: colors.textSecondary,
   },
   dot: {
-    borderColor: '#CBD5E1',
+    borderColor: colors.border,
     backgroundColor: 'transparent',
   },
   activeDot: {
-    backgroundColor: '#0284C7',
+    backgroundColor: colors.primary,
   },
   key: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: colors.softSurface,
   },
   logoutText: {
-    color: '#0284C7',
+    color: colors.primaryText,
   },
 });
 

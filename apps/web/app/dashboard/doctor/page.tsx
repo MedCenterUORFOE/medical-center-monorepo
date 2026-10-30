@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Search, User, Calendar, Activity, Weight, FileText, PlusCircle, Save, Edit3, Loader2, CheckCircle2, AlertTriangle, ShieldAlert, Key, Plus, Trash2, Clock, History, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Search, User, Calendar, Activity, Weight, FileText, PlusCircle, Save, Edit3, Loader2, CheckCircle2, AlertTriangle, ShieldAlert, Plus, Trash2, Clock, History, AlertCircle } from 'lucide-react';
 import api from '@/lib/axios';
 import CertificateDrawer from './components/CertificateDrawer';
+import UserProfilePanel from '@/components/UserProfilePanel';
 
 interface Patient {
   id: string;
@@ -49,6 +49,30 @@ interface Appointment {
   }
 }
 
+interface AvailabilityDay {
+  day_of_week: number;
+  label: string;
+  is_available: boolean;
+  start_time: string;
+  end_time: string;
+}
+
+const DEFAULT_AVAILABILITY_SCHEDULE: AvailabilityDay[] = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+].map((label, day_of_week) => ({
+  day_of_week,
+  label,
+  is_available: false,
+  start_time: '09:00',
+  end_time: '17:00',
+}));
+
 interface Medicine {
   id: string;
   name: string;
@@ -81,6 +105,41 @@ interface MedicalRecordItem {
   } | null;
 }
 
+type DoctorHistoryPeriod = 'today' | 'week' | 'month' | 'all';
+
+interface DoctorHistoryRecord {
+  id: string;
+  visit_date_time: string;
+  patient: {
+    id: string;
+    name: string;
+    email: string;
+    nic: string;
+    role: string;
+    registration_number: string | null;
+  };
+  symptoms: string;
+  diagnosis: string;
+  treatment_plan: string | null;
+  prescription_notes: string | null;
+  follow_up_date: string | null;
+  notes: string | null;
+  prescription: {
+    id: string;
+    issued_timestamp: string;
+    items: {
+      id: string;
+      medicine_id: string | null;
+      medicine_name: string | null;
+      external_medicine_name: string | null;
+      dosage: string;
+      quantity: number;
+      instructions: string | null;
+      source: 'INTERNAL' | 'EXTERNAL';
+    }[];
+  } | null;
+}
+
 interface PrescriptionFormItem {
   key: string;
   medicine_id: string | null;
@@ -97,14 +156,24 @@ interface PrescriptionFormItem {
 }
 
 export default function DoctorDashboard() {
-  const router = useRouter();
-
   // Certificate Drawer State
   const [isCertDrawerOpen, setIsCertDrawerOpen] = useState(false);
 
   // Appointments Sidebar States
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loadingAppointments, setLoadingAppointments] = useState(false);
+  const [savingAvailability, setSavingAvailability] = useState(false);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [availabilitySchedule, setAvailabilitySchedule] = useState<AvailabilityDay[]>(
+    DEFAULT_AVAILABILITY_SCHEDULE
+  );
+  const [isDoctorHistoryOpen, setIsDoctorHistoryOpen] = useState(false);
+  const [doctorHistory, setDoctorHistory] = useState<DoctorHistoryRecord[]>([]);
+  const [doctorHistoryPeriod, setDoctorHistoryPeriod] = useState<DoctorHistoryPeriod>('all');
+  const [doctorHistoryPage, setDoctorHistoryPage] = useState(1);
+  const [doctorHistoryTotalPages, setDoctorHistoryTotalPages] = useState(0);
+  const [doctorHistoryTotal, setDoctorHistoryTotal] = useState(0);
+  const [loadingDoctorHistory, setLoadingDoctorHistory] = useState(false);
 
   // Search Patient (Walk-in case) States
   const [searchQuery, setSearchQuery] = useState('');
@@ -135,16 +204,11 @@ export default function DoctorDashboard() {
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const showToast = (type: 'success' | 'error', message: string) => {
+  const showToast = useCallback((type: 'success' | 'error', message: string) => {
     setToast({ type, message });
     setTimeout(() => {
       setToast(null);
     }, 5000);
-  };
-
-  // Fetch Scheduled Appointments on mount
-  useEffect(() => {
-    fetchAppointments();
   }, []);
 
   const fetchAppointments = async () => {
@@ -158,6 +222,160 @@ export default function DoctorDashboard() {
       console.error('Error fetching appointments:', err);
     } finally {
       setLoadingAppointments(false);
+    }
+  };
+
+  const fetchAvailability = useCallback(async () => {
+    setLoadingAvailability(true);
+    try {
+      const response = await api.get('/availability/medicalstaff');
+      const savedSchedule = response.data?.data?.schedule;
+
+      if (!Array.isArray(savedSchedule)) {
+        throw new Error('Availability response did not contain a schedule.');
+      }
+
+      setAvailabilitySchedule(
+        DEFAULT_AVAILABILITY_SCHEDULE.map((defaultDay) => {
+          const savedDay = savedSchedule.find(
+            (day: { day_of_week: number }) => day.day_of_week === defaultDay.day_of_week
+          );
+
+          if (!savedDay) return defaultDay;
+
+          const startDate = new Date(savedDay.start_time);
+          const endDate = new Date(savedDay.end_time);
+          if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+            throw new Error(`Invalid availability time for ${defaultDay.label}.`);
+          }
+
+          return {
+            ...defaultDay,
+            is_available: savedDay.is_available,
+            start_time: `${String(startDate.getUTCHours()).padStart(2, '0')}:${String(
+              startDate.getUTCMinutes()
+            ).padStart(2, '0')}`,
+            end_time: `${String(endDate.getUTCHours()).padStart(2, '0')}:${String(
+              endDate.getUTCMinutes()
+            ).padStart(2, '0')}`,
+          };
+        })
+      );
+    } catch (err: any) {
+      console.error('Error fetching availability:', err);
+      showToast(
+        'error',
+        err.response?.data?.message || err.message || 'Failed to load your availability schedule.'
+      );
+    } finally {
+      setLoadingAvailability(false);
+    }
+  }, [showToast]);
+
+  const fetchDoctorHistory = useCallback(async (period: DoctorHistoryPeriod, page: number) => {
+    setLoadingDoctorHistory(true);
+    try {
+      const response = await api.get('/doctor/history', {
+        params: { period, page, limit: 20 },
+      });
+      const data = response.data?.data;
+
+      if (!data || !Array.isArray(data.records) || !data.pagination) {
+        throw new Error('Doctor history response was incomplete.');
+      }
+
+      setDoctorHistory(data.records);
+      setDoctorHistoryPage(data.pagination.page);
+      setDoctorHistoryTotalPages(data.pagination.total_pages);
+      setDoctorHistoryTotal(data.pagination.total);
+    } catch (err: any) {
+      console.error('Error fetching doctor history:', err);
+      setDoctorHistory([]);
+      setDoctorHistoryTotalPages(0);
+      setDoctorHistoryTotal(0);
+      showToast(
+        'error',
+        err.response?.data?.message || 'Failed to load your treatment history.'
+      );
+    } finally {
+      setLoadingDoctorHistory(false);
+    }
+  }, [showToast]);
+
+  // Fetch dashboard data on mount.
+  useEffect(() => {
+    fetchAppointments();
+    fetchAvailability();
+    fetchDoctorHistory('all', 1);
+  }, [fetchAvailability, fetchDoctorHistory]);
+
+  const handleAvailabilityChange = (
+    dayOfWeek: number,
+    field: 'is_available' | 'start_time' | 'end_time',
+    value: boolean | string
+  ) => {
+    setAvailabilitySchedule((current) =>
+      current.map((day) =>
+        day.day_of_week === dayOfWeek ? { ...day, [field]: value } : day
+      )
+    );
+  };
+
+  const handleAvailabilitySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setToast(null);
+
+    const invalidDay = availabilitySchedule.find(
+      (day) =>
+        day.is_available &&
+        (!day.start_time ||
+          !day.end_time ||
+          day.start_time >= day.end_time)
+    );
+
+    if (invalidDay) {
+      showToast(
+        'error',
+        `${invalidDay.label}: the ending time must be later than the starting time.`
+      );
+      return;
+    }
+
+    setSavingAvailability(true);
+
+    const schedule = availabilitySchedule.map((day) => {
+      const baseDate = new Date(Date.UTC(1970, 0, 4 + day.day_of_week));
+      const [startHour, startMinute] = day.start_time.split(':').map(Number);
+      const [endHour, endMinute] = day.end_time.split(':').map(Number);
+
+      const startTime = new Date(baseDate);
+      startTime.setUTCHours(startHour, startMinute, 0, 0);
+
+      const endTime = new Date(baseDate);
+      endTime.setUTCHours(endHour, endMinute, 0, 0);
+
+      return {
+        day_of_week: day.day_of_week,
+        start_time: startTime.toISOString(),
+        end_time: endTime.toISOString(),
+        is_available: day.is_available,
+      };
+    });
+
+    try {
+      const response = await api.put('/availability/medicalstaff', { schedule });
+      await fetchAvailability();
+      showToast(
+        'success',
+        response.data?.message || 'Weekly availability schedule saved successfully.'
+      );
+    } catch (err: any) {
+      showToast(
+        'error',
+        err.response?.data?.message || 'Failed to save your availability schedule.'
+      );
+    } finally {
+      setSavingAvailability(false);
     }
   };
 
@@ -425,26 +643,211 @@ export default function DoctorDashboard() {
 
         <div className="flex items-center gap-4">
           <button
+            onClick={() => {
+              setIsDoctorHistoryOpen(true);
+              fetchDoctorHistory(doctorHistoryPeriod, doctorHistoryPage);
+            }}
+            className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-350 hover:text-white rounded-lg text-xs font-bold border border-slate-750 transition-all flex items-center gap-1.5"
+          >
+            <History className="w-4 h-4" />
+            <span>My Treatment History</span>
+          </button>
+          <button
             onClick={() => setIsCertDrawerOpen(true)}
             className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-350 hover:text-white rounded-lg text-xs font-bold border border-slate-750 transition-all flex items-center gap-1.5"
           >
             <FileText className="w-4 h-4" />
             <span>Certificates Panel</span>
           </button>
-
-          <button
-            onClick={() => {
-              localStorage.removeItem('session_token');
-              document.cookie = 'session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-              router.push('/login');
-            }}
-            className="px-4 py-2 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 text-xs font-bold rounded-lg border border-transparent hover:border-rose-500/20 transition-all flex items-center gap-2"
-          >
-            <Key className="w-4 h-4" />
-            <span>Sign Out</span>
-          </button>
+          <UserProfilePanel />
         </div>
       </header>
+
+      {toast && (
+        <div
+          className={`fixed right-6 top-20 z-[60] flex items-center gap-3 rounded-xl border p-4 shadow-2xl ${
+            toast.type === 'success'
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+              : 'border-rose-500/30 bg-rose-500/10 text-rose-200'
+          }`}
+        >
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
+          ) : (
+            <ShieldAlert className="h-5 w-5 shrink-0 text-rose-400" />
+          )}
+          <span className="text-xs font-semibold">{toast.message}</span>
+        </div>
+      )}
+
+      {isDoctorHistoryOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-6 backdrop-blur-sm">
+          <section className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-[#0d1726] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
+              <div>
+                <h2 className="flex items-center gap-2 text-base font-extrabold text-white">
+                  <History className="h-5 w-5 text-emerald-400" />
+                  My Treatment History
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  {doctorHistoryTotal} record{doctorHistoryTotal === 1 ? '' : 's'} found
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDoctorHistoryOpen(false)}
+                className="rounded-lg px-3 py-1.5 text-xs font-bold text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-6 py-3">
+              <div className="flex gap-1 rounded-lg bg-[#0b0f19] p-1">
+                {(['today', 'week', 'month', 'all'] as DoctorHistoryPeriod[]).map((period) => (
+                  <button
+                    key={period}
+                    type="button"
+                    onClick={() => {
+                      setDoctorHistoryPeriod(period);
+                      fetchDoctorHistory(period, 1);
+                    }}
+                    className={`rounded-md px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide transition-colors ${
+                      doctorHistoryPeriod === period
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    {period}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => fetchDoctorHistory(doctorHistoryPeriod, doctorHistoryPage)}
+                disabled={loadingDoctorHistory}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-[10px] font-bold text-slate-300 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Loader2 className={`h-3.5 w-3.5 ${loadingDoctorHistory ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-6">
+              {loadingDoctorHistory ? (
+                <div className="flex min-h-56 flex-col items-center justify-center gap-3 text-slate-500">
+                  <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+                  <span className="text-xs">Loading treatment history...</span>
+                </div>
+              ) : doctorHistory.length === 0 ? (
+                <div className="flex min-h-56 flex-col items-center justify-center gap-2 text-center text-slate-500">
+                  <Clock className="h-8 w-8 text-slate-700" />
+                  <span className="text-sm">No treatment records for this period.</span>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {doctorHistory.map((record) => (
+                    <article
+                      key={record.id}
+                      className="rounded-xl border border-slate-800 bg-[#111827] p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-800 pb-3">
+                        <div>
+                          <h3 className="text-sm font-bold text-white">{record.patient.name}</h3>
+                          <p className="mt-1 text-[10px] text-slate-500">
+                            {record.patient.registration_number || record.patient.nic} ·{' '}
+                            {record.patient.role}
+                          </p>
+                        </div>
+                        <time className="text-[10px] font-bold text-emerald-400">
+                          {new Date(record.visit_date_time).toLocaleString()}
+                        </time>
+                      </div>
+
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <div>
+                          <h4 className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                            Symptoms
+                          </h4>
+                          <p className="mt-1 text-xs leading-relaxed text-slate-300">
+                            {record.symptoms}
+                          </p>
+                        </div>
+                        <div>
+                          <h4 className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                            Diagnosis
+                          </h4>
+                          <p className="mt-1 text-xs leading-relaxed text-slate-300">
+                            {record.diagnosis}
+                          </p>
+                        </div>
+                      </div>
+
+                      {record.treatment_plan && (
+                        <div className="mt-3">
+                          <h4 className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                            Treatment Plan
+                          </h4>
+                          <p className="mt-1 text-xs leading-relaxed text-slate-300">
+                            {record.treatment_plan}
+                          </p>
+                        </div>
+                      )}
+
+                      {record.prescription?.items.length ? (
+                        <div className="mt-3 border-t border-slate-800 pt-3">
+                          <h4 className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                            Prescription
+                          </h4>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {record.prescription.items.map((item) => (
+                              <span
+                                key={item.id}
+                                className="rounded-md border border-slate-700 bg-[#0b0f19] px-2 py-1 text-[10px] text-slate-300"
+                              >
+                                {item.medicine_name || item.external_medicine_name || 'Unnamed medicine'} ·{' '}
+                                {item.dosage} · Qty {item.quantity}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-800 px-6 py-3">
+              <span className="text-[10px] text-slate-500">
+                Page {doctorHistoryPage} of {Math.max(doctorHistoryTotalPages, 1)}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={loadingDoctorHistory || doctorHistoryPage <= 1}
+                  onClick={() => fetchDoctorHistory(doctorHistoryPeriod, doctorHistoryPage - 1)}
+                  className="rounded-lg border border-slate-700 px-3 py-1.5 text-[10px] font-bold text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    loadingDoctorHistory ||
+                    doctorHistoryPage >= doctorHistoryTotalPages ||
+                    doctorHistoryTotalPages === 0
+                  }
+                  onClick={() => fetchDoctorHistory(doctorHistoryPeriod, doctorHistoryPage + 1)}
+                  className="rounded-lg border border-slate-700 px-3 py-1.5 text-[10px] font-bold text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* Main Workspace Layout */}
       <div className="flex-1 flex overflow-hidden">
@@ -482,8 +885,103 @@ export default function DoctorDashboard() {
             </div>
           </div>
 
+          {/* Weekly Availability */}
+          <form
+            onSubmit={handleAvailabilitySubmit}
+            className="order-2 border-y border-slate-800 py-5 space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Weekly Availability
+                </h3>
+                <p className="text-[10px] text-slate-600 mt-1">
+                  Set the hours patients can book
+                </p>
+              </div>
+              {loadingAvailability ? (
+                <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+              ) : (
+                <Calendar className="w-4 h-4 text-emerald-400" />
+              )}
+            </div>
+
+            <div className="space-y-2.5">
+              {availabilitySchedule.map((day) => (
+                <div
+                  key={day.day_of_week}
+                  className="rounded-lg border border-slate-800 bg-[#0b0f19] p-2.5 space-y-2"
+                >
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <span className="text-xs font-semibold text-slate-200">{day.label}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-500">
+                        {day.is_available ? 'Available' : 'Unavailable'}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={day.is_available}
+                        onChange={(e) =>
+                          handleAvailabilityChange(
+                            day.day_of_week,
+                            'is_available',
+                            e.target.checked
+                          )
+                        }
+                        className="h-4 w-4 accent-emerald-500"
+                      />
+                    </span>
+                  </label>
+
+                  {day.is_available && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="text-[10px] text-slate-500">
+                        Start
+                        <input
+                          type="time"
+                          value={day.start_time}
+                          onChange={(e) =>
+                            handleAvailabilityChange(
+                              day.day_of_week,
+                              'start_time',
+                              e.target.value
+                            )
+                          }
+                          className="mt-1 w-full rounded-md border border-slate-800 bg-[#151b2c] px-2 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                        />
+                      </label>
+                      <label className="text-[10px] text-slate-500">
+                        End
+                        <input
+                          type="time"
+                          value={day.end_time}
+                          onChange={(e) =>
+                            handleAvailabilityChange(
+                              day.day_of_week,
+                              'end_time',
+                              e.target.value
+                            )
+                          }
+                          className="mt-1 w-full rounded-md border border-slate-800 bg-[#151b2c] px-2 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="submit"
+              disabled={savingAvailability}
+              className="w-full rounded-lg bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-400 border border-emerald-500/20 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {savingAvailability ? 'Saving Schedule...' : 'Save Availability'}
+            </button>
+          </form>
+
           {/* Appointments Sidebar */}
-          <div className="flex-1 flex flex-col min-h-0 gap-3">
+          <div className="order-1 flex-1 flex flex-col min-h-0 gap-3">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Scheduled Today</h4>
               <span className="text-[10px] text-slate-500 font-bold bg-[#0b0f19] px-2 py-0.5 rounded-full">
@@ -547,24 +1045,6 @@ export default function DoctorDashboard() {
             </div>
           ) : selectedPatient ? (
             <div className="flex-1 flex gap-6 overflow-hidden">
-              {/* Floating Toast */}
-              {toast && (
-                <div
-                  className={`fixed top-20 right-6 z-50 p-4 rounded-xl shadow-2xl flex items-center gap-3 border transition-all duration-300 transform translate-y-0 ${
-                    toast.type === 'success'
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
-                      : 'bg-rose-500/10 border-rose-500/30 text-rose-200'
-                  }`}
-                >
-                  {toast.type === 'success' ? (
-                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                  ) : (
-                    <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0" />
-                  )}
-                  <span className="text-xs font-semibold">{toast.message}</span>
-                </div>
-              )}
-
               {/* Left Column: Demographics + Historical Timeline */}
               <div className="w-1/2 flex flex-col gap-4 overflow-hidden h-full">
                 {/* Patient Profile Card */}
