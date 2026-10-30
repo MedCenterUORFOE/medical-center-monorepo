@@ -28,12 +28,15 @@ interface AcademicStaffDetails {
   ExtraCertificateRecipient: string | null;
 }
 
+const RELATIONSHIP_OPTIONS = ['Father', 'Mother', 'Guardian', 'Sibling', 'Spouse', 'Other'];
+
 interface CompleteProfilePayload {
   name: string; // ✅ Newly added: Mandatory Name field expected by the Backend
   role: 'STUDENT' | 'ACADEMIC_STAFF';
   nic: string;
   phone: string;
   emergency_contact_name: string;
+  emergency_contact_relationship?: string;
   emergency_contact_number: string;
   student_details?: StudentDetails;
   academic_staff_details?: AcademicStaffDetails;
@@ -49,6 +52,11 @@ export default function CompleteProfileScreen() {
   const [role, setRole] = useState<'STUDENT' | 'ACADEMIC_STAFF'>(targetRole);
   const [nic, setNic] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  // ── Guardian / Emergency Contact Fields ─────────
+  const [guardianName, setGuardianName] = useState<string>('');
+  const [guardianRelationship, setGuardianRelationship] = useState<string>('Father');
+  const [guardianPhone, setGuardianPhone] = useState<string>('');
 
   // ── STUDENT Fields ──────────────────────────────
   const [batch, setBatch] = useState<string>('');
@@ -107,6 +115,10 @@ export default function CompleteProfileScreen() {
           const rawNic = userData?.nic || patientProfile?.nic || '';
           const existingNic = (rawNic && rawNic !== 'Not Provided') ? rawNic : '';
 
+          const rawGuardianName = overrides?.emergency_contact_name || patientProfile?.emergency_contact_name || '';
+          const rawGuardianRel = overrides?.emergency_contact_relationship || patientProfile?.emergency_contact_relationship || '';
+          const rawGuardianPhone = overrides?.emergency_contact_number || patientProfile?.emergency_contact_number || '';
+
           if (existingName) {
             setStudentFullName((prev) => prev || existingName);
             setStaffFullName((prev) => prev || existingName);
@@ -117,6 +129,15 @@ export default function CompleteProfileScreen() {
           }
           if (existingNic) {
             setNic((prev) => prev || existingNic);
+          }
+          if (rawGuardianName) {
+            setGuardianName(rawGuardianName);
+          }
+          if (rawGuardianRel) {
+            setGuardianRelationship(rawGuardianRel);
+          }
+          if (rawGuardianPhone) {
+            setGuardianPhone(rawGuardianPhone);
           }
         }
       } catch (e) {
@@ -147,6 +168,9 @@ export default function CompleteProfileScreen() {
     let payload: Partial<CompleteProfilePayload> = {};
     const surnameValue = role === 'STUDENT' ? studentFullName.trim() : staffFullName.trim();
     const phoneValue = role === 'STUDENT' ? formatPhoneNumber(studentPhone) : formatPhoneNumber(staffPhone);
+    const contactName = guardianName.trim() || surnameValue;
+    const contactPhone = guardianPhone.trim() ? formatPhoneNumber(guardianPhone) : phoneValue;
+    const contactRelation = guardianRelationship.trim() || 'Father';
 
     // 1. STUDENT Payload Structure mapping exactly to Postman Schema
     if (role === 'STUDENT') {
@@ -160,8 +184,9 @@ export default function CompleteProfileScreen() {
         role: "STUDENT",
         nic: nic.trim(), 
         phone: phoneValue, 
-        emergency_contact_name: surnameValue,
-        emergency_contact_number: phoneValue, 
+        emergency_contact_name: contactName,
+        emergency_contact_relationship: contactRelation,
+        emergency_contact_number: contactPhone, 
         student_details: {
           university_reg_number: universityRegNumber.trim(),
           faculty: faculty.trim(),
@@ -186,8 +211,9 @@ export default function CompleteProfileScreen() {
         role: "ACADEMIC_STAFF",
         nic: nic.trim(), 
         phone: phoneValue,
-        emergency_contact_name: surnameValue,
-        emergency_contact_number: phoneValue,
+        emergency_contact_name: contactName,
+        emergency_contact_relationship: contactRelation,
+        emergency_contact_number: contactPhone,
         academic_staff_details: { 
           university_staff_id: universityStaffId.trim(),
           department: staffDepartment,
@@ -248,6 +274,9 @@ export default function CompleteProfileScreen() {
               name: surnameValue,
               surname: surnameValue,
               phone: phoneValue,
+              emergency_contact_name: contactName,
+              emergency_contact_relationship: contactRelation,
+              emergency_contact_number: contactPhone,
             })
           );
 
@@ -260,6 +289,9 @@ export default function CompleteProfileScreen() {
               name: surnameValue,
               surname: surnameValue,
               phone: phoneValue,
+              emergency_contact_name: contactName,
+              emergency_contact_relationship: contactRelation,
+              emergency_contact_number: contactPhone,
               is_profile_complete: true,
             })
           );
@@ -458,6 +490,65 @@ export default function CompleteProfileScreen() {
                 </View>
               )}
 
+              {/* ── GUARDIAN / EMERGENCY CONTACT FIELDS ─────────────────────── */}
+              <View style={styles.conditionalSection}>
+                <Text style={styles.sectionHeading}>
+                  {role === 'STUDENT' ? 'Guardian / Emergency Contact' : 'Emergency Contact Person'}
+                </Text>
+                <Text style={styles.sectionSubheading}>
+                  {role === 'STUDENT'
+                    ? 'Parent, guardian, or next of kin in case of medical emergency'
+                    : 'Emergency contact person details for official notifications'}
+                </Text>
+
+                <Text style={styles.inputLabel}>
+                  {role === 'STUDENT' ? 'Guardian Full Name' : 'Contact Person Full Name'}
+                </Text>
+                <TextInput
+                  style={styles.inputBox}
+                  placeholderTextColor={colors.placeholder}
+                  value={guardianName}
+                  onChangeText={setGuardianName}
+                  placeholder={role === 'STUDENT' ? "Enter guardian's full name" : "Enter contact person's full name"}
+                />
+
+                <Text style={styles.inputLabel}>Relationship</Text>
+                <View style={styles.relationChipsGrid}>
+                  {RELATIONSHIP_OPTIONS.map((rel) => {
+                    const isSelected = guardianRelationship === rel;
+                    return (
+                      <TouchableOpacity
+                        key={rel}
+                        style={[styles.relationChip, isSelected && styles.relationChipSelected]}
+                        onPress={() => setGuardianRelationship(rel)}
+                        activeOpacity={0.8}
+                      >
+                        <Text
+                          style={[
+                            styles.relationChipText,
+                            isSelected && styles.relationChipTextSelected,
+                          ]}
+                        >
+                          {rel}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={styles.inputLabel}>
+                  {role === 'STUDENT' ? 'Guardian Phone Number' : 'Emergency Contact Phone'}
+                </Text>
+                <TextInput
+                  style={styles.inputBox}
+                  placeholderTextColor={colors.placeholder}
+                  value={guardianPhone}
+                  onChangeText={setGuardianPhone}
+                  keyboardType="phone-pad"
+                  placeholder="e.g. 0771234567 or +94 77 123 4567"
+                />
+              </View>
+
               <View style={{ height: 30 }} />
 
               {/* SAVE BUTTON */}
@@ -495,4 +586,10 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: colors.textOnPrimary, fontSize: 16, fontWeight: 'bold' },
   conditionalSection: { marginTop: 20, paddingTop: 15, borderTopWidth: 1, borderTopColor: colors.border },
   sectionHeading: { fontSize: 18, fontWeight: 'bold', color: colors.primaryText, marginBottom: 10 },
+  sectionSubheading: { fontSize: 12, color: colors.textSecondary, marginBottom: 12, marginTop: -6 },
+  relationChipsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  relationChip: { paddingHorizontal: 13, paddingVertical: 7, borderRadius: 10, backgroundColor: colors.softSurface, borderWidth: 1, borderColor: colors.border },
+  relationChipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+  relationChipText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  relationChipTextSelected: { color: colors.textOnPrimary, fontWeight: '700' },
 });
