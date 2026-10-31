@@ -23,7 +23,9 @@ import {
   Sparkles,
   Lock,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import api from '@/lib/axios';
 import UserProfilePanel from '@/components/UserProfilePanel';
@@ -108,6 +110,7 @@ interface UserItem {
 
 export default function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<'provision' | 'directory'>('provision');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   // Directory state
@@ -501,43 +504,73 @@ export default function AdminDashboardPage() {
         <UserProfilePanel />
       </div>
 
-      <aside className="w-64 bg-[#0d1726]/85 border-r border-slate-700/80 hidden md:flex flex-col p-6 shrink-0 backdrop-blur-sm">
-        <div className="flex items-center gap-3 mb-8">
+      <aside
+        className={`${
+          isSidebarCollapsed ? 'w-20' : 'w-64'
+        } bg-[#0d1726]/85 border-r border-slate-700/80 hidden md:flex flex-col p-4 shrink-0 backdrop-blur-sm transition-[width] duration-300`}
+      >
+        <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} gap-3 mb-8`}>
+          <div className={`flex items-center gap-3 ${isSidebarCollapsed ? 'justify-center' : ''}`}>
           <div className="p-2 bg-emerald-500 rounded-lg text-white">
             <Shield className="w-6 h-6" />
           </div>
-          <div>
+          {!isSidebarCollapsed && <div>
             <h2 className="font-bold text-white tracking-wide text-sm">MedCenter Admin</h2>
             <p className="text-xs text-slate-500">Enterprise Control</p>
+          </div>}
           </div>
+          {!isSidebarCollapsed && (
+            <button
+              type="button"
+              onClick={() => setIsSidebarCollapsed(true)}
+              className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+              aria-label="Collapse admin sidebar"
+              title="Collapse sidebar"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
         <nav className="space-y-2 flex-1">
           <button
             onClick={() => setActiveTab('provision')}
+            title={isSidebarCollapsed ? 'Create Staff Account' : undefined}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
               activeTab === 'provision'
                 ? 'bg-slate-800 text-emerald-400'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
-            }`}
+            } ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}
           >
             <UserPlus className="w-5 h-5" />
-            <span>Create Staff Account</span>
+            {!isSidebarCollapsed && <span>Create Staff Account</span>}
           </button>
 
           <button
             onClick={() => setActiveTab('directory')}
+            title={isSidebarCollapsed ? 'Staff Directory' : undefined}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
               activeTab === 'directory'
                 ? 'bg-slate-800 text-emerald-400'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
-            }`}
+            } ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}
           >
             <Users className="w-5 h-5" />
-            <span>Staff Directory</span>
+            {!isSidebarCollapsed && <span>Staff Directory</span>}
           </button>
         </nav>
 
+        {isSidebarCollapsed && (
+          <button
+            type="button"
+            onClick={() => setIsSidebarCollapsed(false)}
+            className="mt-4 flex w-full items-center justify-center rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+            aria-label="Expand admin sidebar"
+            title="Expand sidebar"
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </button>
+        )}
       </aside>
 
       {/* Main Content Pane */}
@@ -545,7 +578,7 @@ export default function AdminDashboardPage() {
         {/* Floating Toast Notification */}
         {toast && (
           <div
-            className={`fixed top-6 right-6 z-50 p-4 rounded-xl shadow-2xl flex items-center gap-3 border transition-all duration-300 max-w-md ${
+            className={`admin-toast fixed top-24 right-6 z-50 p-4 rounded-xl shadow-2xl flex items-center gap-3 border transition-all duration-300 max-w-md ${
               toast.type === 'success'
                 ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200 shadow-emerald-950/50'
                 : 'bg-rose-950/90 border-rose-500/40 text-rose-200 shadow-rose-950/50'
@@ -571,22 +604,14 @@ export default function AdminDashboardPage() {
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setActiveTab('directory')}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold border border-slate-700 transition-colors flex items-center gap-2 self-start"
-              >
-                <Users className="w-4 h-4 text-emerald-400" />
-                <span>View Staff Directory</span>
-              </button>
             </div>
 
             {/* Flow A Security Notice */}
-            <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-4 flex items-start gap-3.5">
-              <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+            <div className="credential-flow-notice bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-4 flex items-start gap-3.5">
+              <ShieldCheck className="credential-flow-icon w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
               <div className="text-xs space-y-1">
-                <p className="font-semibold text-emerald-300">Direct Credential Flow (Active)</p>
-                <p className="text-slate-400 leading-relaxed">
+                <p className="credential-flow-title font-semibold text-emerald-300">Direct Credential Flow (Active)</p>
+                <p className="credential-flow-description text-slate-400 leading-relaxed">
                   The account is verified immediately upon creation with the password provided below. Please share the credentials
                   securely with the staff member.
                 </p>
@@ -1002,13 +1027,6 @@ export default function AdminDashboardPage() {
                 <p className="text-xs text-slate-400 mt-1">Manage, update credentials, or decommission accounts.</p>
               </div>
 
-              <button
-                onClick={() => setActiveTab('provision')}
-                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-emerald-950/20"
-              >
-                <UserPlus className="w-4 h-4" />
-                <span>Create Staff Member</span>
-              </button>
             </div>
 
             {/* Filter and Search Bar */}
@@ -1081,14 +1099,14 @@ export default function AdminDashboardPage() {
                             <span
                               className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                 u.role === 'ADMIN'
-                                  ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
+                                    ? 'role-chip role-chip-admin bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
                                   : u.role === 'DOCTOR'
-                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                    ? 'role-chip role-chip-doctor bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                                   : u.role === 'NURSE'
-                                  ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
+                                    ? 'role-chip role-chip-nurse bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
                                   : u.role === 'PHARMACIST'
-                                  ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
-                                  : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                    ? 'role-chip role-chip-pharmacist bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                                    : 'role-chip role-chip-driver bg-amber-500/10 text-amber-400 border border-amber-500/20'
                               }`}
                             >
                               {u.role}
