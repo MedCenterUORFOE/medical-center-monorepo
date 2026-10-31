@@ -6,6 +6,7 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   RefreshControl,
@@ -55,6 +56,7 @@ const DAYS_OF_WEEK = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
 const HEIGHT_PRESETS = [150, 155, 160, 165, 170, 175, 180, 185];
 const WEIGHT_PRESETS = [45, 50, 55, 60, 65, 70, 75, 80, 85];
+const RELATIONSHIP_OPTIONS = ['Father', 'Mother', 'Guardian', 'Sibling', 'Spouse', 'Other'];
 
 // ── Types & Interfaces ──
 export interface StudentData {
@@ -66,7 +68,8 @@ export interface StudentData {
   year_of_study: number;
   batch: string;
   emergency_contact_name: string | null;
-  emergency_contact_number: string;
+  emergency_contact_relationship?: string | null;
+  emergency_contact_number: string | null;
 }
 
 export interface AcademicStaffData {
@@ -76,7 +79,8 @@ export interface AcademicStaffData {
   department: string;
   position: string;
   emergency_contact_name: string | null;
-  emergency_contact_number: string;
+  emergency_contact_relationship?: string | null;
+  emergency_contact_number: string | null;
 }
 
 export interface ClinicalProfileData {
@@ -114,6 +118,9 @@ interface LocalProfileOverrides {
   height?: number | null;
   weight?: number | null;
   date_of_birth?: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_relationship?: string | null;
+  emergency_contact_number?: string | null;
 }
 
 export default function ProfileScreen() {
@@ -168,6 +175,9 @@ export default function ProfileScreen() {
   const [editWeight, setEditWeight] = useState('');
   const [editAllergies, setEditAllergies] = useState('');
   const [editSpecialNotes, setEditSpecialNotes] = useState('');
+  const [editGuardianName, setEditGuardianName] = useState('');
+  const [editGuardianRelation, setEditGuardianRelation] = useState('Father');
+  const [editGuardianPhone, setEditGuardianPhone] = useState('');
 
   // ── Date Picker Modal States ──
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
@@ -322,8 +332,53 @@ export default function ProfileScreen() {
       phone: resolvedPhone,
       role: serverData?.role || cachedUserData?.role || 'STUDENT',
       profile_picture: serverData?.profile_picture || null,
-      student: serverData?.student || null,
-      academicStaff: serverData?.academicStaff || null,
+      student: serverData?.student
+        ? {
+            ...serverData.student,
+            emergency_contact_name:
+              cachedOverrides?.emergency_contact_name !== undefined
+                ? cachedOverrides.emergency_contact_name
+                : serverData.student.emergency_contact_name ?? cachedPatientProfile?.emergency_contact_name ?? null,
+            emergency_contact_relationship:
+              cachedOverrides?.emergency_contact_relationship !== undefined
+                ? cachedOverrides.emergency_contact_relationship
+                : serverData.student.emergency_contact_relationship ?? cachedPatientProfile?.emergency_contact_relationship ?? null,
+            emergency_contact_number:
+              cachedOverrides?.emergency_contact_number !== undefined
+                ? cachedOverrides.emergency_contact_number
+                : serverData.student.emergency_contact_number ?? cachedPatientProfile?.emergency_contact_number ?? null,
+          }
+        : cachedPatientProfile?.emergency_contact_number
+        ? {
+            student_id: patientId || '',
+            university_reg_number: cachedPatientProfile?.university_reg_number || '',
+            university_email: cachedPatientProfile?.university_email || null,
+            faculty: cachedPatientProfile?.faculty || '',
+            department: cachedPatientProfile?.department || null,
+            year_of_study: cachedPatientProfile?.year_of_study || 1,
+            batch: cachedPatientProfile?.batch || '',
+            emergency_contact_name: cachedOverrides?.emergency_contact_name ?? cachedPatientProfile?.emergency_contact_name ?? null,
+            emergency_contact_relationship: cachedOverrides?.emergency_contact_relationship ?? cachedPatientProfile?.emergency_contact_relationship ?? null,
+            emergency_contact_number: cachedOverrides?.emergency_contact_number ?? cachedPatientProfile?.emergency_contact_number ?? null,
+          }
+        : null,
+      academicStaff: serverData?.academicStaff
+        ? {
+            ...serverData.academicStaff,
+            emergency_contact_name:
+              cachedOverrides?.emergency_contact_name !== undefined
+                ? cachedOverrides.emergency_contact_name
+                : serverData.academicStaff.emergency_contact_name ?? cachedPatientProfile?.emergency_contact_name ?? null,
+            emergency_contact_relationship:
+              cachedOverrides?.emergency_contact_relationship !== undefined
+                ? cachedOverrides.emergency_contact_relationship
+                : serverData.academicStaff.emergency_contact_relationship ?? cachedPatientProfile?.emergency_contact_relationship ?? null,
+            emergency_contact_number:
+              cachedOverrides?.emergency_contact_number !== undefined
+                ? cachedOverrides.emergency_contact_number
+                : serverData.academicStaff.emergency_contact_number ?? cachedPatientProfile?.emergency_contact_number ?? null,
+          }
+        : null,
       patientProfile: {
         user_id: serverData?.id || patientId || '',
         blood_group:
@@ -452,6 +507,9 @@ export default function ProfileScreen() {
   const handleOpenEditModal = () => {
     setEditName(profile?.name || '');
     setEditPhone(profile?.phone || '');
+    setEditGuardianName(guardianName || '');
+    setEditGuardianRelation(guardianRelation || 'Father');
+    setEditGuardianPhone(guardianPhone || '');
     const dob = profile?.patientProfile?.date_of_birth;
     if (dob) {
       const d = new Date(dob);
@@ -581,8 +639,22 @@ export default function ProfileScreen() {
       (await AsyncStorage.getItem('userToken'));
 
     try {
-      // 1. Call `PATCH /api/users/settings` for Phone Number
+      // 1. Call `PATCH /api/users/settings` for Phone Number and Guardian details
+      const settingsPayload: Record<string, any> = {};
       if (editPhone.trim()) {
+        settingsPayload.phone = editPhone.trim();
+      }
+      if (editGuardianName.trim()) {
+        settingsPayload.emergency_contact_name = editGuardianName.trim();
+      }
+      if (editGuardianRelation.trim()) {
+        settingsPayload.emergency_contact_relationship = editGuardianRelation.trim();
+      }
+      if (editGuardianPhone.trim()) {
+        settingsPayload.emergency_contact_number = editGuardianPhone.trim();
+      }
+
+      if (Object.keys(settingsPayload).length > 0) {
         try {
           await fetch(`${API_URL}/api/users/settings`, {
             method: 'PATCH',
@@ -590,9 +662,7 @@ export default function ProfileScreen() {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify({
-              phone: editPhone.trim(),
-            }),
+            body: JSON.stringify(settingsPayload),
           });
         } catch (settingsErr) {
           console.warn('Settings API patch error:', settingsErr);
@@ -626,7 +696,7 @@ export default function ProfileScreen() {
         }
       }
 
-      // 3. Save Complete Overrides (including Surname, Phone, Blood Group, Allergies, Special Notes)
+      // 3. Save Complete Overrides (including Surname, Phone, Guardian, Blood Group, Allergies, Special Notes)
       // to local AsyncStorage cache so they persist reliably on device across reloads
       const surnameVal = editName.trim() || profile?.name || '';
       const phoneVal = editPhone.trim() || profile?.phone || '';
@@ -641,6 +711,9 @@ export default function ProfileScreen() {
         height: editHeight ? Number(editHeight) : null,
         weight: editWeight ? Number(editWeight) : null,
         date_of_birth: editDob.trim() || null,
+        emergency_contact_name: editGuardianName.trim() || null,
+        emergency_contact_relationship: editGuardianRelation.trim() || null,
+        emergency_contact_number: editGuardianPhone.trim() || null,
       };
 
       if (patientId) {
@@ -658,6 +731,9 @@ export default function ProfileScreen() {
             name: surnameVal,
             surname: surnameVal,
             phone: phoneVal,
+            emergency_contact_name: editGuardianName.trim() || null,
+            emergency_contact_relationship: editGuardianRelation.trim() || null,
+            emergency_contact_number: editGuardianPhone.trim() || null,
             is_profile_complete: true,
           })
         );
@@ -835,6 +911,39 @@ export default function ProfileScreen() {
         },
       ]
     );
+  };
+
+  // ── Guardian / Emergency Contact Details Resolution ──
+  const contactPerson = profile?.student || profile?.academicStaff;
+  const guardianName =
+    cachedOverrides?.emergency_contact_name !== undefined
+      ? cachedOverrides.emergency_contact_name
+      : contactPerson?.emergency_contact_name ?? cachedPatientProfile?.emergency_contact_name ?? null;
+
+  const guardianRelation =
+    cachedOverrides?.emergency_contact_relationship !== undefined
+      ? cachedOverrides.emergency_contact_relationship
+      : contactPerson?.emergency_contact_relationship ?? cachedPatientProfile?.emergency_contact_relationship ?? null;
+
+  const guardianPhone =
+    cachedOverrides?.emergency_contact_number !== undefined
+      ? cachedOverrides.emergency_contact_number
+      : contactPerson?.emergency_contact_number ?? cachedPatientProfile?.emergency_contact_number ?? null;
+
+  const hasGuardianContact = Boolean(
+    (guardianName && guardianName.trim() !== '' && guardianName !== 'N/A') ||
+    (guardianPhone && guardianPhone.trim() !== '' && guardianPhone !== '0000000000')
+  );
+
+  const handleCallGuardian = async (phoneToCall?: string | null) => {
+    if (!phoneToCall) return;
+    const cleaned = phoneToCall.replace(/[^\d+]/g, '');
+    if (!cleaned) return;
+    try {
+      await Linking.openURL(`tel:${cleaned}`);
+    } catch (e) {
+      Alert.alert('Unable to Open Dialer', `Please dial ${phoneToCall} manually.`);
+    }
   };
 
   // Determine avatar to display (photo or single-letter initial fallback)
@@ -1032,15 +1141,95 @@ export default function ProfileScreen() {
                 </View>
 
                 {/* Contact Phone */}
-                <View style={[styles.metaInfoRow, { borderBottomWidth: 0 }]}>
+                <View style={[styles.metaInfoRow, !hasGuardianContact && { borderBottomWidth: 0 }]}>
                   <View style={styles.metaIconCol}>
                     <Ionicons name="call-outline" size={16} color="#3B6E5C" />
                   </View>
                   <Text style={styles.metaLabel}>Phone</Text>
                   <Text style={styles.metaValue}>{profile?.phone || 'Not Set'}</Text>
                 </View>
+
+                {/* Guardian / Emergency Contact in Meta Table */}
+                {hasGuardianContact ? (
+                  <View style={[styles.metaInfoRow, { borderBottomWidth: 0 }]}>
+                    <View style={styles.metaIconCol}>
+                      <Ionicons name="shield-checkmark-outline" size={16} color="#3B6E5C" />
+                    </View>
+                    <Text style={styles.metaLabel}>Guardian</Text>
+                    <Text style={styles.metaValue} numberOfLines={1}>
+                      {guardianName
+                        ? `${guardianName}${guardianRelation ? ` (${guardianRelation})` : ''}`
+                        : guardianPhone}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             </View>
+          )}
+        </View>
+
+        {/* ── SECTION: GUARDIAN / EMERGENCY CONTACT CARD ── */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionHeading}>Guardian / Emergency Contact</Text>
+          <TouchableOpacity onPress={handleOpenEditModal} activeOpacity={0.7}>
+            <Text style={styles.sectionActionText}>{hasGuardianContact ? 'Edit Contact' : 'Add Contact'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.guardianCard}>
+          {hasGuardianContact ? (
+            <View style={styles.guardianCardContent}>
+              <View style={styles.guardianCardLeft}>
+                <View style={styles.guardianIconPill}>
+                  <Ionicons name="shield-checkmark" size={22} color="#1B5E4B" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <View style={styles.guardianNameRow}>
+                    <Text style={styles.guardianNameText} numberOfLines={1}>
+                      {guardianName || 'Guardian Contact'}
+                    </Text>
+                    {guardianRelation ? (
+                      <View style={styles.guardianRelationBadge}>
+                        <Text style={styles.guardianRelationBadgeText}>{guardianRelation}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Text style={styles.guardianPhoneText}>
+                    {guardianPhone || 'Phone number not set'}
+                  </Text>
+                </View>
+              </View>
+
+              {guardianPhone ? (
+                <TouchableOpacity
+                  style={styles.guardianCallButton}
+                  onPress={() => handleCallGuardian(guardianPhone)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="call" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                  <Text style={styles.guardianCallButtonText}>Call</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.emptyGuardianCard}
+              onPress={handleOpenEditModal}
+              activeOpacity={0.75}
+            >
+              <View style={styles.emptyGuardianIconCircle}>
+                <Ionicons name="person-add-outline" size={22} color="#3B6E5C" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.emptyGuardianTitle}>No Emergency Contact Set</Text>
+                <Text style={styles.emptyGuardianSubtitle}>
+                  Add parent or guardian details for medical emergencies
+                </Text>
+              </View>
+              <View style={styles.emptyGuardianAddBadge}>
+                <Text style={styles.emptyGuardianAddBadgeText}>Add</Text>
+              </View>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -1453,6 +1642,64 @@ export default function ProfileScreen() {
                     <Ionicons name="calendar" size={14} color="#3B6E5C" />
                   </View>
                 </TouchableOpacity>
+              </View>
+
+              {/* Guardian / Emergency Contact Form Section */}
+              <Text style={[styles.formSectionLabel, { marginTop: 18 }]}>GUARDIAN & EMERGENCY CONTACT</Text>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputFieldLabel}>Guardian / Contact Name</Text>
+                <View style={styles.inputFieldBox}>
+                  <Ionicons name="shield-outline" size={18} color="#4A5952" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.inputTextInput}
+                    value={editGuardianName}
+                    onChangeText={setEditGuardianName}
+                    placeholder="Enter guardian full name"
+                    placeholderTextColor="#72857B"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputFieldLabel}>Relationship to Patient</Text>
+                <View style={styles.relationChipsGrid}>
+                  {RELATIONSHIP_OPTIONS.map((rel) => {
+                    const isSelected = editGuardianRelation === rel;
+                    return (
+                      <TouchableOpacity
+                        key={rel}
+                        style={[styles.relationChip, isSelected && styles.relationChipSelected]}
+                        onPress={() => setEditGuardianRelation(rel)}
+                        activeOpacity={0.8}
+                      >
+                        <Text
+                          style={[
+                            styles.relationChipText,
+                            isSelected && styles.relationChipTextSelected,
+                          ]}
+                        >
+                          {rel}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputFieldLabel}>Guardian Phone Number</Text>
+                <View style={styles.inputFieldBox}>
+                  <Ionicons name="call-outline" size={18} color="#4A5952" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.inputTextInput}
+                    value={editGuardianPhone}
+                    onChangeText={setEditGuardianPhone}
+                    placeholder="e.g. 0771234567 or +94 77 123 4567"
+                    placeholderTextColor="#72857B"
+                    keyboardType="phone-pad"
+                  />
+                </View>
               </View>
 
               {/* Blood Group Chips */}
@@ -2912,5 +3159,156 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13.5,
     fontWeight: '800',
+  },
+
+  // ── Guardian / Emergency Contact Card ──
+  guardianCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#DCECE2',
+    marginBottom: 16,
+    shadowColor: '#1B5E4B',
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  guardianCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  guardianCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  guardianIconPill: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#E6F4EE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#CBE5D9',
+  },
+  guardianNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  guardianNameText: {
+    color: '#16211C',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  guardianRelationBadge: {
+    backgroundColor: '#EAF3ED',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#D2E5DB',
+  },
+  guardianRelationBadgeText: {
+    color: '#1B5E4B',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  guardianPhoneText: {
+    color: '#4A5952',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 3,
+  },
+  guardianCallButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1B5E4B',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    shadowColor: '#1B5E4B',
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  guardianCallButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  emptyGuardianCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  emptyGuardianIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F1F7F4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#D8E8DF',
+  },
+  emptyGuardianTitle: {
+    color: '#16211C',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  emptyGuardianSubtitle: {
+    color: '#72857B',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  emptyGuardianAddBadge: {
+    backgroundColor: '#3B6E5C',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  emptyGuardianAddBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+
+  // ── Relationship Selector Chips in Modal ──
+  relationChipsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+  },
+  relationChip: {
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F3',
+    borderWidth: 1,
+    borderColor: '#DCE7E1',
+  },
+  relationChipSelected: {
+    backgroundColor: '#1B5E4B',
+    borderColor: '#1B5E4B',
+  },
+  relationChipText: {
+    color: '#4A5952',
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  relationChipTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 });

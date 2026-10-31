@@ -464,6 +464,22 @@ export default function PatientDashboard() {
         if (reqId) {
           await AsyncStorage.setItem('activeEmergencyRequestId', reqId);
           await AsyncStorage.setItem('activeEmergencyStatus', 'PENDING');
+          try {
+            const activeUserId =
+              (await SecureStore.getItemAsync('userId')) ||
+              (await AsyncStorage.getItem('userId')) ||
+              'anonymous';
+            await AsyncStorage.setItem(
+              `active_sos_request_${activeUserId}`,
+              JSON.stringify({
+                requestId: reqId,
+                status: 'PENDING',
+                updatedAt: new Date().toISOString(),
+              })
+            );
+          } catch (storageErr) {
+            console.warn('Error saving active_sos_request from dashboard:', storageErr);
+          }
         }
 
         Alert.alert('Success', 'SOS Sent Successfully! We are finding the nearest ambulance.');
