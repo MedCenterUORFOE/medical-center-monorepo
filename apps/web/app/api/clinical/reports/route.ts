@@ -37,6 +37,7 @@ export async function GET() {
             diagnosis: true,
             patient: {
               select: {
+                user_id: true,
                 user: {
                   select: { name: true }
                 }
@@ -51,6 +52,7 @@ export async function GET() {
     const formattedReports = reports.map(report => ({
       report_id: report.id,
       record_id: report.record_id,
+      patient_id: report.medical_record.patient.user_id,
       type: report.type,
       file_url: report.file_url,
       upload_time: report.upload_time,
