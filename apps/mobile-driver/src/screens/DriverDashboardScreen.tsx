@@ -92,6 +92,7 @@ const parseApiResponse = async <T,>(response: Response): Promise<ApiResponse<T> 
 
 const getPastRidesStorageKey = (driverId: string) => `driver_past_rides:${driverId}`;
 const getUsernameStorageKey = (driverId: string) => `driver_username:${driverId}`;
+const RECENT_REQUEST_WINDOW_MS = 12 * 60 * 60 * 1000;
 
 export default function DriverDashboardScreen() {
   const router = useRouter();
@@ -142,24 +143,28 @@ export default function DriverDashboardScreen() {
 
   const refreshHome = useCallback(async () => {
     const data = await loadHome();
-    setPayload(data);
+    const cutoff = Date.now() - RECENT_REQUEST_WINDOW_MS;
+    const recentPendingRequests = data.pending_requests.filter((request) => {
+      const createdAt = Date.parse(request.created_at);
+      return Number.isFinite(createdAt) && createdAt >= cutoff;
+    });
+    const recentData = {
+      ...data,
+      pending_requests: recentPendingRequests,
+      pending_count: recentPendingRequests.length,
+    };
 
-    if (data.pending_requests.length > 0) {
-      const newest = data.pending_requests[0];
+    setPayload(recentData);
+
+    if (recentPendingRequests.length > 0) {
+      const newest = recentPendingRequests[0];
       if (!seenRequestIds.current.has(newest.id)) {
         seenRequestIds.current.add(newest.id);
         setNotificationText(`New ambulance request from ${newest.requester.name}`);
 
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: 'New ambulance request',
-            body: `Pickup request from ${newest.requester.name}`,
-          },
-          trigger: null,
-        });
       }
 
-      data.pending_requests.forEach((request) => seenRequestIds.current.add(request.id));
+      recentPendingRequests.forEach((request) => seenRequestIds.current.add(request.id));
     }
   }, [loadHome]);
 
