@@ -73,7 +73,7 @@ export default function LandingScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F2FAF6',
+    backgroundColor: '#D9EEEA',
   },
   container: {
     flex: 1,
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
     width: 260,
     height: 260,
     borderRadius: 130,
-    backgroundColor: 'rgba(185, 222, 203, 0.42)',
+    backgroundColor: 'rgba(129, 190, 185, 0.36)',
   },
   heroCard: {
     flex: 1,
@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
   badge: {
     alignSelf: 'flex-start',
     borderRadius: 999,
-    backgroundColor: '#DDEFE6',
+    backgroundColor: '#C9E4DF',
     paddingHorizontal: 14,
     paddingVertical: 8,
     marginBottom: 18,
@@ -143,9 +143,9 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     borderRadius: 24,
-    backgroundColor: '#E8F3ED',
+    backgroundColor: '#CFE7E3',
     borderWidth: 1,
-    borderColor: '#D2E8DC',
+    borderColor: '#B9D9D3',
     padding: 18,
   },
   statValue: {
