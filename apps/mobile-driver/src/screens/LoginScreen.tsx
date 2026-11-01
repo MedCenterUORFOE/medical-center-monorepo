@@ -169,7 +169,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F2FAF6',
+    backgroundColor: '#D9EEEA',
   },
   flex: {
     flex: 1,
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 110,
-    backgroundColor: 'rgba(111, 190, 155, 0.18)',
+    backgroundColor: 'rgba(91, 174, 166, 0.18)',
   },
   container: {
     flex: 1,
@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   input: {
-    backgroundColor: '#E8F3ED',
+    backgroundColor: '#CFE7E3',
     borderRadius: 18,
     paddingHorizontal: 16,
     paddingVertical: 15,

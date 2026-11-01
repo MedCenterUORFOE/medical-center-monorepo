@@ -124,7 +124,7 @@ export default function NotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F2FAF6' },
+  safeArea: { flex: 1, backgroundColor: '#D9EEEA' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 20, gap: 18 },
   title: { flex: 1, color: '#111827', fontSize: 24, fontWeight: '800' },
   actions: { flexDirection: 'row', gap: 18 },
