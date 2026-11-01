@@ -2,15 +2,28 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Pill, User, Calendar, Activity, CheckCircle2, ShieldAlert, Plus, Trash2, Clock, History, AlertCircle, Loader2, Save, FileText, ArrowRight } from 'lucide-react';
+import { Pill, User, Calendar, Activity, CheckCircle2, ShieldAlert, Plus, Trash2, Clock, History, AlertCircle, Loader2, Save, FileText, ArrowRight, Package } from 'lucide-react';
 import api from '@/lib/axios';
 import UserProfilePanel from '@/components/UserProfilePanel';
 
 interface Batch {
   id: string;
+  medicine_id?: string;
   batch_number: string;
   stock_quantity: number;
   expiry_date: string;
+  medicine?: {
+    name: string;
+    unit: string;
+    category: string;
+  };
+}
+
+interface CatalogMedicine {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
 }
 
 interface PrescriptionItem {
@@ -92,6 +105,20 @@ export default function PharmacistDashboard() {
   // UI Feedback States
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<'dispensing' | 'inventory'>('dispensing');
+  const [inventoryBatches, setInventoryBatches] = useState<Batch[]>([]);
+  const [catalogMedicines, setCatalogMedicines] = useState<CatalogMedicine[]>([]);
+  const [loadingInventory, setLoadingInventory] = useState(false);
+  const [inventorySubmitting, setInventorySubmitting] = useState(false);
+  const [inventoryForm, setInventoryForm] = useState({
+    medicine_id: '',
+    medicine_name: '',
+    category: '',
+    unit: 'tablets',
+    batch_number: '',
+    stock_quantity: '',
+    expiry_date: '',
+  });
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
@@ -141,6 +168,87 @@ export default function PharmacistDashboard() {
       showToast('error', 'Failed to retrieve active prescriptions queue.');
     } finally {
       setLoadingFeed(false);
+    }
+  };
+
+  const fetchInventory = async () => {
+    setLoadingInventory(true);
+    try {
+      const [catalogResponse, batchesResponse] = await Promise.all([
+        api.get('/medicines/catalog?search='),
+        api.get('/inventory/batches'),
+      ]);
+      setCatalogMedicines(catalogResponse.data?.data?.catalog || []);
+      setInventoryBatches(batchesResponse.data?.data?.batches || []);
+    } catch (err: any) {
+      console.error('Error fetching inventory:', err);
+      showToast('error', err.response?.data?.message || 'Failed to load inventory.');
+    } finally {
+      setLoadingInventory(false);
+    }
+  };
+
+  const handleInventoryTab = () => {
+    setActiveTab('inventory');
+    fetchInventory();
+  };
+
+  const handleInventorySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const quantity = Number(inventoryForm.stock_quantity);
+
+    if (!inventoryForm.batch_number.trim() || !inventoryForm.expiry_date || !Number.isInteger(quantity) || quantity <= 0) {
+      showToast('error', 'Enter a batch number, a valid positive stock quantity, and an expiry date.');
+      return;
+    }
+
+    setInventorySubmitting(true);
+    setToast(null);
+
+    try {
+      let medicineId = inventoryForm.medicine_id;
+
+      if (!medicineId) {
+        if (!inventoryForm.medicine_name.trim() || !inventoryForm.category.trim() || !inventoryForm.unit.trim()) {
+          showToast('error', 'Enter the medicine name, category, and unit for a new medicine.');
+          return;
+        }
+
+        const medicineResponse = await api.post('/medicines/catalog', {
+          name: inventoryForm.medicine_name.trim(),
+          category: inventoryForm.category.trim(),
+          unit: inventoryForm.unit.trim(),
+        });
+        medicineId = medicineResponse.data?.data?.id;
+      }
+
+      if (!medicineId) {
+        throw new Error('The medicine could not be created or selected.');
+      }
+
+      await api.post('/inventory/batches', {
+        medicine_id: medicineId,
+        batch_number: inventoryForm.batch_number.trim(),
+        stock_quantity: quantity,
+        expiry_date: inventoryForm.expiry_date,
+      });
+
+      showToast('success', 'Inventory batch added successfully.');
+      setInventoryForm({
+        medicine_id: '',
+        medicine_name: '',
+        category: '',
+        unit: 'tablets',
+        batch_number: '',
+        stock_quantity: '',
+        expiry_date: '',
+      });
+      await fetchInventory();
+    } catch (err: any) {
+      console.error('Error adding inventory:', err);
+      showToast('error', err.response?.data?.message || 'Failed to add inventory batch.');
+    } finally {
+      setInventorySubmitting(false);
     }
   };
 
@@ -271,6 +379,27 @@ export default function PharmacistDashboard() {
         </div>
 
         <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1 p-1 bg-slate-900/70 border border-slate-700 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setActiveTab('dispensing')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                activeTab === 'dispensing' ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Dispensing
+            </button>
+            <button
+              type="button"
+              onClick={handleInventoryTab}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 ${
+                activeTab === 'inventory' ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Package className="w-3.5 h-3.5" />
+              Inventory
+            </button>
+          </div>
           {(userRole === 'NURSE' || userRole === 'ADMIN') && (
             <button
               onClick={() => router.push('/dashboard/nurse')}
@@ -287,7 +416,7 @@ export default function PharmacistDashboard() {
       {/* Main Workspace Layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Side Column: Awaiting Fulfillment Feed */}
-        <aside className="w-80 border-r border-slate-700/80 bg-[#0b1520]/80 p-5 flex flex-col gap-4 shrink-0 overflow-y-auto backdrop-blur-sm">
+        <aside className={`pharmacist-sidebar ${activeTab === 'inventory' ? 'hidden' : 'w-80'} border-r border-slate-700/80 bg-[#0b1520]/80 p-5 flex flex-col gap-4 shrink-0 overflow-y-auto backdrop-blur-sm`}>
           <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Awaiting Fulfillment</h3>
             <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
@@ -365,13 +494,134 @@ export default function PharmacistDashboard() {
             </div>
           )}
 
-          {selectedPrescription ? (
+          {activeTab === 'inventory' ? (
+            <div className="flex-1 overflow-y-auto space-y-6">
+              <div>
+                <h2 className="text-xl font-extrabold text-white">Inventory Management</h2>
+                <p className="text-xs text-slate-500 mt-1">Add physical medicine batches and monitor expiry dates.</p>
+              </div>
+
+              <form onSubmit={handleInventorySubmit} className="p-5 bg-[#111827] border border-slate-800 rounded-2xl space-y-4">
+                <h3 className="text-sm font-bold text-slate-200">Add Inventory Batch</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="md:col-span-2">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Existing Medicine</label>
+                    <select
+                      value={inventoryForm.medicine_id}
+                      onChange={(e) => setInventoryForm({ ...inventoryForm, medicine_id: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#0b0f19] border border-slate-800 rounded-lg text-xs text-white"
+                    >
+                      <option value="">Add a new medicine instead</option>
+                      {catalogMedicines.map((medicine) => (
+                        <option key={medicine.id} value={medicine.id}>{medicine.name} ({medicine.unit})</option>
+                      ))}
+                    </select>
+                  </div>
+                  {!inventoryForm.medicine_id && (
+                    <>
+                      <input
+                        value={inventoryForm.medicine_name}
+                        onChange={(e) => setInventoryForm({ ...inventoryForm, medicine_name: e.target.value })}
+                        placeholder="New medicine name"
+                        className="px-3 py-2 bg-[#0b0f19] border border-slate-800 rounded-lg text-xs text-white"
+                        required
+                      />
+                      <input
+                        value={inventoryForm.category}
+                        onChange={(e) => setInventoryForm({ ...inventoryForm, category: e.target.value })}
+                        placeholder="Category"
+                        className="px-3 py-2 bg-[#0b0f19] border border-slate-800 rounded-lg text-xs text-white"
+                        required
+                      />
+                      <input
+                        value={inventoryForm.unit}
+                        onChange={(e) => setInventoryForm({ ...inventoryForm, unit: e.target.value })}
+                        placeholder="Unit (e.g. tablets)"
+                        className="px-3 py-2 bg-[#0b0f19] border border-slate-800 rounded-lg text-xs text-white"
+                        required
+                      />
+                    </>
+                  )}
+                  <input
+                    value={inventoryForm.batch_number}
+                    onChange={(e) => setInventoryForm({ ...inventoryForm, batch_number: e.target.value })}
+                    placeholder="Batch number"
+                    className="px-3 py-2 bg-[#0b0f19] border border-slate-800 rounded-lg text-xs text-white"
+                    required
+                  />
+                  <input
+                    type="number"
+                    min="1"
+                    value={inventoryForm.stock_quantity}
+                    onChange={(e) => setInventoryForm({ ...inventoryForm, stock_quantity: e.target.value })}
+                    placeholder="Stock quantity"
+                    className="px-3 py-2 bg-[#0b0f19] border border-slate-800 rounded-lg text-xs text-white"
+                    required
+                  />
+                  <input
+                    type="date"
+                    value={inventoryForm.expiry_date}
+                    onChange={(e) => setInventoryForm({ ...inventoryForm, expiry_date: e.target.value })}
+                    className="px-3 py-2 bg-[#0b0f19] border border-slate-800 rounded-lg text-xs text-white"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={inventorySubmitting}
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 rounded-lg text-xs font-bold text-white flex items-center gap-2"
+                >
+                  {inventorySubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  Add Batch
+                </button>
+              </form>
+
+              <div className="bg-[#111827] border border-slate-800 rounded-2xl overflow-hidden">
+                <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-slate-200">Inventory Batches</h3>
+                  <span className="text-[10px] text-slate-500">{inventoryBatches.length} batches</span>
+                </div>
+                {loadingInventory ? (
+                  <div className="p-10 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-emerald-500" /></div>
+                ) : inventoryBatches.length === 0 ? (
+                  <div className="p-10 text-center text-xs text-slate-500">No inventory batches found.</div>
+                ) : (
+                  <div className="divide-y divide-slate-800">
+                    {inventoryBatches.map((batch) => {
+                      const expiry = new Date(batch.expiry_date);
+                      const isExpired = expiry.getTime() < Date.now();
+                      const isExpiringSoon = !isExpired && expiry.getTime() <= Date.now() + 30 * 24 * 60 * 60 * 1000;
+                      return (
+                        <div key={batch.id} className="p-4 flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <h4 className="text-xs font-bold text-white">{batch.medicine?.name || 'Unknown medicine'}</h4>
+                            <p className="text-[10px] text-slate-500 mt-1">Batch: {batch.batch_number} · {batch.stock_quantity} {batch.medicine?.unit || 'units'}</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className={`inventory-status text-[10px] font-bold px-2 py-1 rounded-md border ${
+                              isExpired
+                                ? 'text-rose-300 bg-rose-500/10 border-rose-500/20'
+                                : isExpiringSoon
+                                ? 'text-amber-300 bg-amber-500/10 border-amber-500/20'
+                                : 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20'
+                            }`}>
+                              {isExpired ? 'Expired' : isExpiringSoon ? 'Expires soon' : 'Valid'} · {expiry.toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : selectedPrescription ? (
             <div className="flex-1 flex gap-6 overflow-hidden">
               
               {/* Mid Pane: List of items in selected prescription */}
               <div className="w-1/2 flex flex-col gap-4 overflow-hidden h-full">
                 {/* Patient / Prescriber Banner */}
-                <div className="bg-[#111827] border border-slate-800 rounded-2xl p-5 shadow-xl shrink-0">
+                <div className="dispense-detail-card bg-[#111827] border border-slate-800 rounded-2xl p-5 shadow-xl shrink-0">
                   <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2">Prescription Profile</h3>
                   <h2 className="text-lg font-extrabold text-white leading-tight">{selectedPrescription.patient_name}</h2>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-slate-400">
@@ -382,7 +632,7 @@ export default function PharmacistDashboard() {
                 </div>
 
                 {/* Items list */}
-                <div className="bg-[#111827] border border-slate-800 rounded-2xl p-5 shadow-xl flex-1 flex flex-col overflow-hidden">
+                <div className="dispense-items-card bg-[#111827] border border-slate-800 rounded-2xl p-5 shadow-xl flex-1 flex flex-col overflow-hidden">
                   <div className="border-b border-slate-800 pb-3 mb-3 shrink-0">
                     <h3 className="text-sm font-bold text-slate-200">Prescribed Medicine Items</h3>
                   </div>
@@ -393,7 +643,7 @@ export default function PharmacistDashboard() {
                       return (
                         <div
                           key={item.id}
-                          className={`p-3.5 rounded-xl border transition-all ${
+                          className={`dispense-medicine-item ${selectedItemId === item.id ? 'dispense-medicine-item-selected' : ''} p-3.5 rounded-xl border transition-all ${
                             item.source === 'EXTERNAL'
                               ? 'bg-slate-900/40 border-slate-850 opacity-60'
                               : selectedItemId === item.id
@@ -446,17 +696,17 @@ export default function PharmacistDashboard() {
               </div>
 
               {/* Right Pane: Lot-by-lot allocation grid */}
-              <div className="w-1/2 bg-[#111827] border border-slate-800 rounded-2xl p-5 md:p-6 shadow-xl overflow-y-auto h-full flex flex-col">
+              <div className="dispense-allocation-card w-1/2 bg-[#111827] border border-slate-800 rounded-2xl p-5 md:p-6 shadow-xl overflow-y-auto h-full flex flex-col">
                 {selectedItem ? (
                   <div className="flex-1 flex flex-col min-h-0 space-y-5">
                     {/* Header */}
-                    <div className="border-b border-slate-800 pb-3 shrink-0">
+                    <div className="dispense-lot-header border-b border-slate-800 pb-3 shrink-0">
                       <h3 className="text-sm font-extrabold text-white">Physical Lot Extraction</h3>
                       <p className="text-xs text-slate-500 mt-0.5">Medicine: <span className="text-slate-350 font-bold">{selectedItem.medicine_name}</span></p>
                     </div>
 
                     {/* Stock status split summary */}
-                    <div className="grid grid-cols-2 gap-4 p-4 bg-[#151b2c] border border-slate-850 rounded-xl shrink-0 text-xs">
+                    <div className="dispense-lot-summary grid grid-cols-2 gap-4 p-4 bg-[#151b2c] border border-slate-850 rounded-xl shrink-0 text-xs">
                       <div>
                         <span className="text-slate-500 block mb-0.5">Remaining Required</span>
                         <span className="text-lg font-black text-amber-400">{remainingRequirement} <span className="text-xs font-semibold text-slate-400">{selectedItem.medicine?.unit}</span></span>
@@ -474,7 +724,7 @@ export default function PharmacistDashboard() {
                       {allocations.length > 0 ? (
                         <div className="space-y-2">
                           {allocations.map((alloc, idx) => (
-                            <div key={alloc.inventory_batch_id} className="flex items-center justify-between p-3 bg-slate-900/60 border border-slate-850 rounded-xl text-xs">
+                            <div key={alloc.inventory_batch_id} className="dispense-lot-split flex items-center justify-between p-3 bg-slate-900/60 border border-slate-850 rounded-xl text-xs">
                               <div>
                                 <span className="font-bold text-slate-300">Batch Code: </span>
                                 <span className="text-white font-mono">{alloc.batch_number}</span>
@@ -494,7 +744,7 @@ export default function PharmacistDashboard() {
                           ))}
                         </div>
                       ) : (
-                        <div className="text-center py-8 text-slate-600 text-xs border border-dashed border-slate-800 rounded-xl">
+                        <div className="dispense-lot-empty text-center py-8 text-slate-600 text-xs border border-dashed border-slate-800 rounded-xl">
                           No batches added yet. Allocate batches below.
                         </div>
                       )}
@@ -502,7 +752,7 @@ export default function PharmacistDashboard() {
 
                     {/* Form Builder Grid */}
                     {!isSatisfied && (
-                      <form onSubmit={handleAddAllocation} className="bg-slate-900/40 p-4 border border-slate-800 rounded-xl space-y-3 shrink-0">
+                      <form onSubmit={handleAddAllocation} className="dispense-lot-form bg-slate-900/40 p-4 border border-slate-800 rounded-xl space-y-3 shrink-0">
                         <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Draw Batch Lot</h4>
                         <div className="grid grid-cols-2 gap-3">
                           {/* Batch selection */}
@@ -511,7 +761,7 @@ export default function PharmacistDashboard() {
                             <select
                               value={selectedBatchId}
                               onChange={(e) => setSelectedBatchId(e.target.value)}
-                              className="w-full px-2.5 py-1.5 bg-[#0b0f19] border border-slate-800 rounded-lg text-xs text-white"
+                              className="dispense-lot-input w-full px-2.5 py-1.5 bg-[#0b0f19] border border-slate-800 rounded-lg text-xs text-white"
                               required
                             >
                               <option value="">-- Choose Batch --</option>
@@ -533,7 +783,7 @@ export default function PharmacistDashboard() {
                                 value={allocatedQty}
                                 onChange={(e) => setAllocatedQty(e.target.value)}
                                 placeholder="e.g. 7"
-                                className="w-full px-2.5 py-1.5 bg-[#0b0f19] border border-slate-800 rounded-lg text-xs text-white font-mono"
+                                className="dispense-lot-input w-full px-2.5 py-1.5 bg-[#0b0f19] border border-slate-800 rounded-lg text-xs text-white font-mono"
                                 required
                               />
                             </div>

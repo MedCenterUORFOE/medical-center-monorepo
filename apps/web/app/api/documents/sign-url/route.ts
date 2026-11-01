@@ -32,11 +32,23 @@ export async function GET(request: Request) {
 
     const [report, certificate] = await Promise.all([
       prisma.medicalReport.findFirst({
-        where: { file_url: { endsWith: filePath } },
+        where: {
+          OR: [
+            { file_url: { endsWith: filePath } },
+            { file_url: filePath },
+            { file_url: filePath.replace(/^reports\//, '') },
+            { file_url: `reports/${filePath.replace(/^reports\//, '')}` },
+          ]
+        },
         include: { medical_record: true }
       }),
       prisma.medicalCertificate.findFirst({
-        where: { file_url: { endsWith: filePath } },
+        where: {
+          OR: [
+            { file_url: { endsWith: filePath } },
+            { file_url: filePath },
+          ]
+        },
         include: { 
           record: true,
           request: { include: { recipients: true } }
@@ -85,9 +97,29 @@ export async function GET(request: Request) {
       return apiErrors.forbidden("You do not have permission to view this document.");
     }
 
-    const { data, error } = await supabase.storage
+    // Determine actual storage path within the bucket
+    let storagePath = report ? report.file_url : certificate!.file_url;
+
+    // Ensure medical reports stored inside 'reports/' subfolder are correctly prefixed
+    if (report && !storagePath.startsWith('reports/')) {
+      storagePath = `reports/${storagePath}`;
+    }
+
+    let { data, error } = await supabase.storage
       .from('medical-documents') 
-      .createSignedUrl(filePath, 300);
+      .createSignedUrl(storagePath, 300);
+
+    // If signing with reports/ prefix failed, attempt legacy unprefixed path as fallback
+    if ((error || !data) && report && storagePath.startsWith('reports/')) {
+      const fallbackPath = storagePath.replace(/^reports\//, '');
+      const fallbackResult = await supabase.storage
+        .from('medical-documents')
+        .createSignedUrl(fallbackPath, 300);
+      if (fallbackResult.data && !fallbackResult.error) {
+        data = fallbackResult.data;
+        error = null;
+      }
+    }
 
     if (error || !data) {
       console.error("Supabase URL Signing Error:", error);

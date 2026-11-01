@@ -56,6 +56,25 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="records"
+        options={{
+          title: 'Records',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'document-text' : 'document-text-outline'} size={24} color={color} />
+          ),
+          headerShown: false,
+          tabBarButton: (props) => (
+            <Pressable
+              {...(props as any)}
+              onPress={(e) => {
+                triggerHaptic();
+                props.onPress?.(e);
+              }}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="messages"
         options={{
           title: 'Messages',
@@ -115,7 +134,6 @@ export default function TabLayout() {
       <Tabs.Screen name="appointment" options={{ href: null }} />
       <Tabs.Screen name="sos" options={{ href: null }} />
       <Tabs.Screen name="prescriptions" options={{ href: null }} />
-      <Tabs.Screen name="records" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -107,8 +107,8 @@ function LoginContent() {
         )}
 
         {success && (
-          <div className="mt-6 flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-sm text-emerald-200">
-            <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
+          <div className="login-success-alert mt-6 flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-sm text-emerald-200">
+            <CheckCircle className="login-success-icon mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
             <span>{success}</span>
           </div>
         )}

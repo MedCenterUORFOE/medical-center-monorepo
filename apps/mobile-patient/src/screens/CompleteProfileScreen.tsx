@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, StatusBar
@@ -8,6 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors } from '../theme/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage'; // To send Security Token
+import * as SecureStore from 'expo-secure-store';
+import { useQueryClient } from '@tanstack/react-query';
 
 // Define rigid data type contracts matching the backend validation expectations
 interface StudentDetails {
@@ -26,12 +28,15 @@ interface AcademicStaffDetails {
   ExtraCertificateRecipient: string | null;
 }
 
+const RELATIONSHIP_OPTIONS = ['Father', 'Mother', 'Guardian', 'Sibling', 'Spouse', 'Other'];
+
 interface CompleteProfilePayload {
   name: string; // ✅ Newly added: Mandatory Name field expected by the Backend
   role: 'STUDENT' | 'ACADEMIC_STAFF';
   nic: string;
   phone: string;
   emergency_contact_name: string;
+  emergency_contact_relationship?: string;
   emergency_contact_number: string;
   student_details?: StudentDetails;
   academic_staff_details?: AcademicStaffDetails;
@@ -40,12 +45,18 @@ interface CompleteProfilePayload {
 export default function CompleteProfileScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const queryClient = useQueryClient();
 
   // Enforce types safely from search parameters or fallback to student context
   const targetRole = (params.role as 'STUDENT' | 'ACADEMIC_STAFF') || 'STUDENT';
   const [role, setRole] = useState<'STUDENT' | 'ACADEMIC_STAFF'>(targetRole);
   const [nic, setNic] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  // ── Guardian / Emergency Contact Fields ─────────
+  const [guardianName, setGuardianName] = useState<string>('');
+  const [guardianRelationship, setGuardianRelationship] = useState<string>('Father');
+  const [guardianPhone, setGuardianPhone] = useState<string>('');
 
   // ── STUDENT Fields ──────────────────────────────
   const [batch, setBatch] = useState<string>('');
@@ -79,6 +90,63 @@ export default function CompleteProfileScreen() {
   // ✅ Extracted dynamically from centralized mobile system environment configs
   const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
+  // Pre-load any existing known session info
+  useEffect(() => {
+    async function loadExistingInfo() {
+      try {
+        const id = (await SecureStore.getItemAsync('userId')) || (await AsyncStorage.getItem('userId'));
+        if (id) {
+          const [rawOverrides, rawUserData, rawPatientProfile] = await Promise.all([
+            AsyncStorage.getItem(`patient_profile_overrides_${id}`),
+            AsyncStorage.getItem('userData'),
+            AsyncStorage.getItem(`patientProfile_${id}`),
+          ]);
+          const overrides = rawOverrides ? JSON.parse(rawOverrides) : null;
+          const rawUserParsed = rawUserData ? JSON.parse(rawUserData) : null;
+          const userData = (rawUserParsed && (!rawUserParsed.id || rawUserParsed.id === id)) ? rawUserParsed : null;
+          const patientProfile = rawPatientProfile ? JSON.parse(rawPatientProfile) : null;
+
+          const rawName = overrides?.surname || overrides?.name || userData?.surname || userData?.name || '';
+          const existingName = (rawName && rawName !== 'New User' && rawName !== 'Unknown User') ? rawName : '';
+
+          const rawPhone = overrides?.phone || userData?.phone || patientProfile?.phone || '';
+          const existingPhone = (rawPhone && rawPhone !== '0000000000') ? rawPhone : '';
+
+          const rawNic = userData?.nic || patientProfile?.nic || '';
+          const existingNic = (rawNic && rawNic !== 'Not Provided') ? rawNic : '';
+
+          const rawGuardianName = overrides?.emergency_contact_name || patientProfile?.emergency_contact_name || '';
+          const rawGuardianRel = overrides?.emergency_contact_relationship || patientProfile?.emergency_contact_relationship || '';
+          const rawGuardianPhone = overrides?.emergency_contact_number || patientProfile?.emergency_contact_number || '';
+
+          if (existingName) {
+            setStudentFullName((prev) => prev || existingName);
+            setStaffFullName((prev) => prev || existingName);
+          }
+          if (existingPhone) {
+            setStudentPhone((prev) => prev || existingPhone);
+            setStaffPhone((prev) => prev || existingPhone);
+          }
+          if (existingNic) {
+            setNic((prev) => prev || existingNic);
+          }
+          if (rawGuardianName) {
+            setGuardianName(rawGuardianName);
+          }
+          if (rawGuardianRel) {
+            setGuardianRelationship(rawGuardianRel);
+          }
+          if (rawGuardianPhone) {
+            setGuardianPhone(rawGuardianPhone);
+          }
+        }
+      } catch (e) {
+        console.warn('Error pre-populating CompleteProfile form:', e);
+      }
+    }
+    void loadExistingInfo();
+  }, []);
+
   const yearStringToInt = (val: string): number => {
     const map: Record<string, number> = { '1st Year': 1, '2nd Year': 2, '3rd Year': 3, '4th Year': 4 };
     return map[val] ?? 1;
@@ -98,6 +166,11 @@ export default function CompleteProfileScreen() {
     }
 
     let payload: Partial<CompleteProfilePayload> = {};
+    const surnameValue = role === 'STUDENT' ? studentFullName.trim() : staffFullName.trim();
+    const phoneValue = role === 'STUDENT' ? formatPhoneNumber(studentPhone) : formatPhoneNumber(staffPhone);
+    const contactName = guardianName.trim() || surnameValue;
+    const contactPhone = guardianPhone.trim() ? formatPhoneNumber(guardianPhone) : phoneValue;
+    const contactRelation = guardianRelationship.trim() || 'Father';
 
     // 1. STUDENT Payload Structure mapping exactly to Postman Schema
     if (role === 'STUDENT') {
@@ -106,15 +179,14 @@ export default function CompleteProfileScreen() {
         return;
       }
 
-      const validatedPhone = formatPhoneNumber(studentPhone);
-
       payload = {
-        name: studentFullName.trim(), // ✅ Newly added: Student Name
+        name: surnameValue,
         role: "STUDENT",
         nic: nic.trim(), 
-        phone: validatedPhone, 
-        emergency_contact_name: studentFullName.trim(),
-        emergency_contact_number: validatedPhone, 
+        phone: phoneValue, 
+        emergency_contact_name: contactName,
+        emergency_contact_relationship: contactRelation,
+        emergency_contact_number: contactPhone, 
         student_details: {
           university_reg_number: universityRegNumber.trim(),
           faculty: faculty.trim(),
@@ -132,16 +204,16 @@ export default function CompleteProfileScreen() {
         return;
       }
 
-      const validatedPhone = formatPhoneNumber(staffPhone);
       const finalEmail = staffEmail.trim() || `${universityStaffId.toLowerCase().replace(/[^a-z0-9]/g, "")}@eng.ruh.ac.lk`;
 
       payload = {
-        name: staffFullName.trim(), // ✅ Newly added: Staff Name
+        name: surnameValue,
         role: "ACADEMIC_STAFF",
         nic: nic.trim(), 
-        phone: validatedPhone,
-        emergency_contact_name: staffFullName.trim(),
-        emergency_contact_number: validatedPhone,
+        phone: phoneValue,
+        emergency_contact_name: contactName,
+        emergency_contact_relationship: contactRelation,
+        emergency_contact_number: contactPhone,
         academic_staff_details: { 
           university_staff_id: universityStaffId.trim(),
           department: staffDepartment,
@@ -155,8 +227,13 @@ export default function CompleteProfileScreen() {
     setIsLoading(true);
     try {
       const endpoint = `${API_URL}/api/users/complete-profile`; 
-      const token = await AsyncStorage.getItem('userToken'); // Retrieving user token
-      
+      const token =
+        (await SecureStore.getItemAsync('userToken')) ||
+        (await AsyncStorage.getItem('userToken'));
+      const activeUserId =
+        (await SecureStore.getItemAsync('userId')) ||
+        (await AsyncStorage.getItem('userId'));
+
       console.log("🚀 Sending Patch Request to:", endpoint);
       console.log("📦 Payload:", JSON.stringify(payload, null, 2));
 
@@ -165,7 +242,6 @@ export default function CompleteProfileScreen() {
         headers: { 
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          // Send Authorization in Headers if Token exists
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}) 
         },
         body: JSON.stringify(payload),
@@ -173,7 +249,7 @@ export default function CompleteProfileScreen() {
 
       console.log("📥 Response Status:", response.status);
       const responseText = await response.text();
-      let responseData;
+      let responseData: any;
       
       try {
         responseData = JSON.parse(responseText);
@@ -185,8 +261,84 @@ export default function CompleteProfileScreen() {
       }
 
       if (response.ok) {
+        const resolvedUserId = responseData?.data?.user?.id || activeUserId;
+
+        // 1. Update AsyncStorage flags and cache
+        if (resolvedUserId) {
+          const existingOverrides = await AsyncStorage.getItem(`patient_profile_overrides_${resolvedUserId}`);
+          const parsedOverrides = existingOverrides ? JSON.parse(existingOverrides) : {};
+          await AsyncStorage.setItem(
+            `patient_profile_overrides_${resolvedUserId}`,
+            JSON.stringify({
+              ...parsedOverrides,
+              name: surnameValue,
+              surname: surnameValue,
+              phone: phoneValue,
+              emergency_contact_name: contactName,
+              emergency_contact_relationship: contactRelation,
+              emergency_contact_number: contactPhone,
+            })
+          );
+
+          const existingProfile = await AsyncStorage.getItem(`patientProfile_${resolvedUserId}`);
+          const parsedProfile = existingProfile ? JSON.parse(existingProfile) : {};
+          await AsyncStorage.setItem(
+            `patientProfile_${resolvedUserId}`,
+            JSON.stringify({
+              ...parsedProfile,
+              name: surnameValue,
+              surname: surnameValue,
+              phone: phoneValue,
+              emergency_contact_name: contactName,
+              emergency_contact_relationship: contactRelation,
+              emergency_contact_number: contactPhone,
+              is_profile_complete: true,
+            })
+          );
+
+          await AsyncStorage.setItem(`profileCompleted_${resolvedUserId}`, 'true');
+        }
+
+        const rawUserData = await AsyncStorage.getItem('userData');
+        const parsedUserData = rawUserData ? JSON.parse(rawUserData) : {};
+        await AsyncStorage.setItem(
+          'userData',
+          JSON.stringify({
+            ...parsedUserData,
+            id: resolvedUserId,
+            name: surnameValue,
+            surname: surnameValue,
+            phone: phoneValue,
+            is_profile_complete: true,
+            profileCompleted: true,
+          })
+        );
+        await AsyncStorage.setItem('is_profile_complete', 'true');
+
+        // 2. Also patch settings endpoint with phone as fallback
+        if (phoneValue && token) {
+          try {
+            await fetch(`${API_URL}/api/users/settings`, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ phone: phoneValue }),
+            });
+          } catch (settingsErr) {
+            console.warn('Settings phone patch fallback error:', settingsErr);
+          }
+        }
+
+        // 3. Invalidate React Query caches so Dashboard & Profile update immediately
+        await queryClient.invalidateQueries({ queryKey: ['profile'] });
+        if (resolvedUserId) {
+          await queryClient.invalidateQueries({ queryKey: ['profile', resolvedUserId] });
+        }
+
         Alert.alert('Success', 'Profile completed successfully!', [
-          { text: 'OK', onPress: () => router.push('/(tabs)') }
+          { text: 'OK', onPress: () => router.replace('/(tabs)') }
         ]);
       } else {
         console.log("❌ Backend Validation Error Details:", responseData);
@@ -236,8 +388,8 @@ export default function CompleteProfileScreen() {
                 <View style={styles.conditionalSection}>
                   <Text style={styles.sectionHeading}>Student Details</Text>
 
-                  <Text style={styles.inputLabel}>Full Name *</Text>
-                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={studentFullName} onChangeText={setStudentFullName} placeholder="Enter your full name" />
+                  <Text style={styles.inputLabel}>Surname *</Text>
+                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={studentFullName} onChangeText={setStudentFullName} placeholder="Enter your surname" />
 
                   <Text style={styles.inputLabel}>Phone Number *</Text>
                   <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={studentPhone} onChangeText={setStudentPhone} keyboardType="phone-pad" placeholder="Enter phone number" />
@@ -291,8 +443,8 @@ export default function CompleteProfileScreen() {
                 <View style={styles.conditionalSection}>
                   <Text style={styles.sectionHeading}>Academic Staff Details</Text>
 
-                  <Text style={styles.inputLabel}>Full Name *</Text>
-                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={staffFullName} onChangeText={setStaffFullName} placeholder="Enter your full name" />
+                  <Text style={styles.inputLabel}>Surname *</Text>
+                  <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={staffFullName} onChangeText={setStaffFullName} placeholder="Enter your surname" />
 
                   <Text style={styles.inputLabel}>Phone Number *</Text>
                   <TextInput style={styles.inputBox} placeholderTextColor={colors.placeholder} value={staffPhone} onChangeText={setStaffPhone} keyboardType="phone-pad" placeholder="Enter phone number" />
@@ -338,6 +490,65 @@ export default function CompleteProfileScreen() {
                 </View>
               )}
 
+              {/* ── GUARDIAN / EMERGENCY CONTACT FIELDS ─────────────────────── */}
+              <View style={styles.conditionalSection}>
+                <Text style={styles.sectionHeading}>
+                  {role === 'STUDENT' ? 'Guardian / Emergency Contact' : 'Emergency Contact Person'}
+                </Text>
+                <Text style={styles.sectionSubheading}>
+                  {role === 'STUDENT'
+                    ? 'Parent, guardian, or next of kin in case of medical emergency'
+                    : 'Emergency contact person details for official notifications'}
+                </Text>
+
+                <Text style={styles.inputLabel}>
+                  {role === 'STUDENT' ? 'Guardian Full Name' : 'Contact Person Full Name'}
+                </Text>
+                <TextInput
+                  style={styles.inputBox}
+                  placeholderTextColor={colors.placeholder}
+                  value={guardianName}
+                  onChangeText={setGuardianName}
+                  placeholder={role === 'STUDENT' ? "Enter guardian's full name" : "Enter contact person's full name"}
+                />
+
+                <Text style={styles.inputLabel}>Relationship</Text>
+                <View style={styles.relationChipsGrid}>
+                  {RELATIONSHIP_OPTIONS.map((rel) => {
+                    const isSelected = guardianRelationship === rel;
+                    return (
+                      <TouchableOpacity
+                        key={rel}
+                        style={[styles.relationChip, isSelected && styles.relationChipSelected]}
+                        onPress={() => setGuardianRelationship(rel)}
+                        activeOpacity={0.8}
+                      >
+                        <Text
+                          style={[
+                            styles.relationChipText,
+                            isSelected && styles.relationChipTextSelected,
+                          ]}
+                        >
+                          {rel}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={styles.inputLabel}>
+                  {role === 'STUDENT' ? 'Guardian Phone Number' : 'Emergency Contact Phone'}
+                </Text>
+                <TextInput
+                  style={styles.inputBox}
+                  placeholderTextColor={colors.placeholder}
+                  value={guardianPhone}
+                  onChangeText={setGuardianPhone}
+                  keyboardType="phone-pad"
+                  placeholder="e.g. 0771234567 or +94 77 123 4567"
+                />
+              </View>
+
               <View style={{ height: 30 }} />
 
               {/* SAVE BUTTON */}
@@ -375,4 +586,10 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: colors.textOnPrimary, fontSize: 16, fontWeight: 'bold' },
   conditionalSection: { marginTop: 20, paddingTop: 15, borderTopWidth: 1, borderTopColor: colors.border },
   sectionHeading: { fontSize: 18, fontWeight: 'bold', color: colors.primaryText, marginBottom: 10 },
+  sectionSubheading: { fontSize: 12, color: colors.textSecondary, marginBottom: 12, marginTop: -6 },
+  relationChipsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  relationChip: { paddingHorizontal: 13, paddingVertical: 7, borderRadius: 10, backgroundColor: colors.softSurface, borderWidth: 1, borderColor: colors.border },
+  relationChipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+  relationChipText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  relationChipTextSelected: { color: colors.textOnPrimary, fontWeight: '700' },
 });

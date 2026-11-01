@@ -122,25 +122,27 @@ model DeviceToken {
 model Student {
   student_id               String  @id // PK + FK to User
   university_reg_number    String  @unique
-  university_email         String? @unique
-  faculty                  String
-  department               String?
-  year_of_study            Int
-  batch                    String
-  emergency_contact_name   String?
-  emergency_contact_number String
+  university_email               String? @unique
+  faculty                        String
+  department                     String?
+  year_of_study                  Int
+  batch                          String
+  emergency_contact_name         String?
+  emergency_contact_relationship String?
+  emergency_contact_number       String
 
   user User @relation(fields: [student_id], references: [id], onDelete: Cascade)
 }
 
 model AcademicStaff {
-  academic_staff_id        String  @id // PK + FK to User
-  university_staff_id      String  @unique
-  university_email         String? @unique
-  department               String
-  position                 String
-  emergency_contact_name   String?
-  emergency_contact_number String
+  academic_staff_id              String  @id // PK + FK to User
+  university_staff_id            String  @unique
+  university_email               String? @unique
+  department                     String
+  position                       String
+  emergency_contact_name         String?
+  emergency_contact_relationship String?
+  emergency_contact_number       String
 
   user                 User                        @relation(fields: [academic_staff_id], references: [id], onDelete: Cascade)
   certificate_receipts ExtraCertificateRecipient[]

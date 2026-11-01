@@ -234,7 +234,7 @@ export default function NurseDashboard() {
       {/* Main Workspace Layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Side Pane: Patient Search */}
-        <aside className="w-80 border-r border-slate-700/80 bg-[#0b1520]/80 p-5 flex flex-col gap-5 shrink-0 overflow-y-auto backdrop-blur-sm">
+        <aside className="nurse-sidebar w-80 border-r border-slate-700/80 bg-[#0b1520]/80 p-5 flex flex-col gap-5 shrink-0 overflow-y-auto backdrop-blur-sm">
           <div>
             <h3 className="text-sm font-semibold text-slate-300 mb-2">Search Patient</h3>
             <div className="relative">

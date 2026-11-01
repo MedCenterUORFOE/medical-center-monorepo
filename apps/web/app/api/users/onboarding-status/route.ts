@@ -72,6 +72,7 @@ export async function GET() {
             batch: true,
             university_email: true,
             emergency_contact_name: true,
+            emergency_contact_relationship: true,
             emergency_contact_number: true,
           }
         },
@@ -82,6 +83,7 @@ export async function GET() {
             department: true,
             position: true,
             emergency_contact_name: true,
+            emergency_contact_relationship: true,
             emergency_contact_number: true,
           }
         },
@@ -187,6 +189,7 @@ export async function GET() {
         fields.department = { complete: !!sd?.department, source: "user" };
         fields.university_email = { complete: !!sd?.university_email, source: "user" };
         fields.emergency_contact_name = { complete: !!sd?.emergency_contact_name, source: "user" };
+        fields.emergency_contact_relationship = { complete: !!sd?.emergency_contact_relationship, source: "user" };
         fields.emergency_contact_number = { complete: !!sd?.emergency_contact_number, source: "user" };
 
       } else if (user.role === "ACADEMIC_STAFF") {
@@ -207,6 +210,7 @@ export async function GET() {
         // Optional — reported, never blocks completion
         fields.university_email = { complete: !!asr?.university_email, source: "user" };
         fields.emergency_contact_name = { complete: !!asr?.emergency_contact_name, source: "user" };
+        fields.emergency_contact_relationship = { complete: !!asr?.emergency_contact_relationship, source: "user" };
         fields.emergency_contact_number = { complete: !!asr?.emergency_contact_number, source: "user" };
       }
       // ADMIN: no nested details — name/nic/phone/username above cover it.

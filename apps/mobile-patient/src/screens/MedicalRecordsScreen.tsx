@@ -11,6 +11,7 @@ import {
   Platform,
   RefreshControl,
   ScrollView,
+  Share,
   StatusBar,
   StyleSheet,
   Text,
@@ -21,14 +22,15 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../theme/colors';
-import { supabase } from '../lib/supabase';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const LOCAL_STORAGE_CACHE_KEY = 'localMedicalReportFiles';
+const REPORT_URI_CACHE_PREFIX = 'report_uri_';
 
 // ── Types & Interfaces ──
 export interface MedicalReportItem {
@@ -49,6 +51,37 @@ export interface ConsultationOption {
   visitDate: string;
   diagnosis: string;
   symptoms: string;
+}
+
+export interface PrescriptionItemData {
+  id: string;
+  medicine_name: string;
+  dosage: string;
+  frequency: string;
+  duration?: string | null;
+  instructions?: string | null;
+}
+
+export interface PrescriptionData {
+  id: string;
+  status: string;
+  instructions?: string | null;
+  items?: PrescriptionItemData[];
+}
+
+export interface ConsultationVisit {
+  id: string;
+  doctorName: string;
+  visitDate: string;
+  diagnosis: string;
+  symptoms?: string | null;
+  treatmentPlan?: string | null;
+  prescriptionNotes?: string | null;
+  followUpDate?: string | null;
+  notes?: string | null;
+  prescription?: PrescriptionData | null;
+  reportsCount: number;
+  reports: MedicalReportItem[];
 }
 
 type FilterCategory = 'All' | 'Blood Test' | 'Lab Report' | 'Ultrasound' | 'ECG' | 'Other';
@@ -137,6 +170,16 @@ const formatDate = (value?: string | null): string => {
   });
 };
 
+const formatTime = (value?: string | null): string => {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 const resolveReportTypeMeta = (rawType?: string | null): {
   label: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
@@ -173,12 +216,16 @@ export default function MedicalRecordsScreen() {
   const router = useRouter();
 
   // Screen State
+  const [activeSegment, setActiveSegment] = useState<'VISITS' | 'REPORTS'>('VISITS');
+  const [visits, setVisits] = useState<ConsultationVisit[]>([]);
   const [reports, setReports] = useState<MedicalReportItem[]>([]);
   const [consultations, setConsultations] = useState<ConsultationOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<FilterCategory>('All');
+  const [selectedRecordFilter, setSelectedRecordFilter] = useState<string>('ALL');
   const [openingReportId, setOpeningReportId] = useState<string | null>(null);
+  const [downloadingReportId, setDownloadingReportId] = useState<string | null>(null);
 
   // Upload Modal State
   const [isUploadModalVisible, setIsUploadModalVisible] = useState(false);
@@ -191,6 +238,12 @@ export default function MedicalRecordsScreen() {
   // In-App Image Preview Modal State
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState<string>('');
+  const [currentPreviewItem, setCurrentPreviewItem] = useState<MedicalReportItem | null>(null);
+
+  useEffect(() => {
+    // Purge legacy oversized monolithic cache key that causes CursorWindow overflow on Android
+    void AsyncStorage.removeItem(LOCAL_STORAGE_CACHE_KEY).catch(() => {});
+  }, []);
 
   // ── Authentication token retrieval ──
   const getAuthCredentials = async () => {
@@ -233,6 +286,7 @@ export default function MedicalRecordsScreen() {
         console.error('History Fetch Error:', response.status, textData);
         setErrorMessage(`HTTP ${response.status}: ${textData || 'Unable to retrieve medical history.'}`);
         setReports([]);
+        setVisits([]);
         setConsultations([]);
         return;
       }
@@ -241,6 +295,7 @@ export default function MedicalRecordsScreen() {
       const rawHistory: any[] = payload?.data?.history || payload?.history || [];
 
       const parsedConsultations: ConsultationOption[] = [];
+      const parsedVisits: ConsultationVisit[] = [];
       const parsedReports: MedicalReportItem[] = [];
 
       rawHistory.forEach((rec: any) => {
@@ -252,19 +307,35 @@ export default function MedicalRecordsScreen() {
           'Assigned Doctor';
         const visitDate = rec.visit_date_time || rec.visit_date || rec.created_at || '';
         const diagnosis = rec.diagnosis || 'Clinical Consultation';
-        const symptoms = rec.symptoms || '';
+        const symptoms = rec.symptoms || null;
+        const treatmentPlan = rec.treatment_plan || null;
+        const prescriptionNotes = rec.prescription_notes || null;
+        const followUpDate = rec.follow_up_date || null;
+        const notes = rec.notes || null;
 
-        parsedConsultations.push({
-          id: recId,
-          doctorName,
-          visitDate,
-          diagnosis,
-          symptoms,
-        });
+        let prescription: PrescriptionData | null = null;
+        if (rec.prescription) {
+          prescription = {
+            id: String(rec.prescription.id),
+            status: rec.prescription.status || 'ACTIVE',
+            instructions: rec.prescription.instructions || null,
+            items: Array.isArray(rec.prescription.items)
+              ? rec.prescription.items.map((it: any) => ({
+                  id: String(it.id),
+                  medicine_name: it.medicine_name || 'Medication',
+                  dosage: it.dosage || '',
+                  frequency: it.frequency || '',
+                  duration: it.duration || null,
+                  instructions: it.instructions || null,
+                }))
+              : [],
+          };
+        }
 
+        const visitReports: MedicalReportItem[] = [];
         if (Array.isArray(rec.reports) && rec.reports.length > 0) {
           rec.reports.forEach((rep: any, idx: number) => {
-            parsedReports.push({
+            const item: MedicalReportItem = {
               id: String(rep.id || `${recId}-rep-${idx}`),
               record_id: recId,
               file_url: rep.file_url || '',
@@ -273,15 +344,42 @@ export default function MedicalRecordsScreen() {
               doctorName,
               visitDate,
               diagnosis,
-            });
+            };
+            visitReports.push(item);
+            parsedReports.push(item);
           });
         }
+
+        parsedConsultations.push({
+          id: recId,
+          doctorName,
+          visitDate,
+          diagnosis,
+          symptoms: symptoms || '',
+        });
+
+        parsedVisits.push({
+          id: recId,
+          doctorName,
+          visitDate,
+          diagnosis,
+          symptoms,
+          treatmentPlan,
+          prescriptionNotes,
+          followUpDate,
+          notes,
+          prescription,
+          reportsCount: visitReports.length,
+          reports: visitReports,
+        });
       });
 
-      // Sort newest upload first
+      // Sort newest upload and newest visit first
       parsedReports.sort((a, b) => new Date(b.upload_time).getTime() - new Date(a.upload_time).getTime());
+      parsedVisits.sort((a, b) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime());
 
       setConsultations(parsedConsultations);
+      setVisits(parsedVisits);
       setReports(parsedReports);
 
       // Pre-select the latest consultation visit for uploading
@@ -292,6 +390,7 @@ export default function MedicalRecordsScreen() {
       console.error('Fetch Medical Records Error:', error);
       setErrorMessage(error?.message || 'Failed to connect to the medical center server.');
       setReports([]);
+      setVisits([]);
       setConsultations([]);
     } finally {
       setIsLoading(false);
@@ -302,124 +401,312 @@ export default function MedicalRecordsScreen() {
     void loadMedicalRecords();
   }, [loadMedicalRecords]);
 
-  // ── Filtered Reports ──
+  // ── Filtered Reports (by Category & Medical Record ID) ──
   const filteredReports = useMemo(() => {
-    if (selectedFilter === 'All') return reports;
     return reports.filter((item) => {
-      const meta = resolveReportTypeMeta(item.type);
-      return meta.category === selectedFilter;
+      // 1. Filter by category chip
+      if (selectedFilter !== 'All') {
+        const meta = resolveReportTypeMeta(item.type);
+        if (meta.category !== selectedFilter) return false;
+      }
+      // 2. Filter by consultation record ID
+      if (selectedRecordFilter !== 'ALL') {
+        if (item.record_id !== selectedRecordFilter) return false;
+      }
+      return true;
     });
-  }, [reports, selectedFilter]);
+  }, [reports, selectedFilter, selectedRecordFilter]);
 
-  // ── Document Viewing (Data URLs, Local Cache & Signed URLs) ──
-  const handleViewReport = async (item: MedicalReportItem) => {
+  // ── Resolve Report URL (Local Cache, Direct URL, or Cloud Signed URL) ──
+  const resolveReportUrl = async (
+    item: MedicalReportItem
+  ): Promise<{ url: string; isDirectData: boolean }> => {
     if (!item.file_url) {
-      Alert.alert('Unavailable', 'No file attachment URL was found for this report.');
-      return;
+      throw new Error('No file attachment URL was found for this report.');
     }
 
-    const typeMeta = resolveReportTypeMeta(item.type);
-    setPreviewTitle(typeMeta.label);
-
-    // CASE A: Direct Data URI (base64 stored in DB), local file URI, or content URI
-    if (
-      item.file_url.startsWith('data:image/') ||
-      item.file_url.startsWith('file://') ||
-      item.file_url.startsWith('content://')
-    ) {
-      setPreviewUri(item.file_url);
-      return;
+    // 1. Direct Data URI (base64)
+    if (item.file_url.startsWith('data:image/')) {
+      return { url: item.file_url, isDirectData: true };
     }
 
-    // Direct HTTP / HTTPS image or document URL
+    // 2. Direct Local File or Content URI
+    if (item.file_url.startsWith('file://') || item.file_url.startsWith('content://')) {
+      return { url: item.file_url, isDirectData: false };
+    }
+
+    // 3. Direct HTTP / HTTPS URL
     if (item.file_url.startsWith('http://') || item.file_url.startsWith('https://')) {
-      const isImg = /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(item.file_url);
-      if (isImg) {
-        setPreviewUri(item.file_url);
-      } else {
-        await Linking.openURL(item.file_url);
-      }
-      return;
+      return { url: item.file_url, isDirectData: false };
     }
 
-    // CASE B: Check Local Device AsyncStorage Cache
+    // 4. Check Per-Report Local Device Cache Key
     try {
-      const cachedRaw = await AsyncStorage.getItem(LOCAL_STORAGE_CACHE_KEY);
-      if (cachedRaw) {
-        const localMap: Record<string, string> = JSON.parse(cachedRaw);
-        const cachedUri = localMap[item.file_url] || localMap[item.id];
-        if (cachedUri) {
-          setPreviewUri(cachedUri);
-          return;
-        }
+      const localUri = await AsyncStorage.getItem(`${REPORT_URI_CACHE_PREFIX}${item.id}`);
+      if (localUri && (localUri.startsWith('file://') || localUri.startsWith('content://'))) {
+        return { url: localUri, isDirectData: false };
       }
-    } catch (cacheErr) {
-      console.warn('Local report cache lookup error:', cacheErr);
+    } catch {
+      // Continue to cloud resolution
     }
 
-    // CASE C: Cloud Storage Path -> Request Signed URL from Backend
-    try {
-      setOpeningReportId(item.id);
-      const { token, apiUrl } = await getAuthCredentials();
+    // 5. Cloud Storage Path -> Request Signed URL from Backend
+    const { token, apiUrl } = await getAuthCredentials();
+    if (!apiUrl || !token) {
+      throw new Error('Authentication session or API server URL missing. Please log in again.');
+    }
 
-      if (!apiUrl || !token) {
-        throw new Error('Authentication session or API URL missing.');
+    // Ensure path targets reports/ subfolder within medical-documents bucket
+    const cloudPath = item.file_url.startsWith('reports/')
+      ? item.file_url
+      : `reports/${item.file_url}`;
+
+    const response = await fetch(
+      `${apiUrl}/api/documents/sign-url?file_path=${encodeURIComponent(cloudPath)}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          Cookie: `session_token=${token}`,
+        },
       }
+    );
 
-      const response = await fetch(
-        `${apiUrl}/api/documents/sign-url?file_path=${encodeURIComponent(item.file_url)}`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-        }
+    const json = await response.json().catch(() => null);
+    const signedUrl = json?.data?.signed_url || json?.signed_url;
+
+    if (!response.ok || !signedUrl) {
+      throw new Error(
+        json?.message ||
+          json?.error?.message ||
+          'This medical report file is not available on the cloud storage server.'
       );
+    }
 
-      const json = await response.json();
+    return { url: signedUrl, isDirectData: false };
+  };
 
-      if (!response.ok || !json.data?.signed_url) {
-        // For older test records created before cloud storage was configured
-        Alert.alert(
-          'Report Unavailable',
-          'This older test record was uploaded before cloud storage was configured, so the physical file is not available on the server.\n\nPlease upload a new report to view or share it.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
+  // ── Document Viewing (In-App Modal / External PDF) ──
+  const handleViewReport = async (item: MedicalReportItem) => {
+    setOpeningReportId(item.id);
+    try {
+      const typeMeta = resolveReportTypeMeta(item.type);
+      setPreviewTitle(typeMeta.label);
+      setCurrentPreviewItem(item);
 
-      const signedUrl = json.data.signed_url;
+      const { url } = await resolveReportUrl(item);
 
-      // Check if image vs PDF / other
-      const isImage =
+      const isImg =
+        url.startsWith('data:image/') ||
+        url.startsWith('file://') ||
+        url.startsWith('content://') ||
         /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(item.file_url) ||
-        /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(signedUrl);
+        /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(url);
 
-      if (isImage) {
-        setPreviewUri(signedUrl);
+      if (isImg) {
+        setPreviewUri(url);
       } else {
         // PDF or external document - open via Linking
-        await Linking.openURL(signedUrl);
+        const supported = await Linking.canOpenURL(url).catch(() => false);
+        if (supported) {
+          await Linking.openURL(url);
+        } else {
+          Alert.alert('Cannot Open', 'No application found to view this document format.');
+        }
       }
-    } catch (error: any) {
-      console.error('Error opening report:', error);
+    } catch (err: any) {
+      console.error('Error opening report:', err);
       Alert.alert(
-        'Connection Notice',
-        'Unable to download this medical report. Please check your internet connection and try again.'
+        'Report Unavailable',
+        err?.message || 'Unable to open this report. Please check your network connection.'
       );
     } finally {
       setOpeningReportId(null);
     }
   };
 
-  // ── Image Picker Workflow (with base64 and quality: 0.5) ──
+  // ── Document Downloading (Direct File Download / StorageAccessFramework / Share) ──
+  const handleDownloadReport = async (item: MedicalReportItem) => {
+    setDownloadingReportId(item.id);
+    try {
+      const typeMeta = resolveReportTypeMeta(item.type);
+
+      // ── Step 1: Resolve File Content into Base64 & MIME Type ──
+      let base64Data = '';
+      let mimeType = 'image/jpeg';
+      let ext = 'jpg';
+
+      if (item.file_url.startsWith('data:')) {
+        // Case A: Report URL is directly a data: URI (Base64)
+        const mimeMatch = item.file_url.match(/^data:([^;]+);base64,/);
+        if (mimeMatch) {
+          mimeType = mimeMatch[1];
+        }
+        base64Data = item.file_url.replace(/^data:[^;]+;base64,/, '');
+      } else {
+        // Check for local file or content URI (direct or cached)
+        let localUri: string | null = null;
+        if (item.file_url.startsWith('file://') || item.file_url.startsWith('content://')) {
+          localUri = item.file_url;
+        } else {
+          try {
+            const cached = await AsyncStorage.getItem(`${REPORT_URI_CACHE_PREFIX}${item.id}`);
+            if (cached && (cached.startsWith('file://') || cached.startsWith('content://'))) {
+              localUri = cached;
+            }
+          } catch {
+            // ignore cache lookup errors
+          }
+        }
+
+        if (localUri) {
+          // Case B: Local URI from upload session or cache
+          if (/\.png$/i.test(localUri)) {
+            mimeType = 'image/png';
+            ext = 'png';
+          } else if (/\.pdf$/i.test(localUri)) {
+            mimeType = 'application/pdf';
+            ext = 'pdf';
+          }
+          base64Data = await FileSystem.readAsStringAsync(localUri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+        } else {
+          // Case C: Remote URL (Cloud storage path or external URL)
+          let remoteUrl = item.file_url;
+          if (!remoteUrl.startsWith('http://') && !remoteUrl.startsWith('https://')) {
+            const { token, apiUrl } = await getAuthCredentials();
+            if (!apiUrl || !token) {
+              throw new Error('Authentication session expired. Please log in again.');
+            }
+            const cloudPath = item.file_url.startsWith('reports/')
+              ? item.file_url
+              : `reports/${item.file_url}`;
+
+            const signRes = await fetch(
+              `${apiUrl}/api/documents/sign-url?file_path=${encodeURIComponent(cloudPath)}`,
+              {
+                method: 'GET',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${token}`,
+                  Cookie: `session_token=${token}`,
+                },
+              }
+            );
+            const signJson = await signRes.json().catch(() => null);
+            const signedUrl = signJson?.data?.signed_url || signJson?.signed_url;
+            if (!signRes.ok || !signedUrl) {
+              throw new Error(
+                signJson?.message || 'Report file is not available on the server.'
+              );
+            }
+            remoteUrl = signedUrl;
+          }
+
+          if (/\.png/i.test(remoteUrl)) {
+            mimeType = 'image/png';
+            ext = 'png';
+          } else if (/\.pdf/i.test(remoteUrl)) {
+            mimeType = 'application/pdf';
+            ext = 'pdf';
+          }
+
+          const tempCacheFile = `${FileSystem.cacheDirectory || ''}temp_dl_${Date.now()}.${ext}`;
+          const downloadResult = await FileSystem.downloadAsync(remoteUrl, tempCacheFile);
+          base64Data = await FileSystem.readAsStringAsync(downloadResult.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          await FileSystem.deleteAsync(downloadResult.uri, { idempotent: true }).catch(() => {});
+        }
+      }
+
+      if (mimeType.includes('png')) {
+        ext = 'png';
+      } else if (mimeType.includes('pdf')) {
+        ext = 'pdf';
+      } else if (mimeType.includes('webp')) {
+        ext = 'webp';
+      }
+
+      const cleanLabel = typeMeta.label.replace(/[^a-zA-Z0-9]/g, '_');
+      const cleanFileName = `Medical_Report_${cleanLabel}_${item.id.slice(0, 8)}.${ext}`;
+
+      // ── Step 2: Save File to Device ──
+      // On Android: Use StorageAccessFramework so user can choose destination folder (Downloads, Documents, etc.)
+      if (Platform.OS === 'android' && FileSystem.StorageAccessFramework) {
+        try {
+          const permissions =
+            await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+          if (permissions.granted) {
+            const destUri = await FileSystem.StorageAccessFramework.createFileAsync(
+              permissions.directoryUri,
+              cleanFileName,
+              mimeType
+            );
+            await FileSystem.writeAsStringAsync(destUri, base64Data, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            Alert.alert(
+              'Download Complete',
+              `Your medical report "${cleanFileName}" has been saved to your selected folder.`
+            );
+            return;
+          } else {
+            Alert.alert(
+              'Download Cancelled',
+              'No folder was selected. If you wish to save this report, please select a destination folder.'
+            );
+            return;
+          }
+        } catch (safErr: any) {
+          console.warn('StorageAccessFramework error, falling back to local documents:', safErr);
+        }
+      }
+
+      // ── Fallback (iOS or if SAF was bypassed) ──
+      const saveDirectory = FileSystem.documentDirectory || FileSystem.cacheDirectory;
+      const localSavedUri = `${saveDirectory}${cleanFileName}`;
+
+      await FileSystem.writeAsStringAsync(localSavedUri, base64Data, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      if (Platform.OS === 'ios') {
+        // On iOS, Share.share with a file URI opens the native "Save to Files / Save Image" sheet
+        await Share.share({
+          title: cleanFileName,
+          url: localSavedUri,
+        });
+      } else {
+        await Share.share({
+          title: cleanFileName,
+          url: localSavedUri,
+          message: `Medical Report: ${cleanFileName}`,
+        });
+        Alert.alert(
+          'Report Saved',
+          `Your medical report was saved to your device: ${cleanFileName}`
+        );
+      }
+    } catch (err: any) {
+      console.error('Download error:', err);
+      Alert.alert(
+        'Download Error',
+        err?.message || 'Unable to download report. Please check device permissions and try again.'
+      );
+    } finally {
+      setDownloadingReportId(null);
+    }
+  };
+
+  // ── Image Picker Workflow (with base64 and quality: 0.4) ──
   const handlePickImage = async (useCamera: boolean) => {
     try {
       const pickerOptions: ImagePicker.ImagePickerOptions = {
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.5,
-        base64: true,
+        mediaTypes: ['images'],
+        quality: 0.4,
         allowsEditing: false,
       };
 
@@ -465,7 +752,7 @@ export default function MedicalRecordsScreen() {
   };
 
   // ── Open Upload Modal Check ──
-  const handleOpenUploadModal = () => {
+  const handleOpenUploadModal = (recordIdToPreselect?: string | unknown) => {
     if (consultations.length === 0) {
       Alert.alert(
         'Doctor Consultation Required',
@@ -480,7 +767,12 @@ export default function MedicalRecordsScreen() {
       );
       return;
     }
-    if (!selectedRecordId && consultations.length > 0) {
+    const preselect = typeof recordIdToPreselect === 'string' ? recordIdToPreselect : undefined;
+    if (preselect && consultations.some((c) => c.id === preselect)) {
+      setSelectedRecordId(preselect);
+    } else if (selectedRecordFilter !== 'ALL' && consultations.some((c) => c.id === selectedRecordFilter)) {
+      setSelectedRecordId(selectedRecordFilter);
+    } else if (!selectedRecordId || !consultations.some((c) => c.id === selectedRecordId)) {
       setSelectedRecordId(consultations[0].id);
     }
     setIsUploadModalVisible(true);
@@ -488,6 +780,13 @@ export default function MedicalRecordsScreen() {
 
   // ── Reset Upload Form ──
   const resetUploadForm = () => {
+    if (selectedRecordFilter !== 'ALL' && consultations.some((c) => c.id === selectedRecordFilter)) {
+      setSelectedRecordId(selectedRecordFilter);
+    } else if (consultations.length > 0) {
+      setSelectedRecordId(consultations[0].id);
+    } else {
+      setSelectedRecordId('');
+    }
     setSelectedReportTypeKey('BLOOD_TEST');
     setCustomReportType('');
     setSelectedImage(null);
@@ -524,89 +823,53 @@ export default function MedicalRecordsScreen() {
       }
 
       const cleanFileName = selectedImage.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const storageFilePath = `${selectedRecordId}/${Date.now()}-${cleanFileName}`;
-      const dataUri = selectedImage.base64
-        ? `data:${selectedImage.type || 'image/jpeg'};base64,${selectedImage.base64}`
-        : selectedImage.uri;
 
-      let fileUrlToSave = '';
-      let supabaseUploadedSuccessfully = false;
+      // Prepare multipart/form-data payload as required by POST /api/records/{recordId}/upload-report
+      const formData = new FormData();
+      formData.append('file', {
+        uri: selectedImage.uri,
+        name: cleanFileName || `report_${Date.now()}.jpg`,
+        type: selectedImage.type || 'image/jpeg',
+      } as any);
+      formData.append('type', finalReportType);
 
-      // 1. Attempt upload to Supabase Storage if configured and base64 is available
-      const hasSupabase =
-        process.env.EXPO_PUBLIC_SUPABASE_URL &&
-        !process.env.EXPO_PUBLIC_SUPABASE_URL.includes('placeholder');
+      // Submit to backend API: POST /api/records/{recordId}/upload-report
+      const response = await fetch(
+        `${apiUrl}/api/records/${encodeURIComponent(selectedRecordId)}/upload-report`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Cookie: `session_token=${token}`,
+          },
+          body: formData,
+        }
+      );
 
-      if (hasSupabase && selectedImage.base64) {
+      const responseJson = await response.json().catch(() => null);
+
+      if (!response.ok || responseJson?.success === false) {
+        const errorMsg =
+          responseJson?.message ||
+          responseJson?.error?.message ||
+          responseJson?.error ||
+          `Server returned HTTP ${response.status} during upload.`;
+        throw new Error(errorMsg);
+      }
+
+      // Persist local file:// URI in AsyncStorage with lightweight per-report key
+      if (selectedImage.uri) {
         try {
-          const uint8Array = base64ToUint8Array(selectedImage.base64);
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('medical-documents')
-            .upload(storageFilePath, uint8Array, {
-              contentType: selectedImage.type || 'image/jpeg',
-              upsert: true,
-            });
-
-          if (!uploadError && uploadData?.path) {
-            fileUrlToSave = uploadData.path;
-            supabaseUploadedSuccessfully = true;
-          } else if (uploadError) {
-            console.warn('Supabase storage upload error:', uploadError.message);
+          const uploadedReport = responseJson?.data?.report || responseJson?.data;
+          if (uploadedReport?.id) {
+            await AsyncStorage.setItem(
+              `${REPORT_URI_CACHE_PREFIX}${uploadedReport.id}`,
+              selectedImage.uri
+            );
           }
-        } catch (uploadException) {
-          console.warn('Supabase upload exception:', uploadException);
+        } catch (cacheErr) {
+          console.warn('Local cache write error:', cacheErr);
         }
-      }
-
-      // If Supabase upload didn't succeed (e.g., Anon key RLS restriction or missing credentials),
-      // we store the dataUri directly into PostgreSQL (TEXT column has no limit).
-      // This guarantees the image is saved and viewable everywhere without 404!
-      if (!supabaseUploadedSuccessfully) {
-        fileUrlToSave = dataUri;
-      }
-
-      // 2. Persist to local device cache in AsyncStorage as a failsafe
-      try {
-        const existingCacheRaw = await AsyncStorage.getItem(LOCAL_STORAGE_CACHE_KEY);
-        const cacheMap: Record<string, string> = existingCacheRaw ? JSON.parse(existingCacheRaw) : {};
-        cacheMap[storageFilePath] = dataUri;
-        cacheMap[selectedImage.uri] = dataUri;
-        if (fileUrlToSave) {
-          cacheMap[fileUrlToSave] = dataUri;
-        }
-        await AsyncStorage.setItem(LOCAL_STORAGE_CACHE_KEY, JSON.stringify(cacheMap));
-      } catch (cacheErr) {
-        console.warn('Local cache write error:', cacheErr);
-      }
-
-      // 3. Submit to backend API: POST /api/reports/upload
-      const response = await fetch(`${apiUrl}/api/reports/upload`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          record_id: selectedRecordId,
-          file_url: fileUrlToSave,
-          type: finalReportType,
-        }),
-      });
-
-      const responseJson = await response.json();
-
-      if (!response.ok || responseJson.success === false) {
-        throw new Error(responseJson.message || 'Server rejected the report submission.');
-      }
-
-      // Save report.id mapping in cache if returned
-      if (responseJson.data?.report?.id) {
-        try {
-          const existingCacheRaw = await AsyncStorage.getItem(LOCAL_STORAGE_CACHE_KEY);
-          const cacheMap: Record<string, string> = existingCacheRaw ? JSON.parse(existingCacheRaw) : {};
-          cacheMap[responseJson.data.report.id] = dataUri;
-          await AsyncStorage.setItem(LOCAL_STORAGE_CACHE_KEY, JSON.stringify(cacheMap));
-        } catch {}
       }
 
       Alert.alert(
@@ -631,10 +894,187 @@ export default function MedicalRecordsScreen() {
     }
   };
 
-  // ── Render Report Card ──
+  // ── Render Consultation Visit Card (Timeline Item) ──
+  const renderVisitCard = ({ item }: { item: ConsultationVisit }) => {
+    const isDoctorPrefixed = item.doctorName.startsWith('Dr');
+    const displayDoc = isDoctorPrefixed ? item.doctorName : `Dr. ${item.doctorName}`;
+    const formattedDate = formatDate(item.visitDate);
+    const formattedTime = formatTime(item.visitDate);
+    const hasPrescription = !!(item.prescription?.items?.length || item.prescriptionNotes);
+
+    return (
+      <View style={styles.visitCard}>
+        {/* Visit Card Header */}
+        <View style={styles.visitCardHeader}>
+          <View style={styles.visitDoctorAvatar}>
+            <FontAwesome5 name="user-md" size={22} color="#3B6E5C" />
+          </View>
+
+          <View style={styles.visitDoctorInfo}>
+            <Text style={styles.visitDoctorName} numberOfLines={1}>
+              {displayDoc}
+            </Text>
+            <View style={styles.visitTimeRow}>
+              <Ionicons name="calendar-outline" size={13} color="#4A5952" />
+              <Text style={styles.visitTimeText}>
+                {formattedDate} {formattedTime ? `• ${formattedTime}` : ''}
+              </Text>
+            </View>
+          </View>
+
+          {/* Record ID Badge */}
+          <View style={styles.visitRecordBadge}>
+            <Text style={styles.visitRecordBadgeText}>
+              #{item.id.slice(0, 8).toUpperCase()}
+            </Text>
+          </View>
+        </View>
+
+        {/* Diagnosis Highlight */}
+        <View style={styles.visitDiagnosisBox}>
+          <View style={styles.diagnosisLabelRow}>
+            <Ionicons name="pulse" size={15} color="#2A8567" style={{ marginRight: 6 }} />
+            <Text style={styles.diagnosisLabel}>Clinical Diagnosis</Text>
+          </View>
+          <Text style={styles.diagnosisValue}>
+            {item.diagnosis || 'General Clinical Consultation'}
+          </Text>
+        </View>
+
+        {/* Symptoms Section */}
+        {item.symptoms ? (
+          <View style={styles.visitClinicalRow}>
+            <Ionicons name="bandage-outline" size={15} color="#3B6E5C" style={styles.clinicalIcon} />
+            <View style={styles.clinicalContentWrap}>
+              <Text style={styles.clinicalTitle}>Reported Symptoms:</Text>
+              <Text style={styles.clinicalText}>{item.symptoms}</Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* Treatment Plan Section */}
+        {item.treatmentPlan ? (
+          <View style={styles.visitClinicalRow}>
+            <Ionicons name="medkit-outline" size={15} color="#3B6E5C" style={styles.clinicalIcon} />
+            <View style={styles.clinicalContentWrap}>
+              <Text style={styles.clinicalTitle}>Treatment Plan:</Text>
+              <Text style={styles.clinicalText}>{item.treatmentPlan}</Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* Prescription Box */}
+        {hasPrescription ? (
+          <View style={styles.visitPrescriptionBox}>
+            <View style={styles.prescriptionHeaderRow}>
+              <FontAwesome5 name="pills" size={13} color="#3B6E5C" style={{ marginRight: 6 }} />
+              <Text style={styles.prescriptionHeaderTitle}>Prescribed Medication</Text>
+            </View>
+
+            {item.prescription?.items && item.prescription.items.length > 0 ? (
+              <View style={styles.prescriptionItemsList}>
+                {item.prescription.items.map((med, idx) => (
+                  <View key={med.id || idx} style={styles.prescriptionItemRow}>
+                    <View style={styles.bulletDot} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.medNameText}>
+                        {med.medicine_name}{' '}
+                        {med.dosage ? <Text style={styles.medDosageText}>({med.dosage})</Text> : null}
+                      </Text>
+                      {med.frequency || med.duration ? (
+                        <Text style={styles.medFrequencyText}>
+                          {[med.frequency, med.duration].filter(Boolean).join(' • ')}
+                        </Text>
+                      ) : null}
+                      {med.instructions ? (
+                        <Text style={styles.medInstructionText}>
+                          Note: {med.instructions}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            {item.prescriptionNotes ? (
+              <Text style={styles.prescriptionNotesText}>
+                Doctor's Note: {item.prescriptionNotes}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* Follow-up Date */}
+        {item.followUpDate ? (
+          <View style={styles.followUpRow}>
+            <Ionicons name="alarm-outline" size={15} color="#92400E" style={{ marginRight: 6 }} />
+            <Text style={styles.followUpText}>
+              Recommended Follow-Up: <Text style={styles.boldText}>{formatDate(item.followUpDate)}</Text>
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Attached Reports Status & Actions */}
+        <View style={styles.visitCardBottomRow}>
+          {item.reportsCount > 0 ? (
+            <TouchableOpacity
+              style={styles.viewReportsAttachedBtn}
+              onPress={() => {
+                setSelectedRecordFilter(item.id);
+                setActiveSegment('REPORTS');
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="document-text" size={14} color="#2A8567" style={{ marginRight: 5 }} />
+              <Text style={styles.viewReportsAttachedText}>
+                {item.reportsCount} Diagnostic {item.reportsCount === 1 ? 'Report' : 'Reports'} Attached
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color="#2A8567" />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.noReportsPill}>
+              <Ionicons name="document-outline" size={13} color="#65776F" style={{ marginRight: 4 }} />
+              <Text style={styles.noReportsPillText}>No reports attached</Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={styles.visitUploadReportBtn}
+            onPress={() => handleOpenUploadModal(item.id)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="cloud-upload-outline" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+            <Text style={styles.visitUploadReportBtnText}>Attach Report</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Medical Certificate Request Action */}
+        <TouchableOpacity
+          style={styles.visitCertificateBtn}
+          onPress={() => {
+            router.push({
+              pathname: '/academic-submission',
+              params: { recordId: item.id },
+            } as any);
+          }}
+          activeOpacity={0.8}
+        >
+          <View style={styles.visitCertificateBtnContent}>
+            <MaterialCommunityIcons name="certificate-outline" size={16} color="#3B6E5C" style={{ marginRight: 6 }} />
+            <Text style={styles.visitCertificateBtnText}>Request Medical Certificate</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={14} color="#3B6E5C" />
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  // ── Render Diagnostic Report Card ──
   const renderReportCard = ({ item }: { item: MedicalReportItem }) => {
     const typeMeta = resolveReportTypeMeta(item.type);
     const isOpening = openingReportId === item.id;
+    const isDownloading = downloadingReportId === item.id;
     const isDirectImage = item.file_url.startsWith('data:image/');
 
     return (
@@ -668,6 +1108,14 @@ export default function MedicalRecordsScreen() {
 
         {/* Linked Consultation Info */}
         <View style={styles.consultationDetailBox}>
+          {/* Explicit Record ID Display */}
+          <View style={styles.consultationDetailRow}>
+            <Ionicons name="document-text-outline" size={14} color="#3B6E5C" style={styles.metaIcon} />
+            <Text style={styles.consultationDetailText}>
+              Record ID: <Text style={styles.recordIdHighlight}>#{item.record_id ? item.record_id.slice(0, 8).toUpperCase() : 'N/A'}</Text>
+            </Text>
+          </View>
+
           <View style={styles.consultationDetailRow}>
             <Ionicons name="person-outline" size={14} color="#3B6E5C" style={styles.metaIcon} />
             <Text style={styles.consultationDetailText} numberOfLines={1}>
@@ -692,29 +1140,76 @@ export default function MedicalRecordsScreen() {
           ) : null}
         </View>
 
-        {/* Action Button: View / Download */}
-        <TouchableOpacity
-          style={styles.viewDocButton}
-          onPress={() => handleViewReport(item)}
-          disabled={isOpening}
-          activeOpacity={0.8}
-        >
-          {isOpening ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <>
-              <Ionicons name="eye-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.viewDocButtonText}>View / Download Report</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        {/* Action Buttons: View & Download side-by-side */}
+        <View style={styles.cardActionsRow}>
+          <TouchableOpacity
+            style={styles.viewCardButton}
+            onPress={() => handleViewReport(item)}
+            disabled={isOpening || isDownloading}
+            activeOpacity={0.8}
+          >
+            {isOpening ? (
+              <ActivityIndicator size="small" color="#3B6E5C" />
+            ) : (
+              <>
+                <Ionicons name="eye-outline" size={17} color="#3B6E5C" />
+                <Text style={styles.viewCardButtonText}>View Report</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.downloadCardButton}
+            onPress={() => handleDownloadReport(item)}
+            disabled={isOpening || isDownloading}
+            activeOpacity={0.8}
+          >
+            {isDownloading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Ionicons name="download-outline" size={17} color="#FFFFFF" />
+                <Text style={styles.downloadCardButtonText}>Download</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
     );
   };
 
-  // ── Render Empty State ──
-  const renderEmptyState = () => {
+  // ── Render Empty State for Reports ──
+  const renderEmptyReportsState = () => {
     if (isLoading || errorMessage) return null;
+
+    if (selectedRecordFilter !== 'ALL') {
+      const matchingConsultation = consultations.find((c) => c.id === selectedRecordFilter);
+      const docName = matchingConsultation?.doctorName
+        ? matchingConsultation.doctorName.startsWith('Dr')
+          ? matchingConsultation.doctorName
+          : `Dr. ${matchingConsultation.doctorName}`
+        : 'this consultation';
+
+      return (
+        <View style={styles.emptyCard}>
+          <View style={styles.emptyIconCircle}>
+            <MaterialCommunityIcons name="file-document-outline" size={38} color="#3B6E5C" />
+          </View>
+          <Text style={styles.emptyTitle}>No Reports Attached to This Record</Text>
+          <Text style={styles.emptyDescription}>
+            No medical reports have been uploaded under consultation #{selectedRecordFilter.slice(0, 8).toUpperCase()} with {docName}.
+          </Text>
+          <TouchableOpacity
+            style={styles.emptyActionButton}
+            onPress={() => handleOpenUploadModal(selectedRecordFilter)}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="add" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Text style={styles.emptyActionButtonText}>Upload Report for This Record</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
 
     return (
       <View style={styles.emptyCard}>
@@ -734,7 +1229,7 @@ export default function MedicalRecordsScreen() {
 
         <TouchableOpacity
           style={styles.emptyActionButton}
-          onPress={handleOpenUploadModal}
+          onPress={() => handleOpenUploadModal()}
           activeOpacity={0.85}
         >
           <Ionicons name="add" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
@@ -744,16 +1239,46 @@ export default function MedicalRecordsScreen() {
     );
   };
 
+  // ── Render Empty State for Consultation Visits ──
+  const renderVisitsEmptyState = () => {
+    if (isLoading || errorMessage) return null;
+    return (
+      <View style={styles.emptyCard}>
+        <View style={styles.emptyIconCircle}>
+          <FontAwesome5 name="clinic-medical" size={32} color="#3B6E5C" />
+        </View>
+        <Text style={styles.emptyTitle}>No Consultation History Found</Text>
+        <Text style={styles.emptyDescription}>
+          You have not completed any clinical doctor consultations or medical center visits on your student file yet.
+        </Text>
+        <TouchableOpacity
+          style={styles.emptyActionButton}
+          onPress={() => router.push('/(tabs)/appointment' as any)}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="calendar-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+          <Text style={styles.emptyActionButtonText}>Book Doctor Consultation</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor="#D5E6DC" />
 
-      {/* ── TOP HEADER WITH BACK BUTTON ── */}
+      {/* ── TOP HEADER WITH BACK BUTTON & SUMMARY ── */}
       <View style={styles.header}>
         <View style={styles.headerNavRow}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(tabs)' as any);
+              }
+            }}
             activeOpacity={0.7}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
@@ -761,63 +1286,81 @@ export default function MedicalRecordsScreen() {
           </TouchableOpacity>
 
           <View style={styles.headerTitleBlock}>
-            <Text style={styles.headerTitleText}>Medical Reports</Text>
+            <Text style={styles.headerTitleText}>Medical Records</Text>
             <Text style={styles.headerSubtitleText}>
-              Diagnostic lab tests, ultrasounds, and doctor documents
+              Consultations, clinical diagnoses & diagnostic reports
             </Text>
           </View>
         </View>
 
         {/* ── SUMMARY STATS BAR & QUICK UPLOAD CTA ── */}
         <View style={styles.statsCardContainer}>
-          <View style={styles.statsLeftCol}>
+          <View style={styles.statsCol}>
+            <Text style={styles.statsCountNumber}>{visits.length}</Text>
+            <Text style={styles.statsCountLabel}>Visits</Text>
+          </View>
+          <View style={styles.statsDivider} />
+          <View style={styles.statsCol}>
             <Text style={styles.statsCountNumber}>{reports.length}</Text>
-            <Text style={styles.statsCountLabel}>Total Reports Attached</Text>
+            <Text style={styles.statsCountLabel}>Reports</Text>
           </View>
 
           <TouchableOpacity
             style={styles.headerUploadCta}
-            onPress={handleOpenUploadModal}
+            onPress={() => handleOpenUploadModal()}
             activeOpacity={0.85}
           >
-            <Ionicons name="cloud-upload-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Ionicons name="cloud-upload-outline" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
             <Text style={styles.headerUploadCtaText}>Upload Report</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── 2-TAB SEGMENTED SELECTOR: CONSULTATIONS vs REPORTS ── */}
+        <View style={styles.segmentContainer}>
+          <TouchableOpacity
+            style={[styles.segmentBtn, activeSegment === 'VISITS' && styles.segmentBtnActive]}
+            onPress={() => setActiveSegment('VISITS')}
+            activeOpacity={0.85}
+          >
+            <FontAwesome5
+              name="stethoscope"
+              size={13}
+              color={activeSegment === 'VISITS' ? '#FFFFFF' : '#3B6E5C'}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[styles.segmentBtnText, activeSegment === 'VISITS' && styles.segmentBtnTextActive]}>
+              Consultations ({visits.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.segmentBtn, activeSegment === 'REPORTS' && styles.segmentBtnActive]}
+            onPress={() => setActiveSegment('REPORTS')}
+            activeOpacity={0.85}
+          >
+            <Ionicons
+              name={activeSegment === 'REPORTS' ? 'document-text' : 'document-text-outline'}
+              size={15}
+              color={activeSegment === 'REPORTS' ? '#FFFFFF' : '#3B6E5C'}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[styles.segmentBtnText, activeSegment === 'REPORTS' && styles.segmentBtnTextActive]}>
+              Diagnostic Reports ({reports.length})
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
 
       {/* ── MAIN SURFACE ── */}
       <View style={styles.surface}>
-        {/* Filter Chips Bar */}
-        <View style={styles.filterBarWrapper}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterScroll}
-          >
-            {FILTER_CHIPS.map((chip) => {
-              const isSelected = selectedFilter === chip;
-              return (
-                <TouchableOpacity
-                  key={chip}
-                  style={[styles.filterChip, isSelected && styles.filterChipActive]}
-                  onPress={() => setSelectedFilter(chip)}
-                  activeOpacity={0.75}
-                >
-                  <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
-                    {chip}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* Reports Content */}
         {isLoading ? (
           <View style={styles.loaderWrap}>
             <ActivityIndicator size="large" color="#3B6E5C" />
-            <Text style={styles.loaderLabel}>Loading medical reports...</Text>
+            <Text style={styles.loaderLabel}>
+              {activeSegment === 'VISITS'
+                ? 'Loading consultation visits...'
+                : 'Loading medical reports...'}
+            </Text>
           </View>
         ) : errorMessage ? (
           <View style={styles.errorCard}>
@@ -828,14 +1371,15 @@ export default function MedicalRecordsScreen() {
               <Text style={styles.retryBtnText}>Try Again</Text>
             </TouchableOpacity>
           </View>
-        ) : (
+        ) : activeSegment === 'VISITS' ? (
+          /* ── TAB 1: CONSULTATION VISITS LIST ── */
           <FlatList
-            data={filteredReports}
+            data={visits}
             keyExtractor={(item) => item.id}
-            renderItem={renderReportCard}
+            renderItem={renderVisitCard}
             contentContainerStyle={styles.listContainer}
             showsVerticalScrollIndicator={false}
-            ListEmptyComponent={renderEmptyState}
+            ListEmptyComponent={renderVisitsEmptyState}
             refreshControl={
               <RefreshControl
                 refreshing={isLoading}
@@ -845,6 +1389,134 @@ export default function MedicalRecordsScreen() {
               />
             }
           />
+        ) : (
+          /* ── TAB 2: DIAGNOSTIC REPORTS LIST ── */
+          <>
+            {/* Consultation Record Filter chips (for Reports) */}
+            {consultations.length > 0 && (
+              <View style={styles.recordFilterSection}>
+                <View style={styles.recordFilterHeaderRow}>
+                  <View style={styles.recordFilterTitleWrap}>
+                    <Ionicons name="git-branch-outline" size={14} color="#3B6E5C" style={{ marginRight: 5 }} />
+                    <Text style={styles.recordFilterLabel}>Filter by Consultation Record</Text>
+                  </View>
+                  {selectedRecordFilter !== 'ALL' && (
+                    <TouchableOpacity
+                      onPress={() => setSelectedRecordFilter('ALL')}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.clearRecordFilterText}>Show All Records</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.recordFilterScroll}
+                >
+                  <TouchableOpacity
+                    style={[
+                      styles.recordFilterChip,
+                      selectedRecordFilter === 'ALL' && styles.recordFilterChipActive,
+                    ]}
+                    onPress={() => setSelectedRecordFilter('ALL')}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons
+                      name="layers-outline"
+                      size={13}
+                      color={selectedRecordFilter === 'ALL' ? '#FFFFFF' : '#3B6E5C'}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text
+                      style={[
+                        styles.recordFilterChipText,
+                        selectedRecordFilter === 'ALL' && styles.recordFilterChipTextActive,
+                      ]}
+                    >
+                      All Medical Records ({reports.length})
+                    </Text>
+                  </TouchableOpacity>
+
+                  {consultations.map((c) => {
+                    const isSelected = selectedRecordFilter === c.id;
+                    const count = reports.filter((r) => r.record_id === c.id).length;
+                    const cleanDoc = c.doctorName.replace(/^Dr\.?\s*/i, '');
+                    return (
+                      <TouchableOpacity
+                        key={c.id}
+                        style={[
+                          styles.recordFilterChip,
+                          isSelected && styles.recordFilterChipActive,
+                        ]}
+                        onPress={() => setSelectedRecordFilter(c.id)}
+                        activeOpacity={0.75}
+                      >
+                        <Ionicons
+                          name={isSelected ? 'checkmark-circle' : 'document-text-outline'}
+                          size={13}
+                          color={isSelected ? '#FFFFFF' : '#3B6E5C'}
+                          style={{ marginRight: 4 }}
+                        />
+                        <Text
+                          style={[
+                            styles.recordFilterChipText,
+                            isSelected && styles.recordFilterChipTextActive,
+                          ]}
+                        >
+                          Dr. {cleanDoc} ({formatDate(c.visitDate)}) - #{c.id.slice(0, 6).toUpperCase()} ({count})
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Category Filter Chips Bar */}
+            <View style={styles.filterBarWrapper}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterScroll}
+              >
+                {FILTER_CHIPS.map((chip) => {
+                  const isSelected = selectedFilter === chip;
+                  return (
+                    <TouchableOpacity
+                      key={chip}
+                      style={[styles.filterChip, isSelected && styles.filterChipActive]}
+                      onPress={() => setSelectedFilter(chip)}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
+                        {chip}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            {/* Reports Content List */}
+            <FlatList
+              data={filteredReports}
+              keyExtractor={(item) => item.id}
+              renderItem={renderReportCard}
+              contentContainerStyle={styles.listContainer}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={renderEmptyReportsState}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isLoading}
+                  onRefresh={loadMedicalRecords}
+                  tintColor="#3B6E5C"
+                  colors={['#3B6E5C']}
+                />
+              }
+            />
+          </>
         )}
       </View>
 
@@ -888,20 +1560,20 @@ export default function MedicalRecordsScreen() {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.modalFormContent}
             >
-              {/* STEP 1: Select Consultation Visit */}
+              {/* STEP 1: Select Medical Record / Consultation (record_id) */}
               <View style={styles.formSection}>
                 <Text style={styles.formLabel}>
-                  1. Select Clinical Consultation <Text style={styles.requiredStar}>*</Text>
+                  1. Select Medical Record / Consultation (record_id) <Text style={styles.requiredStar}>*</Text>
                 </Text>
                 <Text style={styles.formHint}>
-                  Reports must be linked to a consultation visit with the university medical staff.
+                  Reports must be linked to a consultation record with the medical staff. Your attending doctor will receive this report.
                 </Text>
 
                 {consultations.length === 0 ? (
                   <View style={styles.warningCallout}>
                     <Ionicons name="warning-outline" size={18} color="#A65E18" />
                     <Text style={styles.warningCalloutText}>
-                      No clinical consultation visits found on your account.
+                      No clinical consultation records found on your account.
                     </Text>
                   </View>
                 ) : (
@@ -918,23 +1590,64 @@ export default function MedicalRecordsScreen() {
                           onPress={() => setSelectedRecordId(c.id)}
                           activeOpacity={0.75}
                         >
-                          <Ionicons
-                            name={isSelected ? 'radio-button-on' : 'radio-button-off'}
-                            size={18}
-                            color={isSelected ? '#3B6E5C' : '#4A5952'}
-                            style={{ marginRight: 8 }}
-                          />
-                          <View style={{ flex: 1 }}>
+                          <View style={styles.consultationOptionHeader}>
+                            <View
+                              style={[
+                                styles.recordIdBadge,
+                                isSelected && styles.recordIdBadgeActive,
+                              ]}
+                            >
+                              <Ionicons
+                                name="document-text-outline"
+                                size={12}
+                                color={isSelected ? '#2A8567' : '#4A5952'}
+                                style={{ marginRight: 4 }}
+                              />
+                              <Text
+                                style={[
+                                  styles.recordIdBadgeText,
+                                  isSelected && styles.recordIdBadgeTextActive,
+                                ]}
+                              >
+                                Record ID: #{c.id.slice(0, 8).toUpperCase()}
+                              </Text>
+                            </View>
+
+                            <View style={styles.consultationOptionCheck}>
+                              {isSelected ? (
+                                <Ionicons name="checkmark-circle" size={20} color="#3B6E5C" />
+                              ) : (
+                                <Ionicons name="radio-button-off" size={18} color="#9BB5A9" />
+                              )}
+                            </View>
+                          </View>
+
+                          <View style={styles.consultationOptionBody}>
                             <Text style={styles.consultationOptionDoctor} numberOfLines={1}>
-                              {c.doctorName.startsWith('Dr') ? c.doctorName : `Dr. ${c.doctorName}`}
+                              {c.doctorName.startsWith('Dr') ? c.doctorName : `Dr. ${c.doctorName}`} • {formatDate(c.visitDate)}
                             </Text>
-                            <Text style={styles.consultationOptionMeta}>
-                              {formatDate(c.visitDate)} • {c.diagnosis}
+                            <Text style={styles.consultationOptionDiagnosis} numberOfLines={1}>
+                              Diagnosis: <Text style={styles.boldText}>{c.diagnosis || 'Clinical Consultation'}</Text>
                             </Text>
+                            {c.symptoms ? (
+                              <Text style={styles.consultationOptionSymptoms} numberOfLines={1}>
+                                Symptoms: {c.symptoms}
+                              </Text>
+                            ) : null}
                           </View>
                         </TouchableOpacity>
                       );
                     })}
+
+                    {/* Selected Record ID Confirmation Banner */}
+                    {selectedRecordId ? (
+                      <View style={styles.selectedRecordConfirmBox}>
+                        <Ionicons name="link" size={15} color="#2A8567" style={{ marginRight: 6 }} />
+                        <Text style={styles.selectedRecordConfirmText}>
+                          Selected Record ID: <Text style={styles.selectedRecordIdBold}>#{selectedRecordId.slice(0, 8).toUpperCase()}</Text>
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                 )}
               </View>
@@ -1059,20 +1772,51 @@ export default function MedicalRecordsScreen() {
         visible={!!previewUri}
         animationType="fade"
         transparent
-        onRequestClose={() => setPreviewUri(null)}
+        onRequestClose={() => {
+          setPreviewUri(null);
+          setCurrentPreviewItem(null);
+        }}
       >
         <SafeAreaView style={styles.previewBackdrop}>
           <View style={styles.previewHeaderBar}>
             <Text style={styles.previewHeaderTitle} numberOfLines={1}>
               {previewTitle || 'Report Preview'}
             </Text>
-            <TouchableOpacity
-              style={styles.previewCloseBtn}
-              onPress={() => setPreviewUri(null)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="close" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
+
+            <View style={styles.previewHeaderActions}>
+              {currentPreviewItem && (
+                <TouchableOpacity
+                  style={styles.previewDownloadBtn}
+                  onPress={() => {
+                    if (currentPreviewItem) {
+                      void handleDownloadReport(currentPreviewItem);
+                    }
+                  }}
+                  activeOpacity={0.8}
+                  disabled={downloadingReportId === currentPreviewItem.id}
+                >
+                  {downloadingReportId === currentPreviewItem.id ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="download-outline" size={16} color="#FFFFFF" />
+                      <Text style={styles.previewDownloadBtnText}>Save</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={styles.previewCloseBtn}
+                onPress={() => {
+                  setPreviewUri(null);
+                  setCurrentPreviewItem(null);
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.previewImageContainer}>
@@ -1084,6 +1828,31 @@ export default function MedicalRecordsScreen() {
               />
             )}
           </View>
+
+          {/* Bottom Action Bar in Preview Modal */}
+          {currentPreviewItem && (
+            <View style={styles.previewBottomBar}>
+              <TouchableOpacity
+                style={styles.previewBottomDownloadBtn}
+                onPress={() => {
+                  if (currentPreviewItem) {
+                    void handleDownloadReport(currentPreviewItem);
+                  }
+                }}
+                activeOpacity={0.8}
+                disabled={downloadingReportId === currentPreviewItem.id}
+              >
+                {downloadingReportId === currentPreviewItem.id ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="download-outline" size={18} color="#FFFFFF" />
+                    <Text style={styles.previewBottomDownloadBtnText}>Download / Save Report</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
@@ -1113,7 +1882,7 @@ const styles = StyleSheet.create({
   headerNavRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   backButton: {
     width: 40,
@@ -1157,16 +1926,23 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
-  statsLeftCol: {
+  statsCol: {
+    alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  statsDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: '#D1E3D8',
   },
   statsCountNumber: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     color: '#16211C',
   },
   statsCountLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#4A5952',
     marginTop: 1,
@@ -1185,10 +1961,304 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  // ── Segmented Control ──
+  segmentContainer: {
+    marginTop: 12,
+    flexDirection: 'row',
+    backgroundColor: '#C5DFD0',
+    borderRadius: 14,
+    padding: 4,
+    gap: 4,
+  },
+  segmentBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  segmentBtnActive: {
+    backgroundColor: '#3B6E5C',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  segmentBtnText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#2D5648',
+  },
+  segmentBtnTextActive: {
+    color: '#FFFFFF',
+  },
   surface: {
     flex: 1,
     backgroundColor: '#EAF3ED',
   },
+  // ── Visit Card Styles ──
+  visitCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#D1E3D8',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  visitCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 12,
+  },
+  visitDoctorAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#E2F5E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  visitDoctorInfo: {
+    flex: 1,
+  },
+  visitDoctorName: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#16211C',
+  },
+  visitTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+    gap: 4,
+  },
+  visitTimeText: {
+    fontSize: 12,
+    color: '#4A5952',
+    fontWeight: '500',
+  },
+  visitRecordBadge: {
+    backgroundColor: '#EAF3ED',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1E3D8',
+  },
+  visitRecordBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2A8567',
+    letterSpacing: 0.3,
+  },
+  visitDiagnosisBox: {
+    backgroundColor: '#EBF6EF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#D2EADB',
+  },
+  diagnosisLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 3,
+  },
+  diagnosisLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2A8567',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  diagnosisValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#16211C',
+  },
+  visitClinicalRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 6,
+    paddingHorizontal: 4,
+    gap: 8,
+  },
+  clinicalIcon: {
+    marginTop: 2,
+  },
+  clinicalContentWrap: {
+    flex: 1,
+  },
+  clinicalTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3B6E5C',
+  },
+  clinicalText: {
+    fontSize: 13,
+    color: '#16211C',
+    lineHeight: 18,
+    marginTop: 1,
+  },
+  visitPrescriptionBox: {
+    backgroundColor: '#F8FAF9',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#E2EDE6',
+  },
+  prescriptionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  prescriptionHeaderTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3B6E5C',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  prescriptionItemsList: {
+    gap: 6,
+  },
+  prescriptionItemRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  bulletDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#3B6E5C',
+    marginTop: 6,
+  },
+  medNameText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#16211C',
+  },
+  medDosageText: {
+    color: '#3B6E5C',
+    fontWeight: '600',
+  },
+  medFrequencyText: {
+    fontSize: 12,
+    color: '#4A5952',
+    marginTop: 1,
+  },
+  medInstructionText: {
+    fontSize: 11,
+    color: '#65776F',
+    fontStyle: 'italic',
+    marginTop: 1,
+  },
+  prescriptionNotesText: {
+    fontSize: 12,
+    color: '#4A5952',
+    fontStyle: 'italic',
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#E2EDE6',
+  },
+  followUpRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  followUpText: {
+    fontSize: 12,
+    color: '#92400E',
+    flex: 1,
+  },
+  visitCardBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E2EDE6',
+    gap: 10,
+  },
+  viewReportsAttachedBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E2F5E9',
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#C3E7D3',
+  },
+  viewReportsAttachedText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2A8567',
+    flex: 1,
+  },
+  noReportsPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+  },
+  noReportsPillText: {
+    fontSize: 12,
+    color: '#65776F',
+  },
+  visitUploadReportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#3B6E5C',
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  visitUploadReportBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  visitCertificateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#EAF3ED',
+    borderWidth: 1,
+    borderColor: '#DCECE2',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginTop: 10,
+  },
+  visitCertificateBtnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  visitCertificateBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#3B6E5C',
+  },
+  // ── Diagnostic Reports Styles ──
   filterBarWrapper: {
     backgroundColor: '#EAF3ED',
     paddingVertical: 12,
@@ -1318,23 +2388,66 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#16211C',
   },
-  viewDocButton: {
+  cardActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+  },
+  viewCardButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#3B6E5C',
+    borderRadius: 22,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  viewCardButtonText: {
+    color: '#3B6E5C',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  downloadCardButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#3B6E5C',
-    borderRadius: 24,
-    paddingVertical: 12,
-    gap: 8,
+    borderRadius: 22,
+    paddingVertical: 10,
+    gap: 6,
     shadowColor: '#3B6E5C',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.18,
-    shadowRadius: 4,
+    shadowRadius: 3,
     elevation: 2,
   },
-  viewDocButtonText: {
+  downloadCardButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
+    fontWeight: '700',
+  },
+  previewHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  previewDownloadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#3B6E5C',
+    borderRadius: 18,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    gap: 4,
+  },
+  previewDownloadBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '700',
   },
   loaderWrap: {
@@ -1513,27 +2626,168 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   consultationOptionCard: {
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: '#F8FAF9',
+    borderWidth: 1.5,
+    borderColor: '#D1E3D8',
+    marginBottom: 2,
+  },
+  consultationOptionCardActive: {
+    backgroundColor: '#E2F5E9',
+    borderColor: '#3B6E5C',
+  },
+  consultationOptionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: '#F8FAF9',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  recordIdBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EAF3ED',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#D1E3D8',
   },
-  consultationOptionCardActive: {
-    backgroundColor: '#EAF3ED',
-    borderColor: '#3B6E5C',
+  recordIdBadgeActive: {
+    backgroundColor: '#C3E7D3',
+    borderColor: '#2A8567',
+  },
+  recordIdBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4A5952',
+    letterSpacing: 0.2,
+  },
+  recordIdBadgeTextActive: {
+    color: '#2A8567',
+  },
+  recordIdHighlight: {
+    fontWeight: '700',
+    color: '#2A8567',
+    letterSpacing: 0.2,
+  },
+  consultationOptionCheck: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  consultationOptionBody: {
+    gap: 3,
   },
   consultationOptionDoctor: {
     fontSize: 14,
     fontWeight: '700',
     color: '#16211C',
   },
-  consultationOptionMeta: {
+  consultationOptionDiagnosis: {
     fontSize: 12,
     color: '#4A5952',
-    marginTop: 2,
+  },
+  consultationOptionSymptoms: {
+    fontSize: 11,
+    color: '#65776F',
+  },
+  selectedRecordConfirmBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E2F5E9',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#C3E7D3',
+  },
+  selectedRecordConfirmText: {
+    fontSize: 12,
+    color: '#2A8567',
+    fontWeight: '600',
+    flex: 1,
+  },
+  selectedRecordIdBold: {
+    fontWeight: '800',
+    color: '#16211C',
+  },
+  recordFilterSection: {
+    backgroundColor: '#EAF3ED',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  recordFilterHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  recordFilterTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  recordFilterLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3B6E5C',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  clearRecordFilterText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3B6E5C',
+    textDecorationLine: 'underline',
+  },
+  recordFilterScroll: {
+    paddingBottom: 8,
+    gap: 8,
+  },
+  recordFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1E3D8',
+  },
+  recordFilterChipActive: {
+    backgroundColor: '#3B6E5C',
+    borderColor: '#3B6E5C',
+  },
+  recordFilterChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4A5952',
+  },
+  recordFilterChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  previewBottomBar: {
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  previewBottomDownloadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3B6E5C',
+    borderRadius: 24,
+    paddingVertical: 14,
+    gap: 8,
+  },
+  previewBottomDownloadBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
   typeChipsGrid: {
     flexDirection: 'row',

@@ -3,6 +3,8 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, StatusBar 
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { SafeAreaView } from 'react-native-safe-area-context'; 
 import { Ionicons } from '@expo/vector-icons'; 
 import { useRouter } from 'expo-router';
@@ -102,6 +104,19 @@ export default function CreateAccountScreen() {
       });
 
       if (response.ok) {
+        await SecureStore.deleteItemAsync('userToken').catch(() => {});
+        await SecureStore.deleteItemAsync('userId').catch(() => {});
+        await AsyncStorage.multiRemove([
+          'userToken',
+          'userId',
+          'userData',
+          'user_profile',
+          'is_profile_complete',
+          'profileCompleted',
+          'patientProfile',
+          'activeEmergencyRequestId',
+          'activeEmergencyStatus',
+        ]);
         Alert.alert('Success', 'Account created! Please log in.', [{ text: 'OK', onPress: () => router.push('/login') }]);
       } else {
         const errorData = await response.json();

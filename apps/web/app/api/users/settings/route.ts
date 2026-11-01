@@ -31,6 +31,7 @@ const settingsSchema = z.object({
   fcm_token: z.string().optional(),
 
   emergency_contact_name: z.string().min(2).optional(),
+  emergency_contact_relationship: z.string().optional(),
   emergency_contact_number: z.string().min(10).optional(),
   university_email: z.string().email().optional(),
   department: z.string().optional(),
@@ -138,6 +139,7 @@ export async function PATCH(request: Request) {
             ...(validatedData.year_of_study && { year_of_study: validatedData.year_of_study }),
             ...(validatedData.batch && { batch: validatedData.batch }),
             ...(validatedData.emergency_contact_name && { emergency_contact_name: validatedData.emergency_contact_name }),
+            ...(validatedData.emergency_contact_relationship !== undefined && { emergency_contact_relationship: validatedData.emergency_contact_relationship }),
             ...(validatedData.emergency_contact_number && { emergency_contact_number: validatedData.emergency_contact_number }),
           }
         });
@@ -150,6 +152,7 @@ export async function PATCH(request: Request) {
             ...(validatedData.department && { department: validatedData.department }),
             ...(validatedData.position && { position: validatedData.position }),
             ...(validatedData.emergency_contact_name && { emergency_contact_name: validatedData.emergency_contact_name }),
+            ...(validatedData.emergency_contact_relationship !== undefined && { emergency_contact_relationship: validatedData.emergency_contact_relationship }),
             ...(validatedData.emergency_contact_number && { emergency_contact_number: validatedData.emergency_contact_number }),
           }
         });

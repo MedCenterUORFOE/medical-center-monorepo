@@ -114,7 +114,7 @@ export default function UserProfilePanel() {
           setIsOpen(true);
           setMessage(null);
         }}
-        className="flex items-center gap-2 rounded-xl border border-slate-700/80 bg-slate-800/70 px-3 py-2 text-left transition-colors hover:border-emerald-500/40 hover:bg-slate-800"
+        className="profile-trigger flex items-center gap-2 rounded-xl border border-slate-700/80 bg-slate-800/70 px-3 py-2 text-left transition-colors hover:border-emerald-500/40 hover:bg-slate-800"
         aria-label="Open profile"
       >
         <UserCircle className="h-5 w-5 text-emerald-400" />
@@ -127,21 +127,21 @@ export default function UserProfilePanel() {
             type="button"
             aria-label="Close profile"
             onClick={() => setIsOpen(false)}
-            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+            className="profile-backdrop absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
           />
-          <aside className="absolute bottom-0 right-0 top-0 h-screen w-full max-w-sm overflow-y-auto border-l border-slate-700/80 bg-[#0d1726] p-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-5">
+          <aside className="profile-drawer absolute bottom-0 right-0 top-0 h-screen w-full max-w-sm overflow-y-auto border-l border-slate-700/80 bg-[#0d1726] p-6 shadow-2xl">
+            <div className="profile-drawer-header flex items-center justify-between border-b border-slate-800 pb-5">
               <div className="flex items-center gap-3">
                 <UserCircle className="h-9 w-9 text-emerald-400" />
                 <div>
-                  <h2 className="text-sm font-extrabold text-white">My Profile</h2>
+                  <h2 className="profile-drawer-title text-sm font-extrabold text-white">My Profile</h2>
                   <p className="text-[10px] uppercase tracking-wider text-slate-500">{role}</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+                className="profile-close-button rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
                 aria-label="Close profile"
               >
                 <X className="h-5 w-5" />
@@ -149,13 +149,13 @@ export default function UserProfilePanel() {
             </div>
 
             <div className="mt-6 space-y-4">
-              <div className="rounded-xl border border-slate-800 bg-[#111c2c] p-4">
+              <div className="profile-info-card rounded-xl border border-slate-800 bg-[#111c2c] p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Name</p>
-                <p className="mt-1 text-sm font-semibold text-white">{displayName}</p>
+                <p className="profile-value mt-1 text-sm font-semibold text-white">{displayName}</p>
                 <p className="mt-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Email</p>
-                <p className="mt-1 break-all text-xs text-slate-300">{user.email || 'Not available'}</p>
+                <p className="profile-value mt-1 break-all text-xs text-slate-300">{user.email || 'Not available'}</p>
                 <p className="mt-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Role</p>
-                <p className="mt-1 text-xs font-semibold capitalize text-slate-300">{role.toLowerCase()}</p>
+                <p className="profile-value mt-1 text-xs font-semibold capitalize text-slate-300">{role.toLowerCase()}</p>
               </div>
 
               <button
@@ -164,14 +164,14 @@ export default function UserProfilePanel() {
                   setIsPasswordFormOpen((open) => !open);
                   setMessage(null);
                 }}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-xs font-bold text-emerald-400 transition-colors hover:bg-emerald-500/20"
+                className="profile-password-toggle flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-xs font-bold text-emerald-400 transition-colors hover:bg-emerald-500/20"
               >
                 <KeyRound className="h-4 w-4" />
                 {isPasswordFormOpen ? 'Close Password Form' : 'Change Password'}
               </button>
 
               {isPasswordFormOpen && (
-                <form onSubmit={handlePasswordChange} className="space-y-3 rounded-xl border border-slate-800 bg-[#111c2c] p-4">
+                <form onSubmit={handlePasswordChange} className="profile-password-form space-y-3 rounded-xl border border-slate-800 bg-[#111c2c] p-4">
                   <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
                     <LockKeyhole className="h-4 w-4 text-emerald-400" />
                     Update Password
@@ -182,7 +182,7 @@ export default function UserProfilePanel() {
                     onChange={(event) => setOldPassword(event.target.value)}
                     placeholder="Current password"
                     required
-                    className="w-full rounded-lg border border-slate-800 bg-[#0b0f19] px-3 py-2 text-xs text-white outline-none focus:border-emerald-500"
+                    className="profile-password-input w-full rounded-lg border border-slate-800 bg-[#0b0f19] px-3 py-2 text-xs text-white outline-none focus:border-emerald-500"
                   />
                   <input
                     type="password"
@@ -191,7 +191,7 @@ export default function UserProfilePanel() {
                     placeholder="New password (min. 8 characters)"
                     minLength={8}
                     required
-                    className="w-full rounded-lg border border-slate-800 bg-[#0b0f19] px-3 py-2 text-xs text-white outline-none focus:border-emerald-500"
+                    className="profile-password-input w-full rounded-lg border border-slate-800 bg-[#0b0f19] px-3 py-2 text-xs text-white outline-none focus:border-emerald-500"
                   />
                   <input
                     type="password"
@@ -200,7 +200,7 @@ export default function UserProfilePanel() {
                     placeholder="Confirm new password"
                     minLength={8}
                     required
-                    className="w-full rounded-lg border border-slate-800 bg-[#0b0f19] px-3 py-2 text-xs text-white outline-none focus:border-emerald-500"
+                    className="profile-password-input w-full rounded-lg border border-slate-800 bg-[#0b0f19] px-3 py-2 text-xs text-white outline-none focus:border-emerald-500"
                   />
                   {message && (
                     <p className={`text-xs ${message.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -221,7 +221,7 @@ export default function UserProfilePanel() {
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-xs font-bold text-rose-400 transition-colors hover:bg-rose-500/20"
+                className="profile-signout flex w-full items-center justify-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-xs font-bold text-rose-400 transition-colors hover:bg-rose-500/20"
               >
                 <LogOut className="h-4 w-4" />
                 Sign Out
