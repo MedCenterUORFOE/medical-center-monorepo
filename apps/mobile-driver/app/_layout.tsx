@@ -7,8 +7,11 @@ import { getMessaging, setBackgroundMessageHandler } from '@react-native-firebas
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { setupNotificationHandlers, startTokenRefreshListener } from '../src/notifications/pushNotifications';
+import { addNotification } from '../src/notifications/notificationStore';
 
-setBackgroundMessageHandler(getMessaging(), async () => {});
+setBackgroundMessageHandler(getMessaging(), async (message) => {
+  await addNotification(message);
+});
 
 export const unstable_settings = {
   anchor: 'index',
